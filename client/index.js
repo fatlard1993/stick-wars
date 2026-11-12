@@ -7,8 +7,8 @@ import '@vanilla-bean/components/app/reloadOnBuild';
 import Play from './Play.js';
 import Start from './Start.js';
 
-// The start screen and the game are this game's own, made for players who may not read: pictures, one big button.
-// The framework's lobby stays at #/hub for grown-ups and phones: more games, joining one by name, watching.
+// The start screen and the game are this game's own, in pictures. The framework's lobby stays at #/hub: every game,
+// joining one by name, and watching one.
 // Watching shows the game without playing it: the same view as a player's, without controls
 class Watch extends Play {
 	constructor(options, ...children) {

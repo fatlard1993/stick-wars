@@ -1,15 +1,31 @@
 import { Button, Component, Dialog, Link, styled } from '@vanilla-bean/components';
-import { act, createInput, createSound, enterGame, isTouch } from '@fatlard1993/web-game-framework/client';
-import { JoinCard, SoundToggle, Stage, View } from '@fatlard1993/web-game-framework/ui';
+import { createSound, enterGame, exitGame } from '@fatlard1993/web-game-framework/client';
+import { JoinCard, SoundToggle, View } from '@fatlard1993/web-game-framework/ui';
 
-import { FIELD } from '../rules.js';
+import { MODES, TEAMS } from '../rules.js';
+import BattleScreen from './BattleScreen.js';
+import DrawScreen from './DrawScreen.js';
+import battle from './sounds/battle.mp3';
+import crash from './sounds/crash.mp3';
+import deploy from './sounds/deploy.mp3';
+import drawing from './sounds/drawing.mp3';
+import hit from './sounds/hit.mp3';
+import keep from './sounds/keep.mp3';
+import launch from './sounds/launch.mp3';
+import lose from './sounds/lose.mp3';
+import nope from './sounds/nope.mp3';
+import sever from './sounds/sever.mp3';
+import squish from './sounds/squish.mp3';
+import swing from './sounds/swing.mp3';
+import thud from './sounds/thud.mp3';
+import win from './sounds/win.mp3';
 
-const Scores = styled(
+const Status = styled(
 	Component,
 	({ space }) => `
 		display: flex;
-		gap: ${space.md};
-		font-size: 1.4rem;
+		gap: ${space.lg};
+		font-size: 1.3rem;
 		white-space: nowrap;
 		overflow: hidden;
 
@@ -17,17 +33,26 @@ const Scores = styled(
 	`,
 );
 
-// One player's screen, or a watcher's: the field fills everything below the bar, scores and buttons sit in the bar.
-// What it shows comes from the server and nothing else: steering is an action, and the field redraws from each view
-// of the game the server sends.
+const Body = styled(
+	Component,
+	() => `
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
+	`,
+);
+
+// One player's screen, or a watcher's: drawing while the armies are drawn, then the battle. Everything shown comes
+// from the server: the view it sends each tick, and the art, sent once and again whenever it changes.
 export default class Play extends View {
 	static schema = { gameId: {}, watch: { default: false } };
 
 	constructor(options, ...children) {
-		const scores = new Scores();
+		const status = new Status();
 		const sound = createSound({
-			// Sounds go here as the game gets them: import catchSound from './sounds/catch.mp3', then { catch: catchSound }
-			effects: {},
+			effects: { hit, sever, squish, swing, launch, crash, thud, deploy, keep, nope, win, lose },
+			music: { drawing, battle },
 		});
 
 		super(
@@ -35,16 +60,17 @@ export default class Play extends View {
 				...options,
 				toolbar: {
 					heading: '',
-					left: [new Link({ textContent: '🏠', href: '#/', variant: 'button' }), scores],
+					left: [new Link({ textContent: '🏠', href: '#/', variant: 'button' }), status],
 					right: [
 						new SoundToggle({ sound }),
 						new Button({ textContent: '➕👫', title: 'Someone else joins', onPointerPress: () => this.invite() }),
+						new Button({ textContent: '🚪', title: 'Leave this game', onPointerPress: () => this.leaveGame() }),
 					],
 				},
 			},
 			...children,
 		);
-		this.scores = scores;
+		this.status = status;
 		this.sound = sound;
 	}
 
@@ -55,119 +81,71 @@ export default class Play extends View {
 
 	async _init() {
 		const { gameId, watch } = this.options;
-		let view = null;
 
-		const stage = new Stage({ appendTo: this._body, onResize: () => view && this.draw(view) });
+		this.body = new Body({ appendTo: this._body });
+
 		const { playerId, leave } = await enterGame(gameId, {
 			watch,
-			onState: next => {
-				if (next.caught?.some(({ playerId: who }) => who === playerId)) this.sound.play('catch');
-				view = next;
-				this.draw(view);
-			},
-			// Not in this game (or it's gone): the start screen sorts it out
+			onState: view => this.update(view),
+			onUpdate: message => message.update === 'art' && this.setArt(message),
 			notMember: () => (window.location.href = '#/'),
 			gone: () => (window.location.href = '#/'),
 		});
 
-		this.stage = stage;
 		this.playerId = playerId;
 		this.addCleanup('game', () => {
 			leave();
 			this.sound.destroy();
 		});
-		if (!watch && playerId) this.controls(stage);
+		if (this.view) this.update(this.view);
 	}
 
-	// Steering: held keys on a computer, a finger (or the mouse) held down toward where to go; sent only when it changes
-	controls(stage) {
-		let sent = '';
-		let toward = null;
-		const input = createInput();
-		const send = heading => {
-			const said = `${heading.x.toFixed(2)},${heading.y.toFixed(2)}`;
-
-			if (said === sent) return;
-			sent = said;
-			act('steer', heading, { quiet: true });
-		};
-
-		input.pointer(stage.elem, {
-			onDown: point => (toward = point),
-			onMove: point => toward && (toward = point),
-			onUp: () => (toward = null),
-		});
-		input.every(50, () => {
-			const keys = input.direction();
-
-			if (keys.x || keys.y || !toward) return send(keys);
-
-			// Toward the finger, from where this player is now, in field units
-			const me = this.view?.state.spots[this.playerId];
-			const scale = this.scale();
-
-			if (!me || !scale) return;
-
-			const dx = toward.x / scale.factor - scale.left / scale.factor - me.x;
-			const dy = toward.y / scale.factor - scale.top / scale.factor - me.y;
-			const length = Math.hypot(dx, dy);
-
-			send(length < 2 ? { x: 0, y: 0 } : { x: dx / length, y: dy / length });
-		});
-		this.addCleanup('input', () => input.destroy());
-		if (isTouch()) this.stage.elem.title = 'Hold a finger where you want to go';
+	setArt({ art, artOf }) {
+		this.art = { art, artOf };
+		this.screen?.setArt?.(this.art);
 	}
 
-	// How the field fits the stage: as big as it can, centered
-	scale() {
-		const { width, height } = this.stage ?? {};
-
-		if (!width || !height) return null;
-
-		const factor = Math.min(width / FIELD.width, height / FIELD.height);
-
-		return { factor, left: (width - FIELD.width * factor) / 2, top: (height - FIELD.height * factor) / 2 };
-	}
-
-	draw(view) {
+	update(view) {
+		if (view.art) this.setArt(view.art);
 		this.view = view;
+		if (this.playerId === undefined && !this.options.watch) return;
 
-		const { context } = this.stage ?? {};
-		const scale = this.scale();
+		const { state, players } = view;
+		const team = state.seats.indexOf(this.playerId);
+		const kind = state.phase === 'draw' ? 'draw' : 'battle';
+		const avatars = Object.fromEntries(players.map(({ id, name }) => [id, name]));
 
-		if (!context || !scale) return;
-
-		const { factor, left, top } = scale;
-		const here = view.players.filter(({ online }) => online !== false);
-
-		context.clearRect(0, 0, this.stage.width, this.stage.height);
-		context.fillStyle = 'rgba(255, 255, 255, 0.05)';
-		context.fillRect(left, top, FIELD.width * factor, FIELD.height * factor);
-		// Emoji draw in the fill color's opacity: a solid one for the pieces
-		context.fillStyle = '#ffffff';
-		context.textAlign = 'center';
-		context.textBaseline = 'middle';
-		context.font = `${Math.max(16, 7 * factor)}px sans-serif`;
-		for (const star of view.state.stars) context.fillText('⭐', left + star.x * factor, top + star.y * factor);
-		for (const player of here) {
-			const spot = view.state.spots[player.id];
-
-			if (spot) context.fillText(player.name, left + spot.x * factor, top + spot.y * factor);
+		if (kind !== this.kind) {
+			this.kind = kind;
+			this.screen?.destroy();
+			this.screen = kind === 'draw' ? new DrawScreen({ appendTo: this.body }) : new BattleScreen({ appendTo: this.body });
+			if (this.art) this.screen.setArt?.(this.art);
+			this.sound.music(kind === 'draw' ? 'drawing' : 'battle');
 		}
+		this.screen.update(view, { team, sound: this.sound, avatars, art: this.art });
+		this.showStatus(view, team, avatars);
+	}
 
-		this.scores.elem.replaceChildren(
-			...here.map(player => {
-				const score = document.createElement('span');
+	// The bar: each side, who plays it, and in battle how many are fighting, waiting and killed
+	showStatus(view, team, avatars) {
+		const { state, battle } = view;
 
-				score.textContent = `${player.name} ${view.state.scores[player.id] ?? 0}`;
-				if (player.id === this.playerId) score.className = 'me';
+		this.status.elem.replaceChildren(
+			Object.assign(document.createElement('span'), { textContent: MODES[state.mode] }),
+			...[0, 1].map(t => {
+				const span = document.createElement('span');
+				const who = state.seats[t] ? avatars[state.seats[t]] ?? '🙂' : state.mode === 'cpu' && t === 1 ? '🤖' : '…';
+				const counts = battle ? ` ⚔️${battle.fighting[t]} ⏳${battle.reserve[t]} 🗡️${battle.kills[t]}` : '';
 
-				return score;
+				span.textContent = `${TEAMS[t].emoji}${who}${counts}`;
+				if (t === team) span.className = 'me';
+
+				return span;
 			}),
 		);
 	}
 
-	// A code a phone on the same network opens to join
+	// A code a phone on the same network opens to join: the other side in a game for two, or to watch
 	invite() {
 		new Dialog({
 			appendTo: document.body,
@@ -177,5 +155,10 @@ export default class Play extends View {
 			buttons: ['✅'],
 			onButtonPress: ({ closeDialog }) => closeDialog(),
 		});
+	}
+
+	async leaveGame() {
+		if (!this.options.watch && this.playerId) await exitGame();
+		window.location.href = '#/';
 	}
 }
