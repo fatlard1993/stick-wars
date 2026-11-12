@@ -1,0 +1,10 @@
+{
+	"name": "Stick Men Wars",
+	"short_name": "Stick Men Wars",
+	"description": "Draw your own army of stick men, stones, catapults and weapons, then watch them hack each other to bits. Play the computer or a friend.",
+	"display": "standalone",
+	"orientation": "any",
+	"start_url": ".",
+	"theme_color": "#c0392b",
+	"background_color": "#1b1b1b"
+}

@@ -1,0 +1,8 @@
+{
+	"title": "Stick Men Wars",
+	"named": true,
+	"idea": "Draw stick men, stones, wood beams, catapult ammo and weapons against the clock (each has to pass a loose shape check; nothing kept falls back on defaults). The drawings become the battlefield: each side gets a wall, catapults with finite ammo and an army of stick men. Send them to war, last man standing wins. Walls crumble, catapults break, stick men are squishy and bloody, weapons are as brutal as they are shaped. Play the computer or another player.",
+	"player": "chase",
+	"reading": "reading",
+	"made": "2026-11-12T10:50:00.000Z"
+}
