@@ -37,6 +37,12 @@ const TAP = 8;
 const WALL_LAYERS = 6;
 // The height map's step, in world units
 const BUCKET = 4;
+// How much of the world the camera always shows, from the sky over the arcs down to the bottom of the page
+const VIEW_TOP = GROUND - 330;
+// The smallest a stick man is let be drawn before the camera zooms in: about this many screen pixels per world unit
+const READABLE = 0.62;
+// How far a pinch or the wheel zooms in, past the readable view
+const MOST_ZOOM = 2.4;
 
 const Screen = styled(
 	Component,
@@ -62,6 +68,17 @@ const Controls = styled(
 
 		& .picked { display: inline-flex; align-items: center; gap: 4px; font-size: 1.4em; min-width: 3em; }
 		& .gap { width: ${space.lg}; }
+
+		/* On a phone: all of them in one row, small enough for thumbs and the field both */
+		@media (max-width: 767px), (max-height: 500px) {
+			gap: 4px;
+			padding: 4px;
+			flex-wrap: nowrap;
+			& button { padding: 3px 6px; }
+			& button svg { width: 1.5em !important; height: 1.5em !important; }
+			& .picked { font-size: 1.1em; min-width: 2em; }
+			& .gap { width: 2px; }
+		}
 	`,
 );
 
@@ -164,6 +181,10 @@ export default class BattleScreen extends Screen {
 		this.tops = new Float32Array(Math.ceil(W / BUCKET) + 1).fill(GROUND);
 
 		this.stage = new Stage({ appendTo: this });
+		this.turnPhone();
+		// The camera: where along the field it looks (null until placed over our side), and how far zoomed in
+		this.cam = { x: null, zoom: 1 };
+		this.lookAround();
 		this.card = new Card({ appendTo: this });
 		this.decal = document.createElement('canvas');
 		this.decal.width = W;
@@ -470,14 +491,128 @@ export default class BattleScreen extends Screen {
 	}
 
 	// How the world fits the stage: as big as it can, centered
+	// How the world sits on the stage. A big screen shows all of it; a small one (a phone) is zoomed in so the men stay
+	// readable, showing the field and the sky the catapults' arcs need, and the camera pans along the field. The bottom of
+	// the page sits at the stage's bottom.
 	fitting() {
 		const { width, height } = this.stage;
 
 		if (!width || !height) return null;
 
-		const scale = Math.min(width / W, height / H);
+		const fit = Math.min(width / W, height / H);
+		const base = Math.max(fit, Math.min(READABLE, height / (H - VIEW_TOP)));
+		const scale = base * this.cam.zoom;
+		const seen = width / scale;
 
-		return { scale, left: (width - W * scale) / 2, top: (height - H * scale) / 2 };
+		// It starts over our own side, once it's known which that is
+		if (this.cam.x === null && this.team !== undefined) this.cam.x = this.team === 1 ? W - seen / 2 : this.team === 0 ? seen / 2 : W / 2;
+		if (this.cam.x !== null) this.cam.x = seen >= W ? W / 2 : clamp(this.cam.x, seen / 2, W - seen / 2);
+
+		const left = width / 2 - (this.cam.x ?? W / 2) * scale;
+		const top = H * scale > height ? height - H * scale : (height - H * scale) / 2;
+
+		return { scale, left, top };
+	}
+
+	// A phone held upright sees only a slice of the field: a note says it's wider turned on its side
+	turnPhone() {
+		const note = document.createElement('div');
+
+		note.className = 'turn-phone';
+		note.append(icon('rotate', { size: '2em' }), 'turn your phone for a wider view');
+		Object.assign(note.style, {
+			position: 'absolute',
+			left: '50%',
+			top: '12px',
+			transform: 'translateX(-50%) rotate(-1deg)',
+			display: 'none',
+			alignItems: 'center',
+			gap: '8px',
+			padding: '6px 12px',
+			background: 'rgba(255, 253, 246, 0.9)',
+			border: `2px solid ${PENCIL}`,
+			borderRadius: '255px 15px 225px 15px / 15px 225px 15px 255px',
+			whiteSpace: 'nowrap',
+			zIndex: 2,
+		});
+		this.elem.append(note);
+
+		const upright = window.matchMedia('(orientation: portrait) and (pointer: coarse)');
+		const show = () => (note.style.display = upright.matches && !this.dismissed ? 'flex' : 'none');
+
+		note.addEventListener('pointerdown', () => {
+			this.dismissed = true;
+			show();
+		});
+		upright.addEventListener('change', show);
+		this.addCleanup('turn-phone', () => upright.removeEventListener('change', show));
+		show();
+	}
+
+	// Looking around the field: two fingers pan along it and pinch to zoom; the wheel zooms, and the arrow keys pan
+	lookAround() {
+		const touches = new Map();
+		let gesture = null;
+		const spread = () => {
+			const [a, b] = [...touches.values()];
+
+			return { mid: (a.x + b.x) / 2, gap: Math.hypot(a.x - b.x, a.y - b.y) };
+		};
+		const el = this.stage.elem;
+
+		const listen = (target, type, handler, options) => {
+			target.addEventListener(type, handler, options);
+			this.addCleanup(`look-${type}`, () => target.removeEventListener(type, handler, options));
+		};
+
+		listen(el, 'pointerdown', event => {
+			if (event.pointerType !== 'touch') return;
+			touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+			if (touches.size === 2) {
+				// A second finger: whatever the first was doing is let go, and the two move the camera
+				this.press = null;
+				this.box = null;
+				this.aim = null;
+
+				const { mid, gap } = spread();
+
+				gesture = { mid, gap, zoom: this.cam.zoom, x: this.cam.x, scale: this.fitting()?.scale ?? 1 };
+			}
+		});
+		listen(window, 'pointermove', event => {
+			if (!touches.has(event.pointerId)) return;
+			touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+			if (!gesture || touches.size < 2) return;
+
+			const { mid, gap } = spread();
+
+			this.cam.zoom = clamp((gesture.zoom * gap) / Math.max(20, gesture.gap), 1, MOST_ZOOM);
+			this.cam.x = gesture.x - (mid - gesture.mid) / gesture.scale;
+		});
+
+		const lift = event => {
+			touches.delete(event.pointerId);
+			if (touches.size < 2) gesture = null;
+		};
+
+		listen(window, 'pointerup', lift);
+		listen(window, 'pointercancel', lift);
+		listen(
+			el,
+			'wheel',
+			event => {
+				event.preventDefault();
+				this.cam.zoom = clamp(this.cam.zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12), 1, MOST_ZOOM);
+			},
+			{ passive: false },
+		);
+		listen(window, 'keydown', event => {
+			if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+
+			const f = this.fitting();
+
+			if (f) this.cam.x += ((event.key === 'ArrowLeft' ? -1 : 1) * this.stage.width * 0.25) / f.scale;
+		});
 	}
 
 	// A point on the stage as a point on the drawn page of the world (before depth: what's drawn there)
@@ -653,8 +788,14 @@ export default class BattleScreen extends Screen {
 		g.setTransform(this.stage.ratio, 0, 0, this.stage.ratio, 0, 0);
 		g.clearRect(0, 0, this.stage.width, this.stage.height);
 		if (!this.cur || !this.art) return;
+		// Past the world's edges, more paper
+		g.fillStyle = '#f7f2e4';
+		g.fillRect(0, 0, this.stage.width, this.stage.height);
 
 		const t = this.prev ? clamp((performance.now() - this.curAt) / TICK_MS, 0, 1) : 1;
+
+		// A stick man's line is never thinner on the screen than this, however far out the view is
+		this.ink = Math.max(2.6, 2 / f.scale);
 		const shaking = this.shake > 0.3 ? this.shake : 0;
 
 		this.shake *= Math.pow(0.02, dt);
@@ -800,7 +941,7 @@ export default class BattleScreen extends Screen {
 
 		if (!rig) return;
 		if (this.selected.has(body.id)) this.drawPicked(g, body);
-		drawBody(g, rig, body, teamInk(body.t));
+		drawBody(g, rig, body, teamInk(body.t), this.ink);
 		// One of ours holding the wall carries a little shield over his head, a repairer a hammer
 		const mark = { h: 'hold', r: 'hammer' }[body.u];
 

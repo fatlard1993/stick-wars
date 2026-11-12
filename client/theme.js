@@ -41,6 +41,13 @@ appendStyles(
 		font-size: 19px;
 		background: ${PAPER};
 	}
+
+	/* A phone: smaller type and slimmer buttons, so the game gets the room */
+	@media (max-width: 767px), (max-height: 500px) {
+		body { font-size: 16px; }
+		button.doodle { padding: 3px 8px; box-shadow: 1px 2px 0 ${PENCIL}; }
+		.side-kills { display: none !important; }
+	}
 	`,
 	'stick-wars-theme',
 );

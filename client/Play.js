@@ -144,7 +144,12 @@ export default class Play extends View {
 				side.className = t === team ? 'side me' : 'side';
 				side.style.color = ink;
 				side.append(icon('flag', { color: ink }), icon(who, { color: ink }));
-				if (battle) side.append(count('person', battle.army[t], ink), count('sword', battle.kills[t], ink));
+				if (battle) {
+					const kills = count('sword', battle.kills[t], ink);
+
+					kills.classList.add('side-kills');
+					side.append(count('person', battle.army[t], ink), kills);
+				}
 
 				return side;
 			}),

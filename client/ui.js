@@ -38,7 +38,7 @@ export const Doodle = styled(
  * @returns {Doodle} The button
  */
 export const doodle = (name, { title, onPress, big, label, size, addClass, ...rest } = {}) => {
-	const button = new Doodle({ title, onPointerPress: onPress, addClass: [big && 'big', addClass].filter(Boolean), ...rest });
+	const button = new Doodle({ title, onPointerPress: onPress, addClass: ['doodle', big && 'big', addClass].filter(Boolean), ...rest });
 
 	button.elem.append(icon(name, { size }));
 	if (label) button.elem.append(Object.assign(document.createElement('span'), { textContent: label }));

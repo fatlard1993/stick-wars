@@ -34,6 +34,8 @@ Every man has a job, and choosing them is the game:
 - **Shoot**: crew a catapult with the catapult button (C) then a tap on it, or with men picked, just tap it. A catapult only fires with crew at it, loads faster with up to three, and sends its crew home when its ammo runs out. Over each catapult: its ammo, its crew (red when nobody's at it), and a hammer while it's being repaired.
 - **Repair**: the hammer button (R), then tap a catapult or your wall; or with men picked, tap your wall. Repairers patch cracked stones and set new ones into the wall's gaps, mend a damaged catapult, and even rebuild a smashed one from its wreck, slowly, to fight on with whatever ammo it had.
 
+**Looking around**: on a small screen (a phone) the battle is zoomed in so the men stay readable, starting over your own side: two fingers pan along the field and pinch to zoom. On a computer, the scroll wheel zooms and the arrow keys pan. A phone shows more of the field turned on its side.
+
 **Picking men**: tap one, or drag a box around several (the dashed box button, A, picks everyone; Esc lets go). The count of who's picked sits by the buttons. With nobody picked, fight orders go to everyone not crewing or repairing. Tapping past your wall with men picked sends them charging.
 
 **Flinging**: tap your catapults (with no men picked) to pick them out, and an aiming pad opens in the middle of the screen. Pull back from its centre like a slingshot: the further, the harder (its edge is full strength), and each picked catapult shows on the field where it would land. Let go, and every one of them that's ready flings. The cross on the pad (or Esc) puts it away. Dragging straight from a catapult flings it too.

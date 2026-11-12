@@ -114,8 +114,9 @@ const FRAMES = new Float64Array(40);
  * @param {object} rig - The drawing's rig
  * @param {object} body - { j: [x, y, ...] joints, o: owned-bones mask, f: facing, q: squash }
  * @param {string} color - Its side's ink
+ * @param {number} [width] - Its line, in world units
  */
-export const drawBody = (g, rig, body, color) => {
+export const drawBody = (g, rig, body, color, width = 2.6) => {
 	const { j, o, f = 1, q = 1 } = body;
 	const F = FRAMES;
 
@@ -150,7 +151,7 @@ export const drawBody = (g, rig, body, color) => {
 		}
 	}
 	g.strokeStyle = color;
-	g.lineWidth = 2.6;
+	g.lineWidth = width;
 	g.stroke();
 };
 
