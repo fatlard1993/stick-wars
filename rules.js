@@ -7,6 +7,7 @@ export const STEPS = [
 	{ kind: 'stickmen', seconds: 45, title: 'Draw your stick men' },
 	{ kind: 'stones', seconds: 25, title: 'Draw stones for the wall' },
 	{ kind: 'beams', seconds: 25, title: 'Draw beams for the catapult' },
+	{ kind: 'ammo', seconds: 25, title: 'Draw rocks for the catapult' },
 	{ kind: 'swords', seconds: 40, title: 'Draw weapons in the box' },
 ];
 
@@ -42,8 +43,7 @@ export const newState = mode => ({
 	battles: 0,
 });
 
-// The catapult's rocks aren't drawn beforehand: each is drawn during the battle (Game's rock), so ammo starts empty
-export const emptyArt = () => ({ ...Object.fromEntries(STEPS.map(({ kind }) => [kind, []])), ammo: [] });
+export const emptyArt = () => Object.fromEntries(STEPS.map(({ kind }) => [kind, []]));
 
 /** How many men a side has with none of the bonus, and how many the bonus can add */
 export const BASE_ARMY = 10, MOST_BONUS = 6;

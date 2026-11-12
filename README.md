@@ -10,13 +10,14 @@ Pick **vs computer**, or **two players** to fight a friend on their own device (
 
 ### Drawing your army
 
-Four pages, each against the clock. Draw as many as you like on each: the check mark (or Enter) keeps a drawing if it passes a quick shape check, and says what's missing if it doesn't. The curly arrow undoes a line (Z), the eraser clears the page (C), the arrow to the bar moves on (N). A page left with nothing kept gets the defaults. The dashed drawing shows what's wanted. A pen that slides off the page lifts there, and draws on again where it comes back.
+Five pages, each against the clock. Draw as many as you like on each: the check mark (or Enter) keeps a drawing if it passes a quick shape check, and says what's missing if it doesn't. The curly arrow undoes a line (Z), the eraser clears the page (C), the arrow to the bar moves on (N). A page left with nothing kept gets the defaults. The dashed drawing shows what's wanted. A pen that slides off the page lifts there, and draws on again where it comes back.
 
 | What | Time | The check |
 | --- | --- | --- |
 | Stick men | 45s | a roundish closed head on top, a body hanging from it, arms and legs sticking out both sides, not a scribble |
 | Stones | 25s | one closed, lumpy outline |
 | Beams | 25s | long and thin, at least three times as long as it is wide |
+| Rocks | 25s | a closed, round-ish lump: bigger hits harder, spikier tears more. Each one kept is a rock on your catapult's pile (10 at most) |
 | Weapons | 40s | anything with some size to it, inside the box on the page, handle at the bottom |
 
 A weapon is drawn in the box on its page (the pen lifts at the box's edge), and its shape is how it fights: length is reach, width and ink are weight, jagged edges shred and bleed, a thin blade cuts cleaner. Any shape will do: a big clunky one hits hard but swings slowly and slows the man carrying it. Each gets a name: Shredder, Bone Crusher, Skewer, Shiv or Blade. Skewers stab.
@@ -39,7 +40,7 @@ Every man has a job, and choosing them is the game:
 
 **Picking men**: tap one, or drag a box around several (the dashed box button, A, picks everyone; Esc lets go). The count of who's picked sits by the buttons. With nobody picked, fight orders go to everyone not crewing or repairing. Tapping past your wall with men picked sends them charging.
 
-**Rocks**: the catapult starts empty. Every rock it throws is one you draw during the battle: the rock button in the corner of the field (D) opens a small pad; draw a closed, round-ish lump (bigger hits harder, spikier tears more) and keep it (the check mark, or Enter) to put it on the catapult's pile. You get 10 rocks a battle, and the button shows how many are left, wiggling when the catapult has nothing to throw. The computer draws its own as it goes.
+**Rocks**: the catapult throws only rocks you drew, each once. The ones drawn before the battle start on its pile, lying in front of it, each as you drew it; more can be drawn during the battle: the rock button in the corner of the field (D) opens a small pad, and a rock kept there (the check mark, or Enter) goes on the pile. You get 10 rocks a battle all told, and the button shows how many are left to draw, wiggling when the catapult has nothing to throw. A rematch starts with the rocks drawn before the battle again. The computer draws its own as it goes.
 
 **Aiming**: tap your catapult (with no men picked) and an aiming pad opens in the middle of the screen. Pull back from its centre like a slingshot: the further, the farther, and the field shows where it would land. It throws only forward, between a low and a steep angle (the shaded wedge on the pad), and at most into the enemy's wall, never over it: the edge of the pad is as far as it reaches, so men at home behind a wall are safe from rocks (one that rolls over the top drops dead behind it). Let go, and that's its aim: from then on it fires that way by itself as often as it can, its aim drawn as a dotted arc on the field (and the overview). Aim it again any time; the pause on the pad holds its fire. Dragging straight from the catapult aims it too.
 

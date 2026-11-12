@@ -23,16 +23,13 @@ const END_AFTER = 2.2;
 // battle (battle.js), stepped here and sent to every page many times a second. Drawings are judged here too, so what
 // a page keeps is what passed.
 export default class Game extends BaseGame {
-	static version = 2;
+	static version = 3;
 	static migrations = {
-		// Ammo stopped being a drawing step (rocks are drawn in battle): a side part way through drawing moves on a step
-		// if it was past ammo, and onto weapons if it was on ammo
-		2: save => {
-			for (const drawing of save.state?.drawing ?? []) {
-				if (drawing.done || drawing.step < 3) continue;
-				if (drawing.step === 3) drawing.left = STEPS[3].seconds;
-				else drawing.step--;
-			}
+		// Version 2 drew without an ammo page (weapons were step 3); version 3 has it back, as version 1 did. A save made
+		// with version 2 (save.version is what it was saved as, while migrating) and part way past beams moves on a step.
+		3: save => {
+			if (save.version !== 2) return;
+			for (const drawing of save.state?.drawing ?? []) if (!drawing.done && drawing.step >= 3) drawing.step++;
 		},
 	};
 
@@ -63,7 +60,10 @@ export default class Game extends BaseGame {
 			const { kind } = STEPS[drawing.step];
 			const kept = this.state.art[team][kind];
 
-			if (kept.length >= MOST_KEPT) refuse(`That's plenty: ${MOST_KEPT} is the most.`);
+			// Rocks are the catapult's whole pile for a battle, so no more than it may throw
+			const most = kind === 'ammo' ? AMMO : MOST_KEPT;
+
+			if (kept.length >= most) refuse(`That's plenty: ${most} is the most.`);
 
 			const verdict = judge(kind, strokes);
 
@@ -88,7 +88,8 @@ export default class Game extends BaseGame {
 
 			const rocks = this.state.art[team].ammo;
 
-			rocks.push(verdict.item);
+			// Drawn in battle: on the pile for this one only, not for a rematch
+			rocks.push({ ...verdict.item, inBattle: true });
 			this.world.addRock(team, rocks.length - 1);
 			this.artChanged();
 
@@ -215,8 +216,8 @@ export default class Game extends BaseGame {
 		for (const team of uses) {
 			for (const { kind } of STEPS) if (!state.art[team][kind]?.length) state.art[team][kind] = defaultsFor(kind);
 		}
-		// Every battle a person's catapult starts empty: each rock is drawn during it
-		for (const team of humanTeams(state)) state.art[team].ammo = [];
+		// Every battle a person's catapult starts with the rocks drawn before it; those drawn in the last one are gone
+		for (const team of humanTeams(state)) state.art[team].ammo = state.art[team].ammo.filter(rock => !rock.inBattle);
 
 		const auto = [false, state.mode === 'cpu'];
 		const sides = artOf(state).map((a, team) =>

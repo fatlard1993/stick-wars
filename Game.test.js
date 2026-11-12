@@ -148,7 +148,7 @@ test('drawing more stick men and weapons earns more men, and more stones a bigge
 	expect([lazy.world.walls[0].cols, lazy.world.walls[0].rows]).toEqual([3, 6]);
 });
 
-test('the catapult starts empty: each rock is drawn in battle, up to the most a battle allows, and the computer draws its own', () => {
+test('the catapult throws only drawn rocks: those drawn before the battle, and more drawn during it, up to the most a battle allows', () => {
 	const game = newGame('cpu');
 	const fox = game.addPlayer('🦊');
 
@@ -157,21 +157,48 @@ test('the catapult starts empty: each rock is drawn in battle, up to the most a 
 	const cat = game.world.cats[0];
 	const rock = DEFAULT_RAW.ammo()[0];
 
-	expect(cat.ammo).toBe(0);
-	expect(game.act(fox.id, 'rock', { strokes: [lineS(240, 50, 240, 400)] }).ok).toBe(false);
-	expect(game.act(fox.id, 'rock', { strokes: rock }).result).toEqual({ left: AMMO - 1 });
+	// The one drawn before the battle is on the pile; the computer's own are on its
 	expect(cat.ammo).toBe(1);
+	expect(game.world.cats[1].ammo).toBe(game.state.art[1].ammo.length);
+	expect(game.act(fox.id, 'rock', { strokes: [lineS(240, 50, 240, 400)] }).ok).toBe(false);
+	expect(game.act(fox.id, 'rock', { strokes: rock }).result).toEqual({ left: AMMO - 2 });
+	expect(cat.ammo).toBe(2);
 	expect(cat.snapshot().l).toEqual([0, 0]);
-	for (let k = 1; k < AMMO; k++) game.act(fox.id, 'rock', { strokes: rock });
+	for (let k = 2; k < AMMO; k++) game.act(fox.id, 'rock', { strokes: rock });
 	expect(game.act(fox.id, 'rock', { strokes: rock }).error).toBe('No more rocks this battle');
 	expect(cat.ammo).toBe(AMMO);
+
+	const before = game.world.drawnRocks[1];
+
 	for (let i = 0; i < 60 * 10; i++) game.world.step(DT);
-	expect(game.world.drawnRocks[1]).toBeGreaterThan(0);
-	// A rematch starts empty again
+	expect(game.world.drawnRocks[1]).toBeGreaterThan(before);
+	// A rematch starts with the ones drawn before the battle, not those drawn in it
 	game.state.phase = 'over';
 	game.act(fox.id, 'again');
-	expect(game.world.cats[0].ammo).toBe(0);
-	expect(game.state.art[0].ammo).toHaveLength(0);
+	expect(game.world.cats[0].ammo).toBe(1);
+	expect(game.state.art[0].ammo).toHaveLength(1);
+});
+
+test('the rocks page keeps no more than a battle can throw, and left empty gives the default rocks', () => {
+	const game = newGame('cpu');
+	const fox = game.addPlayer('🦊');
+
+	for (const { kind } of STEPS) {
+		if (kind !== 'ammo') {
+			game.act(fox.id, 'next');
+			continue;
+		}
+		for (let k = 0; k < AMMO; k++) expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.ammo()[0] }).ok).toBe(true);
+		expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.ammo()[0] }).ok).toBe(false);
+		game.act(fox.id, 'next');
+	}
+	expect(game.world.cats[0].ammo).toBe(AMMO);
+
+	const lazy = newGame('cpu');
+	const frog = lazy.addPlayer('🐸');
+
+	for (const _ of STEPS) lazy.act(frog.id, 'next');
+	expect(lazy.world.cats[0].ammo).toBe(DEFAULT_RAW.ammo().length);
 });
 
 test('a catapult throws forward at a sensible angle, and never past the enemy wall', () => {
@@ -236,12 +263,14 @@ test('in battle a player sends men out, orders the ones they picked, and crews t
 	expect(world.cats[0].crewing()).toHaveLength(3);
 	for (let k = 0; k < 5; k++) game.act(fox.id, 'rock', { strokes: DEFAULT_RAW.ammo()[0] });
 
+	const loaded = world.cats[0].ammo;
+
 	// Aimed, with its crew in place, it fires by itself as often as it can; told to hold, it stops
 	for (let i = 0; i < 60 * 8; i++) world.step(DT);
 	expect(world.cats[0].crew()).toBe(3);
 	expect(game.act(fox.id, 'aim', { vx: 500, vy: -600 }).ok).toBe(true);
 	for (let i = 0; i < 60 * 8; i++) world.step(DT);
-	expect(5 - world.cats[0].ammo).toBeGreaterThan(1);
+	expect(loaded - world.cats[0].ammo).toBeGreaterThan(1);
 	game.act(fox.id, 'aim', { hold: true });
 
 	const held = world.cats[0].ammo;
@@ -300,7 +329,7 @@ test('the art is saved and the battle is not; a game saved mid-battle comes back
 
 	const save = JSON.parse(JSON.stringify(game.toSaveState()));
 
-	expect(save.version).toBe(2);
+	expect(save.version).toBe(3);
 	expect(save.state.art[0].swords).toHaveLength(1);
 
 	const back = new Game({ saveState: save, server: server(), logger: quiet });
@@ -311,22 +340,23 @@ test('the art is saved and the battle is not; a game saved mid-battle comes back
 	expect(back.state.art[0].swords).toEqual(game.state.art[0].swords);
 });
 
-test('a game saved when ammo was still a drawing step loads, each side on the step it was drawing', () => {
-	const game = newGame('duo');
-	const save = JSON.parse(JSON.stringify(game.toSaveState()));
+test('a game saved part way through drawing loads on the page it was on, whichever pages it was saved with', () => {
+	const load = (version, drawing) => {
+		const save = JSON.parse(JSON.stringify(newGame('duo').toSaveState()));
 
-	save.version = 1;
-	save.state.drawing = [
-		{ step: 3, left: 4, done: false },
-		{ step: 4, left: 30, done: false },
-	];
+		Object.assign(save, { version });
+		save.state.drawing = drawing.map(step => ({ step, left: 9, done: false }));
 
-	const back = new Game({ saveState: Game.migrate(save), server: server(), logger: quiet });
+		const back = new Game({ saveState: Game.migrate(save), server: server(), logger: quiet });
 
-	back.dispose();
-	expect(back.state.drawing.map(({ step }) => STEPS[step].kind)).toEqual(['swords', 'swords']);
-	expect(back.state.drawing[0].left).toBe(STEPS[3].seconds);
-	expect(back.state.drawing[1].left).toBe(30);
+		back.dispose();
+
+		return back.state.drawing.map(({ step }) => STEPS[step].kind);
+	};
+
+	// Version 1 had the rocks page, as now; version 2 didn't
+	expect(load(1, [3, 4])).toEqual(['ammo', 'swords']);
+	expect(load(2, [2, 3])).toEqual(['beams', 'swords']);
 });
 
 test('when the opponent leaves, their side is free and the next one to come draws their own army', () => {
@@ -454,7 +484,7 @@ test('a smashed catapult is rebuilt by its repairers, and fires again once its c
 	for (let i = 0; i < 60 * 6; i++) world.step(DT);
 	game.act(fox.id, 'aim', { vx: 500, vy: -600 });
 	for (let i = 0; i < 60 * 6; i++) world.step(DT);
-	expect(cat.ammo).toBe(0);
+	expect(cat.ammo).toBeLessThan(2);
 });
 
 test('the dead and the wreckage lie a while, fade, and are gone', () => {

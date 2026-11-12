@@ -43,9 +43,9 @@ const VIEW_TOP = GROUND - 330;
 // The smallest a stick man is let be drawn before the camera zooms in: about this many screen pixels per world unit
 const READABLE = 0.62;
 // How much of the field's length an upright phone's main view spans: a base and its wall, and some field
-const UPRIGHT_SPAN = 280;
+const UPRIGHT_SPAN = 360;
 // Where an upright phone's view starts along the field (mirrored for green): over the army at home, its wall beside it
-const UPRIGHT_HOME = 390;
+const UPRIGHT_HOME = 330;
 // How far a pinch or the wheel zooms in, past the readable view
 const MOST_ZOOM = 2.4;
 
@@ -1059,8 +1059,32 @@ export default class BattleScreen extends Screen {
 		placeShape(g, item.shape, prop, fill, prop.c === 'wood' ? WOOD_INK : INK, prop.c === 'ammo' ? 2 : 1.6);
 	}
 
+	// A catapult's rocks, piled on the ground in front of it (its crew stand behind), each as drawn: the bottom row
+	// first, the next to throw on top
+	drawPile(g, cat) {
+		const rocks = (cat.p ?? []).map(ref => this.item(ref, 'ammo')).filter(Boolean).reverse();
+		const at = cat.x + cat.d * 72;
+		const widths = [3, 3, 2, 1, 1];
+		let row = 0, inRow = 0;
+
+		for (const rock of rocks) {
+			const width = widths[row] ?? 1;
+			const x = at + (inRow - (width - 1) / 2) * 20 + (row % 2) * 2, y = GROUND - 10 - row * 15;
+			// Bigger rocks a little bigger on the pile, all small enough to stack
+			const size = clamp(rock.radius * 1.1, 17, 25);
+
+			placeShape(g, rock.shape, { x, y, a: (inRow * 1.7 + row) % TAU, sx: size, sy: size }, FILLS.ammo, INK, 1.6);
+			if (++inRow >= width) {
+				row++;
+				inRow = 0;
+			}
+		}
+	}
+
 	drawCat(g, cat, arm) {
 		const y = GROUND - 160, ink = teamInk(cat.t);
+
+		this.drawPile(g, cat);
 
 		g.font = `22px ${HAND}`;
 		g.textAlign = 'left';

@@ -1217,6 +1217,8 @@ class Catapult {
 			...((this.flying ?? this.rocks[0]) && { l: [(this.flying ?? this.rocks[0]).a, (this.flying ?? this.rocks[0]).i] }),
 			// How many rocks its side can still draw
 			dr: AMMO - this.w.drawnRocks[this.team],
+			// Its pile: each rock on it, the next to throw first
+			p: this.rocks.map(ref => [ref.a, ref.i]),
 			// Something sits in the bucket: loaded and nearly ready, or just about to fly
 			ld: this.ammo > 0 && this.cd < 0.4 && (this.fireT < 0 || Boolean(this.pend)),
 		};
@@ -1286,6 +1288,8 @@ export class World {
 			const [cat] = this.cats.filter(c => c.team === team);
 
 			Object.assign(first, { order: 'crew', post: cat });
+			// The rocks drawn before the battle start on the catapult's pile
+			(this.arts[this.artOf[team]].ammo ?? []).forEach((_, i) => this.addRock(team, i));
 		}
 	}
 
