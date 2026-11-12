@@ -22,8 +22,9 @@ import {
 	project,
 } from '../field.js';
 import { TEAMS, TICK_MS } from '../rules.js';
+import AimPad from './AimPad.js';
 import { drawIcon, icon } from './icons.js';
-import { FILLS, GORE, INK, WOOD_INK, drawBody, drawShape, mixColor, paperBackground, placeShape, teamInk } from './paint.js';
+import { FILLS, GORE, INK, WOOD_INK, drawBlade, drawBody, mixColor, paperBackground, placeShape, teamInk } from './paint.js';
 import { HAND, PENCIL, RED_PENCIL } from './theme.js';
 import { count, doodle } from './ui.js';
 
@@ -157,6 +158,9 @@ export default class BattleScreen extends Screen {
 		this.flash = null;
 		this.mode = null;
 		this.selected = new Set();
+		// Catapults picked out, by which of ours: the aiming pad shows while there are any
+		this.catsPicked = new Set();
+		this.padAim = null;
 		this.tops = new Float32Array(Math.ceil(W / BUCKET) + 1).fill(GROUND);
 
 		this.stage = new Stage({ appendTo: this });
@@ -185,6 +189,13 @@ export default class BattleScreen extends Screen {
 		if (team < 0) return;
 
 		const controls = new Controls({ appendTo: this });
+
+		this.pad = new AimPad({
+			appendTo: this,
+			onAim: v => (this.padAim = v),
+			onFire: v => this.fireAll(v),
+			onClose: () => this.dropCats(),
+		});
 
 		this.picked = document.createElement('span');
 		this.picked.className = 'picked';
@@ -253,7 +264,44 @@ export default class BattleScreen extends Screen {
 	letGo() {
 		this.selected.clear();
 		this.mode = null;
+		this.dropCats();
 		this.showPicked();
+	}
+
+	// A catapult picked out, or put back down if it was
+	pickCat(which) {
+		if (this.catsPicked.has(which)) this.catsPicked.delete(which);
+		else this.catsPicked.add(which);
+		this.showPad();
+	}
+
+	dropCats() {
+		this.catsPicked.clear();
+		this.padAim = null;
+		this.showPad();
+	}
+
+	// The aiming pad for the picked catapults that still stand: how many, and how many could fire now
+	showPad() {
+		if (!this.pad) return;
+
+		const cats = this.myCats().filter(({ which, cat }) => this.catsPicked.has(which) && !cat.dead);
+
+		for (const which of [...this.catsPicked]) if (!cats.some(entry => entry.which === which)) this.catsPicked.delete(which);
+		this.pad.show(cats.length, cats.filter(({ cat }) => cat.n > 0 && cat.cr > 0 && cat.cd <= 0).length, teamInk(this.team));
+	}
+
+	// Every picked catapult flings the way the pad was pulled; one that can't says why over it
+	fireAll([vx, vy]) {
+		for (const { which, cat } of this.myCats()) {
+			if (!this.catsPicked.has(which) || cat.dead) continue;
+			act('fling', { which, vx, vy }, { quiet: true }).then(said => {
+				if (said.ok) return;
+				if (cat.n <= 0) this.say('empty', cat.x, GROUND - 210, RED_PENCIL);
+				else if (!cat.cr) this.say('person', cat.x, GROUND - 210, RED_PENCIL);
+				else this.say('reload', cat.x, GROUND - 210);
+			});
+		}
 	}
 
 	showPicked() {
@@ -309,6 +357,7 @@ export default class BattleScreen extends Screen {
 
 			for (const id of this.selected) if (!alive.has(id)) this.selected.delete(id);
 			if (this.selected.size !== before) this.showPicked();
+			if (this.catsPicked.size) this.showPad();
 		}
 		for (const event of view.events ?? []) this.play(event);
 		this.showCard(view);
@@ -486,6 +535,8 @@ export default class BattleScreen extends Screen {
 
 	down(point) {
 		if (this.view?.state.phase !== 'battle' || this.view.away.length) return;
+		// The aiming pad has its own hands
+		if (point.event?.target?.closest?.('.aim-pad')) return;
 
 		const at = this.toPage(point);
 		// A man under the press is picked over the catapult he crews
@@ -536,7 +587,16 @@ export default class BattleScreen extends Screen {
 
 		// A tap: on a catapult (crew it, or repair it when repairing is chosen), on our wall (repair it), on a man (pick
 		// him out, or let him go), or past our wall with men picked (send them charging)
-		if (press.cat) return this.order(this.mode === 'repair' || press.cat.cat.dead ? 'repair' : 'crew', press.cat.which);
+		// A catapult tapped: repaired or crewed by the men picked (or as chosen), else picked out itself to aim
+		if (press.cat) {
+			const { cat, which } = press.cat;
+
+			if (this.mode === 'repair' || (cat.dead && this.selected.size)) return this.order('repair', which);
+			if (this.mode === 'crew' || this.selected.size) return this.order('crew', which);
+			if (!cat.dead) this.pickCat(which);
+
+			return;
+		}
 		if (this.wallAt(press.at) && !press.unit && (this.mode === 'repair' || this.selected.size)) return this.order('repair', 'wall');
 		if (press.unit) {
 			const only = this.selected.size === 1 && this.selected.has(press.unit.id);
@@ -637,6 +697,7 @@ export default class BattleScreen extends Screen {
 		for (const thing of scene) thing.draw();
 		this.stepParts(g, dt);
 		if (this.mode) this.drawTargets(g);
+		if (this.catsPicked.size) this.drawPickedCats(g);
 		if (this.aim) this.drawAim(g);
 		if (this.box) this.drawBox(g);
 		if (this.flash && performance.now() < this.flash.until) drawIcon(g, this.flash.name, this.flash.x, this.flash.y, 46, this.flash.color);
@@ -747,7 +808,7 @@ export default class BattleScreen extends Screen {
 				g.translate(j[12], hy);
 				g.rotate(ang);
 				g.scale(L, L * f);
-				drawShape(g, item.shape, mixColor(FILLS.steel, GORE, body.w[2]), INK, 1.7 / L);
+				drawBlade(g, item.shape, body.w[2], 1.7 / L);
 				g.restore();
 			}
 		}
@@ -772,6 +833,8 @@ export default class BattleScreen extends Screen {
 		const base = FILLS[prop.c] ?? FILLS.stone;
 		const fill = prop.b ? mixColor(base, GORE, prop.b) : base;
 
+		// A dropped weapon is still drawn as a weapon: its own lines, no fill
+		if (kind === 'swords') return placeShape(g, item.shape, prop, null, INK, 1.7, prop.b ?? 0);
 		placeShape(g, item.shape, prop, fill, prop.c === 'wood' ? WOOD_INK : INK, prop.c === 'ammo' ? 2 : 1.6);
 	}
 
@@ -892,6 +955,42 @@ export default class BattleScreen extends Screen {
 		g.moveTo(fx - 14, fy - 44);
 		g.lineTo(fx + 14, fy - 44);
 		g.stroke();
+	}
+
+	// Picked catapults ringed in their side's ink, and while the pad's pulled, where each would fling
+	drawPickedCats(g) {
+		const ink = teamInk(this.team);
+
+		for (const { which, cat } of this.myCats()) {
+			if (!this.catsPicked.has(which) || cat.dead) continue;
+
+			const [cx, cy] = project(cat.x, GROUND - 40, cat.z);
+
+			g.save();
+			g.strokeStyle = ink;
+			g.lineWidth = 3;
+			g.setLineDash([10, 7]);
+			g.beginPath();
+			g.ellipse(cx, cy, 68, 52, 0, 0, TAU);
+			g.stroke();
+			g.restore();
+			if (!this.padAim) continue;
+
+			const from = catGeometry(cat.x, cat.d, cat.arm).launch;
+
+			g.fillStyle = ink;
+			flingPath(from, this.padAim[0], this.padAim[1], x => this.groundAt(x)).forEach(([x, y], at) => {
+				if (at % 4) return;
+
+				const [px, py] = project(x, y, cat.z, x);
+
+				g.globalAlpha = 1 - at / 200;
+				g.beginPath();
+				g.arc(px, py, 3, 0, TAU);
+				g.fill();
+			});
+			g.globalAlpha = 1;
+		}
 	}
 
 	drawAim(g) {

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import { DEFAULT_RAW, judge, lineS } from './art.js';
+import { DEFAULT_RAW, blobS, judge, lineS } from './art.js';
 import { ARMY, DT, GROUND, World } from './battle.js';
 import Game from './Game.js';
 import { STEPS, emptyArt } from './rules.js';
@@ -28,13 +28,15 @@ test('every default drawing passes its own check', () => {
 
 test('any shape big enough is a weapon, and the bigger and clunkier it is, the slower it swings', () => {
 	const dagger = judge('swords', [lineS(240, 300, 240, 160)]);
-	const slab = judge('swords', [DEFAULT_RAW.stones()[0][0]]);
+	const slab = judge('swords', [blobS(240, 300, 90, 90, 9)]);
 
 	expect(dagger.ok).toBe(true);
 	expect(slab.ok).toBe(true);
 	expect(slab.item.stats.swing).toBeGreaterThan(dagger.item.stats.swing * 1.5);
 	expect(slab.item.stats.dmg).toBeGreaterThan(dagger.item.stats.dmg);
 	expect(judge('swords', [lineS(240, 240, 260, 260)]).ok).toBe(false);
+	// It has to stay in the box drawn for it
+	expect(judge('swords', [lineS(60, 400, 420, 60)]).msg).toBe('Keep the weapon inside the box.');
 });
 
 test('a drawing that is not the thing asked for is turned down, saying why', () => {

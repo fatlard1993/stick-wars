@@ -8,7 +8,7 @@ export const STEPS = [
 	{ kind: 'stones', seconds: 25, title: 'Draw stones for the wall' },
 	{ kind: 'beams', seconds: 25, title: 'Draw beams for the catapults' },
 	{ kind: 'ammo', seconds: 25, title: 'Draw catapult ammo' },
-	{ kind: 'swords', seconds: 40, title: 'Draw weapons' },
+	{ kind: 'swords', seconds: 40, title: 'Draw weapons in the box' },
 ];
 
 /** How many drawings of one kind a side keeps, at most */

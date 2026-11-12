@@ -47,14 +47,34 @@ export const drawShape = (g, shape, fill, ink, lw) => {
 	g.stroke();
 };
 
+/**
+ * A weapon as it was drawn, in whatever transform the context has: steel laid along every one of its lines (bloodier
+ * the more it's used), the pencil over it. Never a fill under it, which would round off what was drawn.
+ */
+export const drawBlade = (g, shape, blood, lw) => {
+	g.beginPath();
+	for (const s of shape.strokes) {
+		if (!s.length) continue;
+		g.moveTo(s[0].x, s[0].y);
+		for (let i = 1; i < s.length; i++) g.lineTo(s[i].x, s[i].y);
+	}
+	g.strokeStyle = mixColor(FILLS.steel, GORE, blood);
+	g.lineWidth = lw * 3.4;
+	g.stroke();
+	g.strokeStyle = INK;
+	g.lineWidth = lw;
+	g.stroke();
+};
+
 /** A shape placed in the world: centered at x, y, turned a, stretched sx by sy, shifted ox along its length first */
-export const placeShape = (g, shape, { x, y, a = 0, sx, sy, ox = 0 }, fill, ink, lw) => {
+export const placeShape = (g, shape, { x, y, a = 0, sx, sy, ox = 0 }, fill, ink, lw, blade = null) => {
 	g.save();
 	g.translate(x, y);
 	g.rotate(a);
 	g.scale(sx, sy);
 	g.translate(-ox, 0);
-	drawShape(g, shape, fill, ink, lw / ((Math.abs(sx) + Math.abs(sy)) / 2));
+	if (blade === null) drawShape(g, shape, fill, ink, lw / ((Math.abs(sx) + Math.abs(sy)) / 2));
+	else drawBlade(g, shape, blade, lw / ((Math.abs(sx) + Math.abs(sy)) / 2));
 	g.restore();
 };
 

@@ -356,8 +356,14 @@ export function checkBeam(strokes) {
   return { ok: true, item: { raw: strokes, shape: { strokes: ns, hull: hull(ns.flat()) }, wr: wid / P.len } };
 }
 
+/** Where on the pad a weapon is drawn: a tall box, handle end at the bottom, so weapons come out a fighting size */
+export const WEAPON_AREA = { x0: 140, y0: 30, x1: 340, y1: 455 };
+
 export function checkSword(strokes) {
   if (allPts(strokes).length < 4) return fail('Draw a weapon first.');
+  const box = bboxOf(allPts(strokes)), edge = 6;
+  if (box.x < WEAPON_AREA.x0 - edge || box.y < WEAPON_AREA.y0 - edge || box.x + box.w > WEAPON_AREA.x1 + edge || box.y + box.h > WEAPON_AREA.y1 + edge)
+    return fail('Keep the weapon inside the box.');
   const { rs, P } = axisFrame(strokes);
   // Any shape will do as a weapon: what it costs is speed, not a refusal (weaponStats)
   if (P.len < 100) return fail('Bigger! A weapon needs some size to it.');
@@ -465,7 +471,7 @@ export const DEFAULT_RAW = {
   ammo: () => [[blobS(240, 240, 115, 110, 12)], [starS(240, 240, 150, 95, 9)]],
   swords: () => [
     [polyS([[229, 385], [233, 112], [240, 58], [247, 112], [251, 385]]), lineS(192, 385, 288, 385), closedPoly([[233, 388], [247, 388], [247, 445], [233, 445]])],
-    [lineS(240, 445, 240, 62), closedPoly([[240, 85], [318, 52], [352, 128], [318, 205], [240, 172]])],
+    [lineS(215, 445, 215, 62), closedPoly([[215, 85], [290, 52], [322, 128], [290, 205], [215, 172]])],
   ],
 };
 

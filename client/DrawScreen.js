@@ -1,7 +1,7 @@
 import { Component, Notify, Whiteboard, styled } from '@vanilla-bean/components';
 import { act, createInput } from '@fatlard1993/web-game-framework/client';
 
-import { DEFAULT_RAW, PAD, clamp, judge, pick } from '../art.js';
+import { DEFAULT_RAW, PAD, WEAPON_AREA, clamp, pick } from '../art.js';
 import { STEPS, TEAMS } from '../rules.js';
 import { icon } from './icons.js';
 import { drawRawFit } from './paint.js';
@@ -36,14 +36,14 @@ class Pad extends Whiteboard {
 	}
 }
 
-// A stroke with the pen lifted wherever it left the pad: what the pad held to its edge (past it) is dropped, and the
-// stroke goes on as a new one where the pen came back
-const offPad = (line, size) => {
+// A stroke with the pen lifted wherever it left the page (or the box a weapon is drawn in): what was past it is dropped,
+// and the stroke goes on as a new one where the pen came back
+const offPad = (line, { x0, y0, x1, y1 }) => {
 	const out = [];
 	let current = [];
 
 	for (const point of line) {
-		const edge = point.x <= 0 || point.y <= 0 || point.x >= size || point.y >= size;
+		const edge = point.x <= x0 || point.y <= y0 || point.x >= x1 || point.y >= y1;
 
 		if (edge) {
 			if (current.length) out.push(current);
@@ -167,28 +167,6 @@ const Tools = styled(
 	`,
 );
 
-const Stats = styled(
-	Component,
-	({ space }) => `
-		display: flex;
-		flex-direction: column;
-		gap: ${space.xs};
-
-		&:empty { display: none; }
-		& h3 { margin: 0; font-size: 1.6em; font-weight: normal; }
-		& .stat { display: flex; align-items: center; gap: ${space.sm}; }
-		& .stat i {
-			flex: 1;
-			height: 12px;
-			border: 2px solid ${PENCIL};
-			border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
-			background: ${SHEET};
-			overflow: hidden;
-		}
-		& .stat b { display: block; height: 100%; background: ${RED_PENCIL}; }
-	`,
-);
-
 const Gallery = styled(
 	Component,
 	({ space }) => `
@@ -227,8 +205,8 @@ const Waiting = styled(
 );
 
 // The drawing page: a pad to draw the step's art on, a dashed example to show what's wanted, the clock draining, and
-// beside it the tools and everything kept so far. A drawing is judged by the server when kept; weapons show what
-// their shape would make them do while they're still being drawn.
+// beside it the tools and everything kept so far. A drawing is judged by the server when kept. Weapons are drawn in a
+// box on the pad (the pen lifts at its edge), and what a weapon's shape makes it do is left for the battle to show.
 export default class DrawScreen extends Screen {
 	build() {
 		super.build();
@@ -260,7 +238,6 @@ export default class DrawScreen extends Screen {
 			doodle('clear', { title: 'Clear (C)', onPress: () => this.clear() }),
 			doodle('next', { title: 'Done, next (N)', onPress: () => act('next') }),
 		);
-		this.stats = new Stats({ appendTo: this.side });
 		this.count = new Component({ appendTo: this.side });
 		this.gallery = new Gallery({ appendTo: this.side });
 
@@ -324,7 +301,6 @@ export default class DrawScreen extends Screen {
 		this.kind = kind;
 		this.strokes = [];
 		this.ghost = DEFAULT_RAW[kind]()[0];
-		this.stats.elem.replaceChildren();
 
 		const dots = document.createElement('span');
 
@@ -372,25 +348,23 @@ export default class DrawScreen extends Screen {
 		if (!this.size || !line?.length) return;
 
 		const k = PAD / this.size;
-		const pieces = offPad(line, this.size);
+		const area = this.kind === 'swords' ? WEAPON_AREA : { x0: 0, y0: 0, x1: PAD, y1: PAD };
+		const pieces = offPad(line, { x0: area.x0 / k, y0: area.y0 / k, x1: area.x1 / k, y1: area.y1 / k });
 		const first = !this.strokes.length;
 
 		for (const piece of pieces) this.strokes.push(piece.map(({ x, y }) => ({ x: x * k, y: y * k })));
 		// The first line wipes the example away; a line that left the pad is drawn again without what was off it
 		if ((first && this.strokes.length) || pieces.length !== 1 || pieces[0].length !== line.length) this.redraw();
-		this.preview();
 	}
 
 	undo() {
 		this.strokes.pop();
 		this.redraw();
-		this.preview();
 	}
 
 	clear() {
 		this.strokes = [];
 		this.redraw();
-		this.stats.elem.replaceChildren();
 	}
 
 	async keep() {
@@ -409,42 +383,6 @@ export default class DrawScreen extends Screen {
 		// Under the bar, clear of the pad, so it never sits under a pen
 		new Notify({ x: window.innerWidth / 2, y: 70, intent: 'success', content: pick(PRAISE[kind]), timeout: 1500 });
 		if (this.strokes === strokes) this.clear();
-		if (said.result?.stats) this.showStats(said.result.stats);
-	}
-
-	// A weapon's stats while it's still being drawn, from the same check the server will run
-	preview() {
-		if (this.kind !== 'swords' || !this.strokes.length) return;
-
-		const verdict = judge('swords', this.strokes);
-
-		if (verdict.ok) this.showStats(verdict.item.stats);
-	}
-
-	showStats(s) {
-		const heading = Object.assign(document.createElement('h3'), { textContent: s.name });
-		const bar = (name, v, title) => {
-			const row = document.createElement('div');
-			const track = document.createElement('i');
-			const fill = document.createElement('b');
-
-			row.className = 'stat';
-			row.title = title;
-			fill.style.width = `${Math.round(clamp(v, 0, 1) * 100)}%`;
-			track.append(fill);
-			row.append(icon(name, { size: '1.4em' }), track);
-
-			return row;
-		};
-
-		this.stats.elem.replaceChildren(
-			heading,
-			bar('ruler', s.lr, 'Reach'),
-			bar('weight', (s.weight - 0.35) / 2.85, 'Weight'),
-			bar('saw', s.serr, 'Shredding'),
-			bar('knife', s.cut, 'Cutting'),
-			bar('bolt', 1 - (s.swing - 0.4) / 1.1, 'Speed'),
-		);
 	}
 
 	redraw() {
@@ -462,6 +400,22 @@ export default class DrawScreen extends Screen {
 
 		this.pad.clearCanvas();
 		g.lineCap = g.lineJoin = 'round';
+		// A weapon's box: drawn inside it, its handle at the bottom
+		if (this.kind === 'swords') {
+			const { x0, y0, x1, y1 } = WEAPON_AREA;
+
+			g.strokeStyle = 'rgba(43,43,43,0.45)';
+			g.lineWidth = 2.5 * k;
+			g.setLineDash([12 * k, 9 * k]);
+			g.strokeRect(x0 * k, y0 * k, (x1 - x0) * k, (y1 - y0) * k);
+			g.setLineDash([]);
+			g.strokeStyle = 'rgba(179,38,30,0.55)';
+			g.lineWidth = 6 * k;
+			g.beginPath();
+			g.moveTo(((x0 + x1) / 2 - 30) * k, (y1 - 4) * k);
+			g.lineTo(((x0 + x1) / 2 + 30) * k, (y1 - 4) * k);
+			g.stroke();
+		}
 		if (!this.strokes.length && this.ghost) {
 			g.setLineDash([10 * k, 12 * k]);
 			g.strokeStyle = 'rgba(0,0,0,0.13)';
