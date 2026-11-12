@@ -10,7 +10,7 @@ Pick **vs computer**, or **two players** to fight a friend on their own device (
 
 ### Drawing your army
 
-Five pages, each against the clock. Draw as many as you like on each: the check mark (or Enter) keeps a drawing if it passes a quick shape check, and says what's missing if it doesn't. The curly arrow undoes a line (Z), the eraser clears the page (C), the arrow to the bar moves on (N). A page left with nothing kept gets the defaults. The dashed drawing shows what's wanted. A pen that slides off the page lifts there, and draws on again where it comes back.
+Five pages, each against the clock. Draw as many as you like on each: the check mark (or Enter) keeps a drawing if it passes a quick shape check, and says what's missing if it doesn't. The curly arrow undoes a line (Z), the eraser clears the page (C), the arrow to the bar moves on (N). A page left with nothing kept gets the defaults, drawn by a shaky hand. The dashed drawing shows what's wanted. A pen that slides off the page lifts there, and draws on again where it comes back.
 
 | What | Time | The check |
 | --- | --- | --- |

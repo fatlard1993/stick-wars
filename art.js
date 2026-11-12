@@ -477,11 +477,13 @@ export const DEFAULT_RAW = {
 
 export const CHECKS = { stickmen: checkStickman, stones: checkStone, beams: checkBeam, ammo: checkAmmo, swords: checkSword };
 
+// The defaults as they fill a page left empty: redrawn by the same shaky hand as the computer's army (a steadier one
+// if a shaky one keeps failing, and at the last, as drawn), so no army looks machine-made
 export function makeDefaults(key) {
   const out = [], count = DEFAULT_RAW[key]().length;
   for (let i = 0; i < count; i++) {
     for (let tries = 0; tries < 8; tries++) {
-      const r = CHECKS[key](DEFAULT_RAW[key]()[i]);
+      const r = CHECKS[key](scrawl(DEFAULT_RAW[key]()[i], tries < 5 ? rand(0.7, 1.3) : tries < 7 ? 0.4 : 0));
       if (r.ok) { out.push(r.item); break; }
       if (tries === 7) console.warn('default failed its own check', key, i, r.msg);
     }
