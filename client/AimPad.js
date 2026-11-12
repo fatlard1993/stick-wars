@@ -21,11 +21,11 @@ const Pad = styled(
 		align-items: center;
 		gap: ${space.xs};
 		padding: ${space.sm} ${space.md} ${space.md};
-		/* A little see-through: the arcs it aims pass behind it */
-		background: rgba(255, 253, 246, 0.82);
-		border: 3px solid ${PENCIL};
+		/* Mostly see-through: the field and the arcs it aims show behind it */
+		background: rgba(255, 253, 246, 0.28);
+		border: 2.5px solid rgba(43, 43, 43, 0.55);
 		border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
-		box-shadow: 4px 6px 0 ${PENCIL};
+		box-shadow: none;
 		touch-action: none;
 		user-select: none;
 
@@ -147,14 +147,14 @@ export default class AimPad extends Pad {
 		g.clearRect(0, 0, size, size);
 		g.lineCap = g.lineJoin = 'round';
 		// Rings a quarter of the strength apart, and the edge that's all of it
-		g.strokeStyle = 'rgba(43,43,43,0.25)';
+		g.strokeStyle = 'rgba(43,43,43,0.2)';
 		g.lineWidth = 1.5;
 		for (const part of [0.25, 0.5, 0.75]) {
 			g.beginPath();
 			g.arc(c, c, radius * part, 0, Math.PI * 2);
 			g.stroke();
 		}
-		g.strokeStyle = PENCIL;
+		g.strokeStyle = 'rgba(43,43,43,0.55)';
 		g.lineWidth = 2.5;
 		g.beginPath();
 		g.arc(c, c, radius, 0, Math.PI * 2);

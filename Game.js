@@ -1,6 +1,6 @@
 import { Game as BaseGame, refuse } from '@fatlard1993/web-game-framework';
 
-import { defaultsFor, judge } from './art.js';
+import { cpuArmy, defaultsFor, judge } from './art.js';
 import { ARMY, DT, ORDERS, World } from './battle.js';
 import { MOST_KEPT, STEPS, TICK_MS, artOf, emptyArt, humanTeams, newDrawing, newState } from './rules.js';
 
@@ -108,6 +108,8 @@ export default class Game extends BaseGame {
 			this.teamOf(player.id);
 			if (this.state.phase !== 'over') refuse('The battle is still on');
 			for (const team of humanTeams(this.state)) this.resetArt(team);
+			// And the computer draws itself a new one too
+			if (this.state.mode === 'cpu') this.state.art[1] = emptyArt();
 			this.world = null;
 			this.state.phase = 'draw';
 		},
@@ -163,6 +165,8 @@ export default class Game extends BaseGame {
 		const { state } = this;
 		const uses = new Set(artOf(state));
 
+		// The computer's army is its own, made when it's first needed and kept for rematches
+		if (state.mode === 'cpu' && STEPS.some(({ kind }) => !state.art[1][kind]?.length)) state.art[1] = cpuArmy();
 		// Every army fights with something: anything missing (an old save, a side left half drawn) is the defaults
 		for (const team of uses) {
 			for (const { kind } of STEPS) if (!state.art[team][kind]?.length) state.art[team][kind] = defaultsFor(kind);

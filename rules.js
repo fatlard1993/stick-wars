@@ -50,5 +50,5 @@ export const newDrawing = () => ({ step: 0, left: STEPS[0].seconds, done: false 
 /** The sides played by people in this game: both against a friend, blue alone against the computer */
 export const humanTeams = state => (state.mode === 'duo' ? [0, 1] : [0]);
 
-/** Whose art each side fights with: against the computer, both armies are made from the player's drawings */
-export const artOf = state => (state.mode === 'duo' ? [0, 1] : [0, 0]);
+/** Whose art each side fights with: always its own; the computer's is drawn for it (art.js cpuArmy) */
+export const artOf = () => [0, 1];

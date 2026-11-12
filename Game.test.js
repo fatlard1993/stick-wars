@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import { DEFAULT_RAW, blobS, judge, lineS } from './art.js';
+import { DEFAULT_RAW, blobS, cpuArmy, judge, lineS } from './art.js';
 import { ARMY, DT, FADE, GROUND, LINGER, World } from './battle.js';
 import Game from './Game.js';
 import { STEPS, emptyArt } from './rules.js';
@@ -58,7 +58,11 @@ test('against the computer, the battle starts once the one player has drawn ever
 	drawEverything(game, fox.id);
 	expect(game.state.phase).toBe('battle');
 	expect(game.world.auto).toEqual([false, true]);
-	expect(game.world.artOf).toEqual([0, 0]);
+	// The computer fights with an army of its own, not the player's drawings
+	expect(game.world.artOf).toEqual([0, 1]);
+	expect(game.state.art[1].stickmen.length).toBeGreaterThan(2);
+	expect(game.state.art[1].swords).not.toEqual(game.state.art[0].swords);
+	expect(game.world.stickmen.filter(s => s.team === 1).every(s => s.body.ref.a === 1)).toBe(true);
 });
 
 test('a step left with nothing kept gets the defaults', () => {
@@ -187,7 +191,7 @@ test('a whole battle runs to a winner, cutting people apart on the way', () => {
 
 	for (const { kind } of STEPS) arts[0][kind] = DEFAULT_RAW[kind]().map(raw => judge(kind, raw).item);
 
-	const world = new World({ arts, artOf: [0, 0], auto: [true, true] });
+	const world = new World({ arts: [arts[0], cpuArmy()], artOf: [0, 1], auto: [true, true] });
 	let steps = 0;
 
 	while (!world.over && steps < 60 * 240) {
@@ -367,7 +371,7 @@ test('a stone knocked out of the wall fades once it has lain loose a while, and 
 	// The top stone of the wall, knocked off it
 	const top = world.masonry.standing(1).sort((a, b) => world.masonry.read(a.body).y - world.masonry.read(b.body).y)[0];
 
-	world.masonry.setSpeed(top.body, -250, -150);
+	world.masonry.setSpeed(top.body, -450, -350);
 	top.body.setAwake(true);
 	for (let i = 0; i < 60 * 2; i++) world.step(DT);
 	expect(top.loose).toBe(true);

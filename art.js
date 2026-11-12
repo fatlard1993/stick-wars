@@ -560,3 +560,82 @@ export const judge = (kind, strokes) => {
 
 /** The defaults for a kind, tidied like a kept drawing */
 export const defaultsFor = kind => makeDefaults(kind).map(item => tidy(item, 3));
+
+// ---------- the computer's own army ----------
+
+// A stick man of its own build: head, body, arms and legs in proportions and a pose of their own, knees bent or not
+const cpuStickman = () => {
+  const cx = 240 + rand(-20, 20), hr = rand(26, 42), hy = rand(66, 100);
+  const neckY = hy + hr, hipY = neckY + rand(110, 160), footY = Math.min(440, hipY + rand(115, 150));
+  const shoulderY = neckY + rand(18, 40);
+  const hand = side => [cx + side * rand(55, 95), shoulderY + rand(-70, 80)];
+  const foot = side => [cx + side * rand(30, 75), footY];
+  const [lh, rh, lf, rf] = [hand(-1), hand(1), foot(-1), foot(1)];
+  const bent = Math.random() < 0.5;
+  const leg = ([fx, fy], side) =>
+    bent ? polyS([[cx, hipY], [cx + side * rand(15, 40), (hipY + fy) / 2 - rand(-10, 10)], [fx, fy]]) : lineS(cx, hipY, fx, fy);
+
+  return [
+    ringS(cx, hy, hr, hr * rand(0.9, 1.15)),
+    lineS(cx, neckY, cx + rand(-8, 8), hipY),
+    lineS(cx, shoulderY, ...lh),
+    lineS(cx, shoulderY, ...rh),
+    leg(lf, -1),
+    leg(rf, 1),
+  ];
+};
+
+const CPU_RAW = {
+  stickmen: () => Array.from({ length: 5 }, cpuStickman),
+  // Blockier stones than a person tends to draw: cut corners, flat-ish sides
+  stones: () =>
+    Array.from({ length: 4 }, () => {
+      const w = rand(120, 170), h = rand(80, 120), cut = rand(12, 30);
+
+      return [closedPoly([[240 - w + cut, 240 - h], [240 + w - cut, 240 - h + rand(-8, 8)], [240 + w, 240 - h + cut], [240 + w + rand(-6, 6), 240 + h - cut], [240 + w - cut, 240 + h], [240 - w + cut, 240 + h + rand(-8, 8)], [240 - w, 240 + h - cut], [240 - w + rand(-6, 6), 240 - h + cut]])];
+    }),
+  beams: () => [
+    // A rough log: two long sides and rings at its ends
+    [lineS(60, 215, 420, 210), lineS(60, 255, 420, 250), ringS(60, 235, 10, 20), ringS(420, 230, 10, 20)],
+    // A plank with a knot in it
+    [closedPoly([[55, 220], [425, 214], [428, 250], [52, 258]]), ringS(250, 236, 10, 7)],
+  ],
+  ammo: () => [[ringS(240, 240, 95, 120, 0.04)], [starS(240, 240, 130, 85, 12)], [blobS(240, 240, 80, 80, 7)]],
+  swords: () => [
+    // A spear
+    [lineS(240, 450, 240, 90), closedPoly([[222, 110], [240, 38], [258, 110]])],
+    // A mace: a handle and a spiked ball
+    [lineS(240, 452, 240, 195), starS(240, 135, 72, 46, 8)],
+    // A club, thick at the end
+    [closedPoly([[232, 452], [250, 452], [282, 160], [262, 66], [218, 66], [200, 160]])],
+    // A double axe
+    [lineS(240, 452, 240, 50), closedPoly([[240, 80], [172, 58], [158, 150], [240, 170]]), closedPoly([[240, 80], [308, 58], [322, 150], [240, 170]])],
+    // A saw of a sword: one edge all teeth
+    [polyS([[232, 380], [218, 340], [232, 320], [218, 280], [232, 260], [218, 220], [232, 200], [218, 160], [232, 140], [240, 60], [252, 140], [252, 380]]), lineS(198, 384, 282, 384), closedPoly([[234, 388], [248, 388], [248, 448], [234, 448]])],
+  ],
+};
+
+/** The computer's army: drawings of its own of every kind, each passing the checks a player's do, tidied for keeping */
+export const cpuArmy = () =>
+  Object.fromEntries(
+    Object.keys(CPU_RAW).map(kind => {
+      const items = [];
+      const count = CPU_RAW[kind]().length;
+
+      for (let i = 0; i < count; i++) {
+        for (let tries = 0; tries < 10; tries++) {
+          const verdict = judge(kind, CPU_RAW[kind]()[i]);
+
+          if (verdict.ok) {
+            items.push(verdict.item);
+            break;
+          }
+        }
+      }
+
+      return [kind, items.length ? items : defaultsFor(kind)];
+    }),
+  );
+
+/** How many of the computer's drawings pass, kind by kind, out of how many it means to have: for tests */
+export const cpuCounts = () => Object.fromEntries(Object.keys(CPU_RAW).map(kind => [kind, CPU_RAW[kind]().length]));

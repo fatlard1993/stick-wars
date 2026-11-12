@@ -22,7 +22,7 @@ Five pages, each against the clock. Draw as many as you like on each: the check 
 
 A weapon is drawn in the box on its page (the pen lifts at the box's edge), and its shape is how it fights: length is reach, width and ink are weight, jagged edges shred and bleed, a thin blade cuts cleaner. Any shape will do: a big clunky one hits hard but swings slowly and slows the man carrying it. Each gets a name: Shredder, Bone Crusher, Skewer, Shiv or Blade. Skewers stab.
 
-Against the computer, both armies are made from your drawings. Against a friend, each fights with their own.
+Every side fights with its own drawings. Against a friend, each draws their own; against the computer, it draws itself a different army (its own stick men, squarer stones, logs and planks, eggs and maces to fling, spears, maces, clubs, double axes and saw-toothed swords), a new one each time you draw yours.
 
 ### The battle
 
