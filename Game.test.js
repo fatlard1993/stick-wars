@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 
 import { DEFAULT_RAW, judge, lineS } from './art.js';
-import { DT, World } from './battle.js';
+import { ARMY, DT, World } from './battle.js';
 import Game from './Game.js';
 import { STEPS, emptyArt } from './rules.js';
 
@@ -88,22 +88,65 @@ test('two players each draw their own army, and fight once both are done', () =>
 	expect(game.act(owl.id, 'send').error).toBe('You are watching this one');
 });
 
-test('in battle a player sends men, changes stance and flings their own catapults', () => {
+test('every man stands at home from the start, one crewing each catapult', () => {
+	const game = newGame('cpu');
+	const fox = game.addPlayer('🦊');
+
+	drawEverything(game, fox.id);
+
+	const mine = game.world.stickmen.filter(s => s.team === 0);
+
+	expect(game.world.stickmen).toHaveLength(ARMY * 2);
+	expect(mine.filter(s => s.order === 'crew')).toHaveLength(2);
+	expect(mine.filter(s => s.order === 'idle')).toHaveLength(ARMY - 2);
+	expect(game.viewFor(fox.id).battle.bodies.filter(b => b.t === 0 && b.u)).toHaveLength(ARMY);
+});
+
+test('in battle a player sends men out, orders the ones they picked, and crews their catapults', () => {
 	const game = newGame('duo');
 	const fox = game.addPlayer('🦊');
 	const frog = game.addPlayer('🐸');
 
 	drawEverything(game, fox.id);
 	drawEverything(game, frog.id);
+
+	const world = game.world;
+	const frogs = () => world.stickmen.filter(s => s.team === 1);
+	const foxes = () => world.stickmen.filter(s => s.team === 0);
+
 	expect(game.act(frog.id, 'send')).toEqual({ ok: true, result: { sent: true } });
-	expect(game.world.stickmen.map(s => s.team)).toEqual([1]);
+	expect(frogs().filter(s => s.order === 'charge')).toHaveLength(1);
 	expect(game.act(frog.id, 'send')).toEqual({ ok: true, result: { sent: false } });
-	game.act(fox.id, 'stance');
-	expect(game.state.hold).toEqual([true, false]);
-	expect(game.world.hold).toEqual([true, false]);
-	for (const cat of game.world.cats) cat.cd = 0;
-	expect(game.act(fox.id, 'fling', { which: 1, vx: 500, vy: -600 }).ok).toBe(true);
-	expect(game.world.cats[1].ammo).toBe(5);
+
+	const picked = foxes()
+		.filter(s => s.order === 'idle')
+		.slice(0, 3)
+		.map(s => s.body.id);
+
+	expect(game.act(fox.id, 'order', { ids: picked, order: 'hold' }).result).toEqual({ count: 3 });
+	expect(foxes().filter(s => s.order === 'hold')).toHaveLength(3);
+	// Someone else's men don't take your orders
+	expect(game.act(frog.id, 'order', { ids: picked, order: 'charge' }).result).toEqual({ count: 0 });
+	expect(game.act(fox.id, 'order', { ids: picked, order: 'march' }).ok).toBe(false);
+
+	// A catapult takes three at most: the one already there and two more
+	expect(game.act(fox.id, 'order', { ids: picked, order: 'crew', which: 0 }).result).toEqual({ count: 2 });
+	expect(game.act(fox.id, 'order', { ids: picked, order: 'crew', which: 0 }).ok).toBe(true);
+	expect(world.cats[0].crewing()).toHaveLength(3);
+
+	// Crew in place, it flings; with nobody at it, it doesn't
+	// Long enough to walk back from holding the wall
+	for (let i = 0; i < 60 * 8; i++) world.step(DT);
+	for (const cat of world.cats) cat.cd = 0;
+	expect(world.cats[0].crew()).toBe(3);
+	expect(game.act(fox.id, 'fling', { which: 0, vx: 500, vy: -600 }).ok).toBe(true);
+	expect(world.cats[0].ammo).toBe(5);
+
+	const crew1 = world.cats[1].crewing().map(s => s.body.id);
+
+	game.act(fox.id, 'order', { ids: crew1, order: 'idle' });
+	for (let i = 0; i < 60 * 3; i++) world.step(DT);
+	world.cats[1].cd = 0;
 	expect(game.act(fox.id, 'fling', { which: 1, vx: 500, vy: -600 }).error).toBe('Not ready');
 	expect(game.act(fox.id, 'fling', { which: 7, vx: 1, vy: 1 }).ok).toBe(false);
 });
@@ -122,9 +165,8 @@ test('a page sees the art once, then the battle every tick with what just happen
 	expect(later.state.art).toBeUndefined();
 	expect(later.state.kept[0].stickmen).toBe(1);
 	expect(later.battle.walls).toHaveLength(2);
-	game.act(fox.id, 'send');
 	game.tick();
-	expect(game.viewFor(fox.id).battle.bodies).toHaveLength(1);
+	expect(game.viewFor(fox.id).battle.bodies).toHaveLength(ARMY * 2);
 });
 
 test('a whole battle runs to a winner, cutting people apart on the way', () => {
@@ -142,7 +184,7 @@ test('a whole battle runs to a winner, cutting people apart on the way', () => {
 	expect(world.over).not.toBeNull();
 	expect(world.stats.limbs).toBeGreaterThan(0);
 	// A tick's picture stays small enough to send twenty times a second
-	expect(JSON.stringify(world.snapshot()).length).toBeLessThan(60_000);
+	expect(JSON.stringify(world.snapshot()).length).toBeLessThan(70_000);
 });
 
 test('the art is saved and the battle is not; a game saved mid-battle comes back fighting with the same art', () => {

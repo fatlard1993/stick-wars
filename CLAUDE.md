@@ -12,16 +12,19 @@ A web game on `@fatlard1993/web-game-framework` and `@vanilla-bean/components`. 
 
 - `rules.js`: what the game is: the drawing steps and their clocks, the sides, the modes (🤖 against the computer, 👫 two players), a new game's `state`. Shared by server and page.
 - `art.js`: geometry, the shape checks a drawing has to pass (`judge(kind, strokes)`, which also cleans what a page sent), the skeleton fitted to a stick man (`buildRig`, each point bound to a bone as `{ b, u, v }`), weapon stats from shape (`weaponStats`), and the defaults. Shared.
-- `battle.js`: the battle (`World`): stick men skinned onto 11-joint skeletons, kinematic while alive and verlet ragdolls once dead or cut apart; walls of drawn stones; catapults of drawn beams; flung ammo; the computer's side. It never draws: `snapshot()` is what pages draw, and blood, dust, sounds and shakes go out as events (`takeEvents()`). Art is referenced as `{ k: kind, a: whose art, i: which }`. Its geometry helpers (`catGeometry`, `flingPath`, `groundAt`) are shared with the page.
-- `Game.js`: one running game. `state` holds the mode, phase (`draw`, `battle`, `over`), seats, each side's art and drawing clock, stance and the last result; the `World` itself is never saved (a restart mid-battle fights again with the same art). `actions`: keep, next, send, stance, fling, again, redraw. The loop steps the battle and publishes every `TICK_MS`; the art goes to pages on their first view and by `broadcast('art')` when it changes, never every tick. A seated player whose page closed pauses their clock and the battle.
+- `battle.js`: the battle (`World`): stick men skinned onto 11-joint skeletons, kinematic while alive and verlet ragdolls once dead or cut apart; each side's whole army standing at home from the start, each man with an order (`idle`, `crew` a catapult, `hold` the wall, `charge`) given by `command`; walls of drawn stones; catapults of drawn beams that fire only with crew at them; flung ammo; the computer's side, playing by the same orders. It never draws: `snapshot()` is what pages draw, and blood, dust, sounds and shakes go out as events (`takeEvents()`). Art is referenced as `{ k: kind, a: whose art, i: which }`. Its geometry helpers (`catGeometry`, `flingPath`, `groundAt`) are shared with the page.
+- `Game.js`: one running game. `state` holds the mode, phase (`draw`, `battle`, `over`), seats, each side's art and drawing clock, stance and the last result; the `World` itself is never saved (a restart mid-battle fights again with the same art). `actions`: keep, next, send (one man out), order (the picked men: an order, and a catapult for crewing), fling, again, redraw. The loop steps the battle and publishes every `TICK_MS`; the art goes to pages on their first view and by `broadcast('art')` when it changes, never every tick. A seated player whose page closed pauses their clock and the battle.
 - `Game.test.js`: the rules, actions and a whole battle, without a browser.
 - `server.js`: the `Server`, a few lines.
 - `client/index.js`: routes: `Start`, `Play`, watch, and the framework's lobby at `#/hub`.
 - `client/Start.js`: pick an animal, then a mode: back into a game you're in, into a two-player game with a free side, or a new one.
 - `client/Play.js`: `enterGame`, the bar, sound and music, and which screen shows for the phase.
-- `client/DrawScreen.js`: the drawing page: a `Whiteboard` in pad units (`PAD`), the dashed example, the clock, keeping, the gallery, live weapon stats.
-- `client/BattleScreen.js`: the battle on a `Stage`: snapshots eased between ticks, local blood and dust with pools on a decal layer, dragging a catapult to fling, 🏃 and ⚔️/🛡️ (Space, H), the end card.
+- `client/DrawScreen.js`: the drawing page: a `Whiteboard` (as `Pad`, which measures the pen against itself and lifts it where it leaves the page) in pad units (`PAD`), the dashed example, the clock, keeping, the gallery, live weapon stats.
+- `client/BattleScreen.js`: the battle on a `Stage`: snapshots eased between ticks, local blood and dust with pools on a decal layer; picking men out (tap, or drag a box) and ordering them (charge, hold, home: Space, H, B; A picks all), tapping a catapult to crew it, dragging back from one to fling; the end card.
 - `client/paint.js`: how art goes on a canvas: shapes, thumbnails, a stick man skinned onto its joints, the paper.
+- `client/theme.js`: the game's look over the library's: paper for its ground, pencil for its text, a hand-drawn font, set before any view draws, so the library's own bar, dialogs and toasts wear it too.
+- `client/icons.js`: every control and mark as a pencil doodle (an SVG path), for buttons (`icon`) and the battlefield's canvas (`drawIcon`).
+- `client/ui.js`: the game's pieces: `doodle` buttons (paper inked round a wobbly edge), the lined page, the sound switch, counts.
 - `client/sounds/`: effects and two music loops (drawing, battle), made by paude's sound service.
 
 ## The libraries, by their docs
@@ -34,11 +37,11 @@ Read these before building anything the framework or the component library might
 
 ## Who plays it
 
-Anyone, including people who don't read: every control is a picture (an emoji) with few or no words, big enough for a thumb, and the game explains itself by being played, not by text. Keep it that way as the game grows: a new thing to do is a new big picture to tap, a new thing to see is drawn, not described. The shape checks' refusals are the one place words carry the game: keep them short.
+Anyone, including people who don't read: every control is a picture with few or no words, big enough for a thumb, and the game explains itself by being played, not by text. The pictures are the game's own pencil doodles (`client/icons.js`), never emoji: the whole page is the game's notebook, paper and pencil, in the hand-drawn font. Keep it that way as the game grows: a new thing to do is a new doodle to tap, a new thing to see is drawn, not described. The shape checks' refusals are the one place words carry the game: keep them short.
 
 ## How this project is written
 
-- Views and controls are the library's components, styled with `styled()` and the theme's tokens (`colors`, `space`, `radius`), not stylesheets or hex colors in the code. The battlefield and the drawings are the game's own art, drawn on canvas in their paper-and-ink colors (`client/paint.js`).
+- Views and controls are the library's components, styled with `styled()`. The game's colors and font are its theme (`client/theme.js`), set over the library's tokens; the battlefield and the drawings are drawn on canvas in the same paper-and-ink colors (`client/paint.js`).
 - The truth of a game lives in its `Game` on the server. A page never changes what it shows on its own: it calls `act(name, data)` and draws the view that comes back, so every player sees the same thing. Never trust a player id a page sends; the action already knows its player. What's only for show (blood flying, dust) runs on each page from the events.
 - A new thing a player can do is a new entry in `actions`, new state in `state`, and the screens showing it. A rule both sides need goes in `rules.js`, `art.js` or `battle.js`.
 - One file per view, each small.
@@ -55,4 +58,4 @@ What players asked for over and over in the first games built this way, so start
 - A player whose page closed is gone from the table (`online` is false on them, and `onPresence` hears it).
 - Saved games (`data/games.json`) outlive changes to the game: when `state` changes shape, raise `version` and add a migration so a game saved the old way still loads.
 - The README says what the game is and how to play it, its rules as they are now: when a rule changes, so does the README.
-- Sounds and music play through `createSound`; a `SoundToggle` in the bar mutes it.
+- Sounds and music play through `createSound`; the game's sound switch in the bar (`soundSwitch`) mutes it.

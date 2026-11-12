@@ -4,23 +4,23 @@
 
 /** The kinds of art, in the order they're drawn, each with how long there is to draw it (seconds) */
 export const STEPS = [
-	{ kind: 'stickmen', seconds: 45, emoji: '🧍', title: 'Stick men' },
-	{ kind: 'stones', seconds: 25, emoji: '🪨', title: 'Stones for the wall' },
-	{ kind: 'beams', seconds: 25, emoji: '🪵', title: 'Beams for catapults' },
-	{ kind: 'ammo', seconds: 25, emoji: '☄️', title: 'Catapult ammo' },
-	{ kind: 'swords', seconds: 40, emoji: '🗡️', title: 'Weapons' },
+	{ kind: 'stickmen', seconds: 45, title: 'Draw your stick men' },
+	{ kind: 'stones', seconds: 25, title: 'Draw stones for the wall' },
+	{ kind: 'beams', seconds: 25, title: 'Draw beams for the catapults' },
+	{ kind: 'ammo', seconds: 25, title: 'Draw catapult ammo' },
+	{ kind: 'swords', seconds: 40, title: 'Draw weapons' },
 ];
 
 /** How many drawings of one kind a side keeps, at most */
 export const MOST_KEPT = 12;
 
 /** Against the computer, or two players each on their own device */
-export const MODES = { cpu: '🤖', duo: '👫' };
+export const MODES = { cpu: 'vs computer', duo: 'two players' };
 
 /** The two sides: blue on the left, green on the right */
 export const TEAMS = [
-	{ name: 'Blue', emoji: '🔵', ink: '#1f3f9e' },
-	{ name: 'Green', emoji: '🟢', ink: '#1c6e35' },
+	{ name: 'Blue', ink: '#1f3f9e' },
+	{ name: 'Green', ink: '#1c6e35' },
 ];
 
 /** How often the game moves on and every page is sent the picture, in ms */
@@ -37,8 +37,6 @@ export const newState = mode => ({
 	art: [emptyArt(), emptyArt()],
 	// How far each side is through drawing: which step, and seconds left in it
 	drawing: [newDrawing(), newDrawing()],
-	// Each side's stance: charge, or hold by its own wall
-	hold: [false, false],
 	// The last battle's end: { winner (0, 1, or -1 for nobody), stats }
 	result: null,
 	// How many battles this game has had

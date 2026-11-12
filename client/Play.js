@@ -1,10 +1,12 @@
-import { Button, Component, Dialog, Link, styled } from '@vanilla-bean/components';
+import { Component, Dialog, styled } from '@vanilla-bean/components';
 import { createSound, enterGame, exitGame } from '@fatlard1993/web-game-framework/client';
-import { JoinCard, SoundToggle, View } from '@fatlard1993/web-game-framework/ui';
+import { JoinCard, View } from '@fatlard1993/web-game-framework/ui';
 
-import { MODES, TEAMS } from '../rules.js';
+import { TEAMS } from '../rules.js';
 import BattleScreen from './BattleScreen.js';
 import DrawScreen from './DrawScreen.js';
+import { icon } from './icons.js';
+import { count, doodle, lined, soundSwitch } from './ui.js';
 import battle from './sounds/battle.mp3';
 import crash from './sounds/crash.mp3';
 import deploy from './sounds/deploy.mp3';
@@ -24,12 +26,14 @@ const Status = styled(
 	Component,
 	({ space }) => `
 		display: flex;
-		gap: ${space.lg};
-		font-size: 1.3rem;
+		align-items: center;
+		gap: ${space.xl};
+		font-size: 1.15em;
 		white-space: nowrap;
 		overflow: hidden;
 
-		& .me { text-decoration: underline; }
+		& .side { display: inline-flex; align-items: center; gap: ${space.sm}; }
+		& .me { border-bottom: 3px solid currentColor; }
 	`,
 );
 
@@ -40,6 +44,7 @@ const Body = styled(
 		flex-direction: column;
 		flex: 1;
 		min-height: 0;
+		${lined}
 	`,
 );
 
@@ -60,11 +65,11 @@ export default class Play extends View {
 				...options,
 				toolbar: {
 					heading: '',
-					left: [new Link({ textContent: '🏠', href: '#/', variant: 'button' }), status],
+					left: [doodle('home', { title: 'Home', onPress: () => (window.location.href = '#/') }), status],
 					right: [
-						new SoundToggle({ sound }),
-						new Button({ textContent: '➕👫', title: 'Someone else joins', onPointerPress: () => this.invite() }),
-						new Button({ textContent: '🚪', title: 'Leave this game', onPointerPress: () => this.leaveGame() }),
+						soundSwitch(sound),
+						doodle('invite', { title: 'Someone else joins', onPress: () => this.invite() }),
+						doodle('leave', { title: 'Leave this game', onPress: () => this.leaveGame() }),
 					],
 				},
 			},
@@ -110,10 +115,9 @@ export default class Play extends View {
 		this.view = view;
 		if (this.playerId === undefined && !this.options.watch) return;
 
-		const { state, players } = view;
+		const { state } = view;
 		const team = state.seats.indexOf(this.playerId);
 		const kind = state.phase === 'draw' ? 'draw' : 'battle';
-		const avatars = Object.fromEntries(players.map(({ id, name }) => [id, name]));
 
 		if (kind !== this.kind) {
 			this.kind = kind;
@@ -122,25 +126,27 @@ export default class Play extends View {
 			if (this.art) this.screen.setArt?.(this.art);
 			this.sound.music(kind === 'draw' ? 'drawing' : 'battle');
 		}
-		this.screen.update(view, { team, sound: this.sound, avatars, art: this.art });
-		this.showStatus(view, team, avatars);
+		this.screen.update(view, { team, sound: this.sound, art: this.art });
+		this.showStatus(view, team);
 	}
 
-	// The bar: each side, who plays it, and in battle how many are fighting, waiting and killed
-	showStatus(view, team, avatars) {
+	// The bar: each side's flag in its ink, who plays it (a person, the computer, or nobody yet), and in battle how many
+	// it has left and how many it has killed
+	showStatus(view, team) {
 		const { state, battle } = view;
 
 		this.status.elem.replaceChildren(
-			Object.assign(document.createElement('span'), { textContent: MODES[state.mode] }),
 			...[0, 1].map(t => {
-				const span = document.createElement('span');
-				const who = state.seats[t] ? avatars[state.seats[t]] ?? '🙂' : state.mode === 'cpu' && t === 1 ? '🤖' : '…';
-				const counts = battle ? ` ⚔️${battle.fighting[t]} ⏳${battle.reserve[t]} 🗡️${battle.kills[t]}` : '';
+				const side = document.createElement('span');
+				const ink = TEAMS[t].ink;
+				const who = state.seats[t] ? 'person' : state.mode === 'cpu' && t === 1 ? 'robot' : 'hourglass';
 
-				span.textContent = `${TEAMS[t].emoji}${who}${counts}`;
-				if (t === team) span.className = 'me';
+				side.className = t === team ? 'side me' : 'side';
+				side.style.color = ink;
+				side.append(icon('flag', { color: ink }), icon(who, { color: ink }));
+				if (battle) side.append(count('person', battle.army[t], ink), count('sword', battle.kills[t], ink));
 
-				return span;
+				return side;
 			}),
 		);
 	}
@@ -150,9 +156,9 @@ export default class Play extends View {
 		new Dialog({
 			appendTo: document.body,
 			size: 'fit',
-			header: '➕👫',
+			header: 'Scan to join',
 			body: new JoinCard({ gameId: this.options.gameId }),
-			buttons: ['✅'],
+			buttons: ['Done'],
 			onButtonPress: ({ closeDialog }) => closeDialog(),
 		});
 	}

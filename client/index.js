@@ -1,3 +1,6 @@
+// The game's look goes on first, before any view draws its styles
+import './theme.js';
+
 import { Page, Router } from '@vanilla-bean/components';
 import { Create, Hub, Join } from '@fatlard1993/web-game-framework/ui';
 

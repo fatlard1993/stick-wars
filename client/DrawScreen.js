@@ -1,9 +1,12 @@
-import { Button, Component, Notify, Whiteboard, styled } from '@vanilla-bean/components';
+import { Component, Notify, Whiteboard, styled } from '@vanilla-bean/components';
 import { act, createInput } from '@fatlard1993/web-game-framework/client';
 
 import { DEFAULT_RAW, PAD, clamp, judge, pick } from '../art.js';
-import { MODES, STEPS, TEAMS } from '../rules.js';
-import { PAPER, drawRawFit } from './paint.js';
+import { STEPS, TEAMS } from '../rules.js';
+import { icon } from './icons.js';
+import { drawRawFit } from './paint.js';
+import { PENCIL, RED_PENCIL } from './theme.js';
+import { doodle } from './ui.js';
 
 const PRAISE = {
 	stickmen: ['Recruited!', 'Fresh meat!', 'Enlisted!', 'Another one for the grinder!'],
@@ -14,6 +17,43 @@ const PRAISE = {
 };
 // The pen, in pad units: the same weight as the drawings the checks were tuned on
 const PEN = 7;
+const SHEET = '#fffdf6';
+
+// The drawing pad. A pen's place is measured against the pad itself: the Whiteboard's own measure (offsetX) is against
+// whatever the pointer is over, and a stroke that strayed over the toast or the panel beside the pad jumped to wherever
+// that thing's corner put it, drawing long lines nobody drew. Off the pad it's held to the edge, and the edge is where
+// the pen lifts (see offPad). And one pen at a time: a palm resting on the screen doesn't draw a second line.
+class Pad extends Whiteboard {
+	getPosition({ clientX, clientY }) {
+		const box = this.elem.getBoundingClientRect();
+
+		return { x: clamp(clientX - box.left, 0, box.width), y: clamp(clientY - box.top, 0, box.height) };
+	}
+
+	interactionInit(event) {
+		if (this._gesture.active) return;
+		super.interactionInit(event);
+	}
+}
+
+// A stroke with the pen lifted wherever it left the pad: what the pad held to its edge (past it) is dropped, and the
+// stroke goes on as a new one where the pen came back
+const offPad = (line, size) => {
+	const out = [];
+	let current = [];
+
+	for (const point of line) {
+		const edge = point.x <= 0 || point.y <= 0 || point.x >= size || point.y >= size;
+
+		if (edge) {
+			if (current.length) out.push(current);
+			current = [];
+		} else current.push(point);
+	}
+	if (current.length) out.push(current);
+
+	return out.filter(stroke => stroke.length > 1);
+};
 
 const Screen = styled(
 	Component,
@@ -24,6 +64,7 @@ const Screen = styled(
 		gap: ${space.lg};
 		padding: ${space.md};
 		justify-content: center;
+		color: ${PENCIL};
 
 		@media (max-width: 767px) {
 			flex-direction: column;
@@ -58,34 +99,38 @@ const Side = styled(
 
 const Heading = styled(
 	Component,
-	({ fontSize, space }) => `
+	({ space }) => `
 		display: flex;
 		align-items: center;
 		gap: ${space.md};
-		font-size: ${fontSize.xxl};
+		font-size: 2em;
 		white-space: nowrap;
 
-		& .dots { margin-left: auto; letter-spacing: 2px; }
+		& .dots { margin-left: auto; display: flex; gap: 6px; }
+		& .dots i { width: 14px; height: 14px; border: 2.5px solid ${PENCIL}; border-radius: 50% 45% 50% 40%; }
+		& .dots i.done { background: ${PENCIL}; }
+		& .dots i.now { background: #ffe36e; }
 	`,
 );
 
 const Clock = styled(
 	Component,
-	({ colors, radius }) => `
+	() => `
 		position: relative;
-		height: 14px;
-		border-radius: ${radius.pill};
-		background: ${colors.alpha(colors.white, 0.1)};
+		height: 16px;
+		border: 2.5px solid ${PENCIL};
+		border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+		background: ${SHEET};
 		overflow: hidden;
 
 		& > div {
 			position: absolute;
 			inset: 0;
 			transform-origin: left;
-			background: ${colors.yellow};
+			background: #ffd34d;
 		}
 
-		&.low > div { background: ${colors.red}; }
+		&.low > div { background: #ff7a6b; }
 	`,
 );
 
@@ -97,6 +142,11 @@ const PadBox = styled(
 		display: flex;
 		align-items: center;
 		justify-content: center;
+
+		& canvas {
+			border: 3px solid ${PENCIL};
+			box-shadow: 3px 4px 0 ${PENCIL};
+		}
 	`,
 );
 
@@ -105,43 +155,43 @@ const Tools = styled(
 	({ space }) => `
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: ${space.sm};
+		gap: ${space.md};
 
-		& button { font-size: 1.6rem; padding: 10px; }
-		& .keep { grid-column: span 2; font-size: 2rem; }
+		& button { padding: 10px; }
+		& .big { grid-column: span 2; }
 
 		@media (max-width: 767px) {
 			grid-template-columns: repeat(4, 1fr);
-			& .keep { grid-column: span 1; }
+			& .big { grid-column: span 1; }
 		}
 	`,
 );
 
 const Stats = styled(
 	Component,
-	({ colors, fontSize, radius, space }) => `
+	({ space }) => `
 		display: flex;
 		flex-direction: column;
 		gap: ${space.xs};
 
 		&:empty { display: none; }
-		& h3 { margin: 0; font-size: ${fontSize.xl}; }
+		& h3 { margin: 0; font-size: 1.6em; font-weight: normal; }
 		& .stat { display: flex; align-items: center; gap: ${space.sm}; }
-		& .stat span { width: 2em; text-align: center; }
 		& .stat i {
 			flex: 1;
-			height: 10px;
-			border-radius: ${radius.pill};
-			background: ${colors.alpha(colors.white, 0.1)};
+			height: 12px;
+			border: 2px solid ${PENCIL};
+			border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+			background: ${SHEET};
 			overflow: hidden;
 		}
-		& .stat b { display: block; height: 100%; background: ${colors.red}; }
+		& .stat b { display: block; height: 100%; background: ${RED_PENCIL}; }
 	`,
 );
 
 const Gallery = styled(
 	Component,
-	({ colors, radius, space }) => `
+	({ space }) => `
 		display: flex;
 		flex-wrap: wrap;
 		gap: ${space.sm};
@@ -149,28 +199,30 @@ const Gallery = styled(
 		min-height: 0;
 
 		& canvas {
-			width: 56px;
-			height: 56px;
-			border-radius: ${radius.md};
-			background: ${PAPER};
-			border: 2px solid ${colors.border};
+			width: 60px;
+			height: 60px;
+			background: ${SHEET};
+			border: 2px solid ${PENCIL};
+			border-radius: 10px 4px 12px 5px;
+			transform: rotate(-2deg);
 		}
+		& canvas:nth-child(even) { transform: rotate(2deg); }
 	`,
 );
 
 const Waiting = styled(
 	Component,
-	({ fontSize, space }) => `
+	({ space }) => `
 		flex: 1;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
 		gap: ${space.lg};
-		font-size: ${fontSize.xxl};
+		font-size: 1.8em;
 		text-align: center;
 
-		& .big { font-size: 5rem; line-height: 1; }
+		& .side { display: flex; align-items: center; gap: ${space.md}; }
 	`,
 );
 
@@ -192,9 +244,9 @@ export default class DrawScreen extends Screen {
 		this.clockBar = document.createElement('div');
 		this.clock.elem.append(this.clockBar);
 		this.padBox = new PadBox({ appendTo: this.main });
-		this.pad = new Whiteboard({
+		this.pad = new Pad({
 			appendTo: this.padBox,
-			background: PAPER,
+			background: SHEET,
 			color: '#222',
 			onLine: event => this.addStroke(event.detail.line),
 		});
@@ -202,10 +254,12 @@ export default class DrawScreen extends Screen {
 
 		const tools = new Tools({ appendTo: this.side });
 
-		new Button({ appendTo: tools, textContent: '✅', title: 'Keep it (Enter)', addClass: 'keep', onPointerPress: () => this.keep() });
-		new Button({ appendTo: tools, textContent: '↩️', title: 'Undo (Z)', onPointerPress: () => this.undo() });
-		new Button({ appendTo: tools, textContent: '🗑️', title: 'Clear (C)', onPointerPress: () => this.clear() });
-		new Button({ appendTo: tools, textContent: '⏭️', title: 'Done, next (N)', onPointerPress: () => act('next') });
+		tools.append(
+			doodle('keep', { title: 'Keep it (Enter)', big: true, size: '2em', onPress: () => this.keep() }),
+			doodle('undo', { title: 'Undo (Z)', onPress: () => this.undo() }),
+			doodle('clear', { title: 'Clear (C)', onPress: () => this.clear() }),
+			doodle('next', { title: 'Done, next (N)', onPress: () => act('next') }),
+		);
 		this.stats = new Stats({ appendTo: this.side });
 		this.count = new Component({ appendTo: this.side });
 		this.gallery = new Gallery({ appendTo: this.side });
@@ -221,8 +275,6 @@ export default class DrawScreen extends Screen {
 		this.addCleanup('sizer', () => this.sizer.disconnect());
 
 		const run = () => {
-			if (!this.elem.isConnected && this.ran) return;
-			this.ran = true;
 			this.tickClock();
 			this.frame = requestAnimationFrame(run);
 		};
@@ -234,7 +286,7 @@ export default class DrawScreen extends Screen {
 	// The pad made as big a square as fits, its pen scaled with it
 	fit() {
 		const { width, height } = this.padBox.elem.getBoundingClientRect();
-		const size = Math.floor(Math.max(120, Math.min(width, height)));
+		const size = Math.floor(Math.max(120, Math.min(width, height) - 8));
 
 		if (size === this.size) return;
 		this.size = size;
@@ -247,15 +299,15 @@ export default class DrawScreen extends Screen {
 	/**
 	 * What the server says now: whose side this is, how far they are, and how long is left
 	 * @param {object} view - The game's view
-	 * @param {object} me - { team, sound, avatars }
+	 * @param {object} me - { team, sound }
 	 */
-	update(view, { team, sound, avatars }) {
+	update(view, { team, sound }) {
 		this.team = team;
 		this.sound = sound;
 
 		const mine = view.state.drawing[team];
 
-		if (!mine || mine.done) return this.showWaiting(view, avatars);
+		if (!mine || mine.done) return this.showWaiting(view);
 		this.showPad();
 		if (mine.step !== this.step) this.setStep(mine.step);
 
@@ -266,21 +318,21 @@ export default class DrawScreen extends Screen {
 	}
 
 	setStep(step) {
-		const { kind, emoji, title } = STEPS[step];
+		const { kind, title } = STEPS[step];
 
 		this.step = step;
 		this.kind = kind;
 		this.strokes = [];
 		this.ghost = DEFAULT_RAW[kind]()[0];
 		this.stats.elem.replaceChildren();
-		this.heading.elem.replaceChildren(
-			Object.assign(document.createElement('span'), { textContent: emoji }),
-			Object.assign(document.createElement('span'), { textContent: title }),
-			Object.assign(document.createElement('span'), {
-				className: 'dots',
-				textContent: STEPS.map((_, at) => (at < step ? '●' : at === step ? '◉' : '○')).join(''),
-			}),
+
+		const dots = document.createElement('span');
+
+		dots.className = 'dots';
+		dots.append(
+			...STEPS.map((_, at) => Object.assign(document.createElement('i'), { className: at < step ? 'done' : at === step ? 'now' : '' })),
 		);
+		this.heading.elem.replaceChildren(Object.assign(document.createElement('span'), { textContent: title }), dots);
 		this.redraw();
 		this.showKept();
 	}
@@ -293,12 +345,12 @@ export default class DrawScreen extends Screen {
 	showKept() {
 		const items = this.art?.art?.[this.team]?.[this.kind] ?? [];
 
-		this.count.elem.textContent = items.length ? `${STEPS[this.step].emoji} × ${items.length}` : '';
+		this.count.elem.textContent = items.length ? `Kept: ${items.length}` : '';
 		this.gallery.elem.replaceChildren(
 			...items.map(item => {
 				const canvas = document.createElement('canvas');
 
-				canvas.width = canvas.height = 112;
+				canvas.width = canvas.height = 120;
 				drawRawFit(canvas, item.raw);
 
 				return canvas;
@@ -320,10 +372,12 @@ export default class DrawScreen extends Screen {
 		if (!this.size || !line?.length) return;
 
 		const k = PAD / this.size;
+		const pieces = offPad(line, this.size);
+		const first = !this.strokes.length;
 
-		this.strokes.push(line.map(({ x, y }) => ({ x: x * k, y: y * k })));
-		// The first line wipes the example away
-		if (this.strokes.length === 1) this.redraw();
+		for (const piece of pieces) this.strokes.push(piece.map(({ x, y }) => ({ x: x * k, y: y * k })));
+		// The first line wipes the example away; a line that left the pad is drawn again without what was off it
+		if ((first && this.strokes.length) || pieces.length !== 1 || pieces[0].length !== line.length) this.redraw();
 		this.preview();
 	}
 
@@ -352,7 +406,8 @@ export default class DrawScreen extends Screen {
 			return;
 		}
 		this.sound?.play('keep');
-		new Notify({ x: window.innerWidth / 2, y: 120, intent: 'success', content: `✅ ${pick(PRAISE[kind])}`, timeout: 1500 });
+		// Under the bar, clear of the pad, so it never sits under a pen
+		new Notify({ x: window.innerWidth / 2, y: 70, intent: 'success', content: pick(PRAISE[kind]), timeout: 1500 });
 		if (this.strokes === strokes) this.clear();
 		if (said.result?.stats) this.showStats(said.result.stats);
 	}
@@ -367,16 +422,29 @@ export default class DrawScreen extends Screen {
 	}
 
 	showStats(s) {
-		const bar = (emoji, v) =>
-			`<div class="stat"><span>${emoji}</span><i><b style="width:${Math.round(clamp(v, 0, 1) * 100)}%"></b></i></div>`;
+		const heading = Object.assign(document.createElement('h3'), { textContent: s.name });
+		const bar = (name, v, title) => {
+			const row = document.createElement('div');
+			const track = document.createElement('i');
+			const fill = document.createElement('b');
 
-		this.stats.elem.innerHTML =
-			`<h3>${s.name}</h3>` +
-			bar('📏', s.lr) +
-			bar('🏋️', (s.weight - 0.35) / 2.2) +
-			bar('🪚', s.serr) +
-			bar('🔪', s.cut) +
-			bar('⚡', 1 - (s.swing - 0.36) / 0.75);
+			row.className = 'stat';
+			row.title = title;
+			fill.style.width = `${Math.round(clamp(v, 0, 1) * 100)}%`;
+			track.append(fill);
+			row.append(icon(name, { size: '1.4em' }), track);
+
+			return row;
+		};
+
+		this.stats.elem.replaceChildren(
+			heading,
+			bar('ruler', s.lr, 'Reach'),
+			bar('weight', (s.weight - 0.35) / 2.2, 'Weight'),
+			bar('saw', s.serr, 'Shredding'),
+			bar('knife', s.cut, 'Cutting'),
+			bar('bolt', 1 - (s.swing - 0.36) / 0.75, 'Speed'),
+		);
 	}
 
 	redraw() {
@@ -413,20 +481,27 @@ export default class DrawScreen extends Screen {
 		this.side.elem.style.display = '';
 	}
 
-	// Done drawing (or only watching): who the battle waits on
-	showWaiting(view, avatars) {
+	// Done drawing (or only watching): who the battle waits on, each side's flag and how far along it is
+	showWaiting(view) {
 		this.main.elem.style.display = 'none';
 		this.side.elem.style.display = 'none';
 		if (!this.waiting.elem.isConnected) this.elem.append(this.waiting.elem);
 
 		const { drawing, seats, mode } = view.state;
-		const sides = (mode === 'duo' ? [0, 1] : [0]).map(t => {
-			const who = seats[t] ? avatars[seats[t]] ?? '🙂' : '➕👫';
-			const how = !seats[t] ? '…' : drawing[t].done ? '✅' : `✏️ ${drawing[t].step + 1}/${STEPS.length}`;
+		const rows = (mode === 'duo' ? [0, 1] : [0]).map(t => {
+			const row = document.createElement('div');
+			const ink = TEAMS[t].ink;
 
-			return `${TEAMS[t].emoji} ${who} ${how}`;
+			row.className = 'side';
+			row.style.color = ink;
+			row.append(icon('flag', { size: '1.4em', color: ink }));
+			if (!seats[t]) row.append(icon('invite', { size: '1.4em', color: ink }), 'waiting for someone to join');
+			else if (drawing[t].done) row.append(icon('person', { size: '1.4em', color: ink }), icon('keep', { size: '1.4em', color: ink }));
+			else row.append(icon('person', { size: '1.4em', color: ink }), icon('draw', { size: '1.4em', color: ink }), `${drawing[t].step + 1} of ${STEPS.length}`);
+
+			return row;
 		});
 
-		this.waiting.elem.innerHTML = `<div class="big">${MODES[mode]} ⏳</div>${sides.map(s => `<div>${s}</div>`).join('')}`;
+		this.waiting.elem.replaceChildren(icon('hourglass', { size: '3em' }), ...rows);
 	}
 }

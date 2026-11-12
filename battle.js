@@ -20,20 +20,35 @@ import {
 	segInter,
 } from './art.js';
 
-export const W = 1400, H = 800, GROUND = 720, GRAV = 900, DT = 1 / 60;
-export const SM_H = 94;
+export const W = 1900, H = 860, GROUND = 780, GRAV = 900, DT = 1 / 60;
+export const SM_H = 80;
 export const WALL = { cols: 3, rows: 7, cw: 34, ch: 22 };
 export const ARMY = 12, AMMO = 6, RELOAD = 4.5;
 /** The fastest a catapult flings, in world units a second */
-export const MOST_FLING = 1150;
+export const MOST_FLING = 1350;
 export const CAT_REST = PI - 0.3, CAT_FIRE = 1.5 * PI + 0.35, CAT_ARM = 74, CAT_PIV = -56;
-export const WALL_X = [260, W - 260 - WALL.cols * WALL.cw];
+export const WALL_X = [430, W - 430 - WALL.cols * WALL.cw];
 export const CAT_X = [
-	[85, 190],
-	[W - 85, W - 190],
+	[90, 220],
+	[W - 90, W - 220],
 ];
-/** How long a side waits between sending stick men, in seconds */
-export const SEND_EVERY = 0.6;
+/** How long a side waits between sending stick men out one at a time, in seconds */
+export const SEND_EVERY = 0.4;
+/** How many can crew one catapult: one to fire it at all, each more loading it faster */
+export const MOST_CREW = 3;
+/** How close an enemy comes before a man who isn't charging turns to fight him */
+export const ENGAGE = 150;
+/** What a man can be told to do: stay home, crew a catapult, hold by the wall, or charge */
+export const ORDERS = ['idle', 'crew', 'hold', 'charge'];
+/** Each order as a page is sent it, one letter apiece */
+export const ORDER_CODE = { idle: 'i', crew: 'w', hold: 'h', charge: 'c' };
+
+/** Where a side's k-th man stands at home, behind his wall among the catapults */
+export const homeX = (team, k) => {
+	const x = 250 + (k % ARMY) * 13;
+
+	return team === 0 ? x : W - x;
+};
 
 export const ADJ = BONES.map(a => BONES.map(b => a[0] === b[0] || a[0] === b[1] || a[1] === b[0] || a[1] === b[1]));
 
@@ -278,6 +293,8 @@ class Body {
 			j: joints,
 			...(wp && { w: [wp.ref.a, wp.ref.i, Math.round(wp.blood * 100) / 100], wo: Math.round(this.wOff * 100) / 100 }),
 			...(this.stumps.length && { st: this.stumps.map(st => st.j) }),
+			// A man still in the fight: can be picked out and told what to do
+			...(this.owner?.alive() && this.kin && { u: ORDER_CODE[this.owner.order] }),
 		};
 	}
 }
@@ -288,14 +305,18 @@ const POSE = new Float64Array(10);
 const FK = new Float64Array(22);
 
 class Stickman {
-	constructor(w, team, x) {
+	constructor(w, team, k) {
 		this.w = w;
 		this.team = team;
 		this.face = team === 0 ? 1 : -1;
 		this.body = new Body(w, w.pickArt(team, 'stickmen'), team, this.face, SM_H * rand(0.9, 1.1));
 		this.body.owner = this;
 		this.body.weapon = { ref: w.pickArt(team, 'swords'), blood: 0 };
-		this.x = x;
+		this.home = homeX(team, k);
+		this.x = this.home + rand(-4, 4);
+		// What he's been told: stay home, crew a catapult (his post), hold by the wall, or charge
+		this.order = 'idle';
+		this.post = null;
 		this.hp = 100;
 		this.bleed = 0;
 		this.phase = rand(0, TAU);
@@ -343,6 +364,19 @@ class Stickman {
 		return this.team === 0 ? wl.x1 + 40 + this.slot * 90 : wl.x0 - 40 - this.slot * 90;
 	}
 
+	// Where he stands crewing his catapult: behind it, beside whoever crews it already
+	crewX() {
+		const cat = this.post;
+		const mates = this.w.stickmen.filter(s => s.post === cat && s.order === 'crew' && s.alive());
+
+		return cat.x - cat.dir * (44 + Math.max(0, mates.indexOf(this)) * 13);
+	}
+
+	// Crewing his catapult now: told to, and standing at his place by it
+	manning(cat) {
+		return this.order === 'crew' && this.post === cat && this.alive() && Math.abs(this.x - this.crewX()) < 20;
+	}
+
 	pickTarget() {
 		let best = null, bd = Infinity;
 
@@ -356,7 +390,9 @@ class Stickman {
 				best = s;
 			}
 		}
-		if (this.w.hold[this.team] && best && Math.abs(best.x - this.holdX()) > 320) best = null;
+		// Only a man charging goes looking; the rest fight whoever comes close, a man holding the wall within reach of it
+		if (this.order === 'hold' && best && Math.abs(best.x - this.holdX()) > 320 && bd > ENGAGE) best = null;
+		else if (this.order !== 'charge' && this.order !== 'hold' && bd > ENGAGE) best = null;
 		this.target = best;
 	}
 
@@ -432,8 +468,11 @@ class Stickman {
 			if (adx > R) move = this.face;
 			else if (adx < 9) move = -this.face;
 			if (adx <= R + 4) want = { type: 'sm' };
-		} else if (w.hold[this.team]) {
-			const dx = this.holdX() - this.x;
+		} else if (this.order !== 'charge') {
+			if (this.order === 'crew' && (!this.post || this.post.dead)) this.order = 'idle';
+
+			const spot = this.order === 'hold' ? this.holdX() : this.order === 'crew' ? this.crewX() : this.home;
+			const dx = spot - this.x;
 
 			if (Math.abs(dx) > 6) move = Math.sign(dx);
 			this.face = move || forward;
@@ -1090,8 +1129,18 @@ class Catapult {
 		return catGeometry(this.x, this.dir, this.arm);
 	}
 
+	// Who's at their place crewing it now
+	crew() {
+		return this.w.stickmen.filter(s => s.manning(this)).length;
+	}
+
+	// Who's been told to crew it, there yet or not
+	crewing() {
+		return this.w.stickmen.filter(s => s.order === 'crew' && s.post === this && s.alive());
+	}
+
 	ready() {
-		return !this.dead && this.cd <= 0 && this.ammo > 0 && this.fireT < 0;
+		return !this.dead && this.cd <= 0 && this.ammo > 0 && this.fireT < 0 && this.crew() > 0;
 	}
 
 	fire(vx, vy) {
@@ -1106,6 +1155,8 @@ class Catapult {
 
 	update(dt) {
 		if (this.dead) return;
+		// Out of ammo, its crew have nothing to do here: they go home, to be sent where they're wanted
+		if (this.ammo <= 0 && this.fireT < 0) for (const s of this.crewing()) Object.assign(s, { order: 'idle', post: null });
 		this.cd -= dt;
 		this.shk = Math.max(0, this.shk - dt);
 		if (this.fireT >= 0) {
@@ -1117,7 +1168,8 @@ class Catapult {
 				this.w.projs.push(new Proj(this.w, this.load, lx, ly, this.pend[0], this.pend[1], this.team));
 				this.load = this.w.pickArt(this.team, 'ammo');
 				this.pend = null;
-				this.cd = RELOAD;
+				// One loads it, each more of its crew (up to its most) loads it faster
+				this.cd = RELOAD / (1 + 0.5 * (Math.min(Math.max(this.crew(), 1), MOST_CREW) - 1));
 			}
 			if (this.fireT > 0.4) this.fireT = -1;
 		} else this.arm += (CAT_REST - this.arm) * Math.min(1, dt * 2.2);
@@ -1164,6 +1216,9 @@ class Catapult {
 			hp: Math.round(this.hp),
 			n: this.ammo,
 			cd: Math.round(Math.max(0, this.cd) * 10) / 10,
+			rl: Math.round((RELOAD / (1 + 0.5 * (Math.min(Math.max(this.crew(), 1), MOST_CREW) - 1))) * 10) / 10,
+			cr: this.crew(),
+			cw: this.crewing().length,
 			arm: Math.round(this.arm * 100) / 100,
 			dead: this.dead,
 			shk: this.shk > 0,
@@ -1195,17 +1250,31 @@ export class World {
 		this.projs = [];
 		this.walls = [this.makeWall(0, WALL_X[0]), this.makeWall(1, WALL_X[1])];
 		this.cats = CAT_X.flatMap((xs, team) => xs.map(x => new Catapult(this, team, x)));
-		this.reserve = [ARMY, ARMY];
 		this.spawnX = [this.walls[0].x1 + 30, this.walls[1].x0 - 30];
 		this.stats = { kills: [0, 0], limbs: 0, heads: 0, blood: 0 };
-		this.hold = [false, false];
 		this.time = 0;
 		this.slow = 0;
 		this.over = null;
 		this.overT = 0;
 		this.events = [];
 		this.shaking = 0;
-		this.ai = [{ deploy: 1.5 }, { deploy: 2.5 }];
+		this.ai = [{ deploy: 2 }, { deploy: 3 }];
+		this.sentAt = [-Infinity, -Infinity];
+		// Every side's whole army out from the start, standing at home, one man crewing each catapult
+		for (let team = 0; team < 2; team++) {
+			for (let k = 0; k < ARMY; k++) {
+				const man = new Stickman(this, team, k);
+
+				this.stickmen.push(man);
+				this.addBody(man.body);
+			}
+
+			const [first, second] = this.stickmen.filter(s => s.team === team);
+			const [catA, catB] = this.cats.filter(c => c.team === team);
+
+			Object.assign(first, { order: 'crew', post: catA });
+			Object.assign(second, { order: 'crew', post: catB });
+		}
 	}
 
 	/** One of a side's drawings of a kind, at random, as a reference to it */
@@ -1291,18 +1360,45 @@ export class World {
 		}
 	}
 
-	deploy(t) {
-		if (this.reserve[t] <= 0 || this.over) return false;
-		this.reserve[t]--;
+	/**
+	 * Some of a side's men told what to do: their body ids, the order, and for crewing, which of the side's two
+	 * catapults. Only that side's own living men take it; a catapult takes no more crew than its most.
+	 * @returns {number} How many took the order
+	 */
+	command(team, ids, order, which) {
+		if (!ORDERS.includes(order) || this.over) return 0;
 
-		const wl = this.walls[t];
-		const s = new Stickman(this, t, t === 0 ? wl.x0 + 10 : wl.x1 - 10);
+		const wanted = new Set(ids);
+		let men = this.stickmen.filter(s => s.team === team && s.alive() && wanted.has(s.body.id));
 
-		this.stickmen.push(s);
-		this.addBody(s.body);
-		this.sound('deploy');
+		if (order === 'crew') {
+			const cat = this.cats.filter(c => c.team === team)[which];
 
-		return true;
+			if (!cat || cat.dead) return 0;
+
+			const room = MOST_CREW - cat.crewing().filter(s => !wanted.has(s.body.id)).length;
+
+			men = men.sort((a, b) => Math.abs(a.x - cat.x) - Math.abs(b.x - cat.x)).slice(0, Math.max(0, room));
+			for (const s of men) Object.assign(s, { order, post: cat });
+		} else for (const s of men) Object.assign(s, { order, post: null });
+		if (men.length && (order === 'charge' || order === 'hold')) this.sound('deploy');
+
+		return men.length;
+	}
+
+	// One man from home to the fight: the nearest the wall of those not crewing, a little apart from the last one sent
+	send(team) {
+		if (this.over || this.time - this.sentAt[team] < SEND_EVERY) return false;
+
+		const wall = this.walls[team];
+		const home = this.stickmen
+			.filter(s => s.team === team && s.alive() && s.order === 'idle')
+			.sort((a, b) => Math.abs(a.x - wall.x0) - Math.abs(b.x - wall.x0));
+
+		if (!home.length) return false;
+		this.sentAt[team] = this.time;
+
+		return this.command(team, [home[0].body.id], 'charge') > 0;
 	}
 
 	/** A side's catapult flung by a player: which of its two, and how hard which way */
@@ -1499,9 +1595,18 @@ export class World {
 			const mine = this.stickmen.filter(s => s.team === t && s.alive()).length;
 			const theirs = this.stickmen.filter(s => s.team !== t && s.alive()).length;
 
-			if (ai.deploy <= 0 && this.reserve[t] > 0) {
-				this.deploy(t);
+			if (ai.deploy <= 0) {
+				this.send(t);
 				ai.deploy = theirs > mine ? rand(0.6, 1.4) : rand(1.4, 3);
+			}
+
+			// A catapult left with nobody to fire it gets someone from home while it has ammo
+			for (const c of this.cats) {
+				if (c.team !== t || c.dead || c.ammo <= 0 || c.crewing().length) continue;
+
+				const spare = this.stickmen.find(s => s.team === t && s.alive() && s.order === 'idle');
+
+				if (spare) this.command(t, [spare.body.id], 'crew', this.cats.filter(k => k.team === t).indexOf(c));
 			}
 			for (const c of this.cats) {
 				if (c.team !== t || !c.ready() || Math.random() > dt * 0.3) continue;
@@ -1559,18 +1664,18 @@ export class World {
 
 			const v = Math.sqrt((GRAV * dx * dx) / den);
 
-			if (v < 1300) return [v * cs * sgn, -v * Math.sin(th)];
+			if (v < MOST_FLING) return [v * cs * sgn, -v * Math.sin(th)];
 		}
 
 		return null;
 	}
 
 	fighting(t) {
-		return this.stickmen.filter(s => s.team === t && s.alive()).length;
+		return this.stickmen.filter(s => s.team === t && s.alive() && (s.order === 'charge' || s.order === 'hold')).length;
 	}
 
 	aliveCount(t) {
-		return this.fighting(t) + this.reserve[t];
+		return this.stickmen.filter(s => s.team === t && s.alive()).length;
 	}
 
 	checkOver(dt) {
@@ -1605,7 +1710,7 @@ export class World {
 				),
 			})),
 			fighting: [this.fighting(0), this.fighting(1)],
-			reserve: [...this.reserve],
+			army: [this.aliveCount(0), this.aliveCount(1)],
 			kills: [...this.stats.kills],
 		};
 	}

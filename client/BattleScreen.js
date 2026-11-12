@@ -1,15 +1,20 @@
-import { Button, Component, styled } from '@vanilla-bean/components';
+import { Component, styled } from '@vanilla-bean/components';
 import { act, createInput } from '@fatlard1993/web-game-framework/client';
 import { Stage } from '@fatlard1993/web-game-framework/ui';
 
-import { TAU, clamp, lerp, rand } from '../art.js';
-import { GRAV, GROUND, H, RELOAD, W, WALL, beamScale, catGeometry, flingPath, groundAt, holdFling } from '../battle.js';
+import { TAU, clamp, lerp, rand, segDist } from '../art.js';
+import { GRAV, GROUND, H, MOST_CREW, W, WALL, beamScale, catGeometry, flingPath, groundAt, holdFling } from '../battle.js';
 import { TEAMS, TICK_MS } from '../rules.js';
+import { drawIcon, icon } from './icons.js';
 import { FILLS, GORE, INK, WOOD_INK, drawBody, drawShape, mixColor, paperBackground, placeShape, teamInk } from './paint.js';
+import { HAND, PENCIL, RED_PENCIL } from './theme.js';
+import { count, doodle } from './ui.js';
 
 const DUST = { stone: '#9b9488', wood: '#b98a55' };
 // How far back a drag flings: world units of drag to speed
 const PULL = 3.6;
+// How far a press may wander and still be a tap, in screen pixels
+const TAP = 8;
 
 const Screen = styled(
 	Component,
@@ -19,6 +24,7 @@ const Screen = styled(
 		flex-direction: column;
 		flex: 1;
 		min-height: 0;
+		color: ${PENCIL};
 	`,
 );
 
@@ -27,35 +33,33 @@ const Controls = styled(
 	({ space }) => `
 		display: flex;
 		justify-content: center;
+		flex-wrap: wrap;
 		gap: ${space.md};
 		padding: ${space.sm};
-
-		& button { font-size: 1.8rem; min-width: 96px; padding: 8px 18px; }
 	`,
 );
 
-const Overlay = styled(
+const Card = styled(
 	Component,
-	({ colors, elevation, fontSize, radius, space }) => `
+	({ space }) => `
 		position: absolute;
 		left: 50%;
 		top: 40%;
-		transform: translate(-50%, -50%);
+		transform: translate(-50%, -50%) rotate(-1deg);
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		gap: ${space.md};
 		padding: ${space.lg} ${space.xl};
-		border-radius: ${radius.lg};
-		background: ${colors.alpha(colors.blackish(), 0.88)};
-		box-shadow: ${elevation.lg};
-		font-size: ${fontSize.xl};
+		background: #fffdf6;
+		border: 3px solid ${PENCIL};
+		border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+		box-shadow: 4px 6px 0 ${PENCIL};
+		font-size: 1.4em;
 		text-align: center;
 
 		&:empty { display: none; }
-		& .big { font-size: 4rem; line-height: 1; }
-		& .row { display: flex; gap: ${space.md}; flex-wrap: wrap; justify-content: center; }
-		& button { font-size: 2rem; padding: 8px 22px; }
+		& .row { display: flex; gap: ${space.lg}; flex-wrap: wrap; justify-content: center; align-items: center; }
 	`,
 );
 
@@ -75,7 +79,9 @@ const ease = (prev, cur, t, key = 'id') => {
 	});
 };
 
-// The battle as every page sees it, and for the two who play it, the catapults to drag and the men to send
+// The battle as every page sees it, and for the two who play it, their army to command: pick men out by tapping them
+// or dragging a box, then send them to fight, hold the wall, go home, or crew a catapult (tap it); drag back from a
+// catapult to fling
 export default class BattleScreen extends Screen {
 	build() {
 		super.build();
@@ -86,10 +92,13 @@ export default class BattleScreen extends Screen {
 		this.cur = null;
 		this.curAt = 0;
 		this.aim = null;
+		this.box = null;
+		this.press = null;
 		this.flash = null;
+		this.selected = new Set();
 
 		this.stage = new Stage({ appendTo: this });
-		this.overlay = new Overlay({ appendTo: this });
+		this.card = new Card({ appendTo: this });
 		this.decal = document.createElement('canvas');
 		this.decal.width = W;
 		this.decal.height = H;
@@ -115,35 +124,58 @@ export default class BattleScreen extends Screen {
 
 		const controls = new Controls({ appendTo: this });
 
-		this.sendButton = new Button({ appendTo: controls, title: 'Send a stick man (Space)', onPointerPress: () => this.send() });
-		this.stanceButton = new Button({ appendTo: controls, title: 'Charge or hold (H)', onPointerPress: () => act('stance') });
+		controls.append(
+			doodle('charge', { title: 'Charge (Space)', size: '2em', onPress: () => this.order('charge') }),
+			doodle('hold', { title: 'Hold the wall (H)', size: '2em', onPress: () => this.order('hold') }),
+			doodle('base', { title: 'Go home (B)', size: '2em', onPress: () => this.order('idle') }),
+			doodle('all', { title: 'Pick out everyone (A)', size: '2em', onPress: () => this.selectAll() }),
+		);
 		this.input = createInput({
-			keys: { send: [' '], stance: ['h', 'H'] },
-			onPress: name => (name === 'send' ? this.send() : act('stance')),
+			keys: { charge: [' '], hold: ['h', 'H'], idle: ['b', 'B'], all: ['a', 'A'], none: ['Escape'] },
+			onPress: name => (name === 'all' ? this.selectAll() : name === 'none' ? this.selected.clear() : this.order(name)),
 		});
 		this.input.pointer(this.stage.elem, {
-			onDown: point => this.aimFrom(point),
-			onMove: point => this.aim && Object.assign(this.aim, this.toWorld(point)),
-			onUp: () => this.release(),
+			onDown: point => this.down(point),
+			onMove: point => this.move(point),
+			onUp: () => this.up(),
 		});
 		this.addCleanup('input', () => this.input.destroy());
 	}
 
-	send() {
-		act('send', undefined, { quiet: true }).then(said => {
-			if (!said.ok) this.say('🚫', this.team === 0 ? 150 : W - 150, GROUND - 200);
+	// The men picked out told what to do; with none picked, charging sends one man from home
+	order(order, which) {
+		const ids = [...this.selected];
+
+		if (!ids.length) {
+			if (order === 'charge')
+				act('send', undefined, { quiet: true }).then(said => {
+					if (!said.ok || !said.result?.sent) this.say('empty', this.team === 0 ? 300 : W - 300, GROUND - 200, RED_PENCIL);
+				});
+
+			return;
+		}
+		act('order', { ids, order, which }, { quiet: true }).then(said => {
+			if (!said.ok && order === 'crew') this.say('person', this.myCats()[which]?.cat.x ?? W / 2, GROUND - 200, RED_PENCIL);
 		});
+		if (order === 'crew' || order === 'charge') this.selected.clear();
+	}
+
+	myUnits() {
+		return (this.cur?.bodies ?? []).filter(body => body.t === this.team && body.u);
+	}
+
+	selectAll() {
+		this.selected = new Set(this.myUnits().map(body => body.id));
 	}
 
 	/**
 	 * What the server says now
 	 * @param {object} view - The game's view
-	 * @param {object} me - { team, sound, avatars, art }
+	 * @param {object} me - { team, sound, art }
 	 */
-	update(view, { team, sound, avatars, art }) {
+	update(view, { team, sound, art }) {
 		this.team = team;
 		this.sound = sound;
-		this.avatars = avatars;
 		this.art = art;
 		this.view = view;
 		this.arm(team);
@@ -156,6 +188,7 @@ export default class BattleScreen extends Screen {
 			this.parts = [];
 			this.prev = null;
 			this.cur = null;
+			this.selected.clear();
 		}
 		if (battle) {
 			// A view sent after an action carries the same picture: it isn't a new tick
@@ -164,13 +197,14 @@ export default class BattleScreen extends Screen {
 				this.curAt = performance.now();
 			}
 			this.cur = battle;
+
+			// The dead can't be picked
+			const alive = new Set(this.myUnits().map(body => body.id));
+
+			for (const id of this.selected) if (!alive.has(id)) this.selected.delete(id);
 		}
 		for (const event of view.events ?? []) this.play(event);
-		if (this.sendButton) {
-			this.sendButton.elem.textContent = `🏃 ${battle?.reserve[team] ?? 0}`;
-			this.stanceButton.elem.textContent = state.hold[team] ? '🛡️' : '⚔️';
-		}
-		this.showOverlay(view);
+		this.showCard(view);
 	}
 
 	play(event) {
@@ -202,18 +236,29 @@ export default class BattleScreen extends Screen {
 		g.fill();
 	}
 
-	showOverlay(view) {
+	// Over the field: who a paused battle waits for, or how a finished one went and what next
+	showCard(view) {
 		const { state } = view;
 		const key = `${state.phase}|${view.away.join()}|${state.battles}`;
 
 		if (key === this.shown) return;
 		this.shown = key;
-		this.overlay.elem.replaceChildren();
+		this.card.elem.replaceChildren();
+
+		const row = (...items) => {
+			const div = document.createElement('div');
+
+			div.className = 'row';
+			div.append(...items.map(item => item?.elem ?? item));
+
+			return div;
+		};
 
 		if (state.phase === 'battle' && view.away.length) {
-			const who = view.away.map(t => `${TEAMS[t].emoji} ${this.avatars[state.seats[t]] ?? ''}`).join(' ');
-
-			this.overlay.elem.innerHTML = `<div class="big">⏸️</div><div>${who} …</div>`;
+			this.card.elem.append(
+				icon('pause', { size: '3em' }),
+				row(...view.away.map(t => icon('flag', { size: '1.6em', color: TEAMS[t].ink })), 'is away…'),
+			);
 
 			return;
 		}
@@ -221,19 +266,31 @@ export default class BattleScreen extends Screen {
 
 		const { winner, stats } = state.result;
 		const mine = this.team >= 0;
-		const big = winner < 0 ? '🤝' : mine ? (winner === this.team ? '🏆' : '💀') : `${TEAMS[winner].emoji} 🏆`;
+		const won = winner === this.team;
+		let big;
 
-		if (mine) this.sound?.play(winner === this.team ? 'win' : 'lose');
-		this.overlay.elem.innerHTML = `
-			<div class="big">${big}</div>
-			<div class="row"><span>${TEAMS[0].emoji} 🗡️ ${stats.kills[0]}</span><span>${TEAMS[1].emoji} 🗡️ ${stats.kills[1]}</span></div>
-			<div class="row"><span>🦴 ${stats.limbs}</span><span>💀 ${stats.heads}</span><span>🩸 ${(stats.blood * 0.004).toFixed(1)} L</span></div>`;
-		if (!mine) return;
+		if (winner < 0) big = icon('skull', { size: '4em' });
+		else if (mine && !won) big = icon('skull', { size: '4em', color: RED_PENCIL });
+		else big = icon('trophy', { size: '4em', color: TEAMS[winner].ink });
 
-		const row = new Component({ appendTo: this.overlay, addClass: 'row' });
+		let words = `${TEAMS[winner]?.name} wins`;
 
-		new Button({ appendTo: row, textContent: '🔁', title: 'Again, same armies', onPointerPress: () => act('again') });
-		new Button({ appendTo: row, textContent: '✏️', title: 'Draw new armies', onPointerPress: () => act('redraw') });
+		if (winner < 0) words = 'Nobody is left standing';
+		else if (mine) words = won ? 'Victory!' : 'Defeat';
+		if (mine) this.sound?.play(won ? 'win' : 'lose');
+		this.card.elem.append(
+			big,
+			Object.assign(document.createElement('div'), { textContent: words }),
+			row(count('sword', stats.kills[0], TEAMS[0].ink), count('sword', stats.kills[1], TEAMS[1].ink)),
+			row(count('bone', stats.limbs), count('skull', stats.heads), count('blood', `${(stats.blood * 0.004).toFixed(1)} L`, GORE)),
+		);
+		if (mine)
+			this.card.elem.append(
+				row(
+					doodle('again', { title: 'Again, same armies', size: '2em', onPress: () => act('again') }),
+					doodle('redraw', { title: 'Draw new armies', size: '2em', onPress: () => act('redraw') }),
+				),
+			);
 	}
 
 	// How the world fits the stage: as big as it can, centered
@@ -250,31 +307,94 @@ export default class BattleScreen extends Screen {
 	toWorld({ x, y }) {
 		const f = this.fitting();
 
-		return f ? { cx: (x - f.left) / f.scale, cy: (y - f.top) / f.scale } : { cx: 0, cy: 0 };
+		return f ? { x: (x - f.left) / f.scale, y: (y - f.top) / f.scale } : { x: 0, y: 0 };
 	}
 
 	myCats() {
 		return (this.cur?.cats ?? []).filter(c => c.t === this.team).map((cat, which) => ({ cat, which }));
 	}
 
-	// A press on (or behind) one of our catapults starts pulling it back
-	aimFrom(point) {
+	// One of our catapults under a point, if there is one
+	catAt({ x, y }) {
+		return this.myCats().find(({ cat }) => !cat.dead && Math.abs(cat.x - x) < 60 && y > GROUND - 110 && y < GROUND + 10) ?? null;
+	}
+
+	// One of our men under a point, if there is one: near his body or his head
+	unitAt({ x, y }) {
+		let best = null, bd = 16;
+
+		for (const body of this.myUnits()) {
+			const j = body.j;
+			const d = Math.min(segDist(x, y, j[2], j[3], j[4], j[5]).d, Math.hypot(x - j[0], y - j[1]));
+
+			if (d < bd) {
+				bd = d;
+				best = body;
+			}
+		}
+
+		return best;
+	}
+
+	down(point) {
 		if (this.view?.state.phase !== 'battle' || this.view.away.length) return;
 
-		const { cx: x, cy: y } = this.toWorld(point);
-		const cats = this.myCats()
-			.filter(({ cat }) => !cat.dead)
-			.map(entry => ({ ...entry, d: Math.hypot(entry.cat.x - x, GROUND - 50 - y) }))
-			.sort((a, b) => a.d - b.d);
+		const at = this.toWorld(point);
 
-		if (!cats.length) return;
+		// A man under the press is picked over the catapult he crews
+		const unit = this.unitAt(at);
 
-		const wall = this.cur.walls[this.team];
-		const behind = this.team === 0 ? x < wall.x1 + 60 : x > wall.x0 - 60;
-		let chosen = cats[0].d < 110 ? cats[0] : null;
+		this.press = { from: point, at, moved: false, unit, cat: unit ? null : this.catAt(at) };
+	}
 
-		if (!chosen && behind) chosen = cats.find(({ cat }) => cat.cd <= 0 && cat.n > 0) ?? cats[0];
-		if (chosen) this.aim = { which: chosen.which, sx: x, sy: y, cx: x, cy: y };
+	move(point) {
+		const press = this.press;
+
+		if (!press) return;
+
+		const now = this.toWorld(point);
+
+		if (!press.moved && Math.hypot(point.x - press.from.x, point.y - press.from.y) > TAP) press.moved = true;
+		if (!press.moved) return;
+		// A drag from a catapult pulls it back; anywhere else it draws a box to pick men out with
+		if (press.cat) this.aim = { which: press.cat.which, sx: press.at.x, sy: press.at.y, cx: now.x, cy: now.y };
+		else this.box = { x0: press.at.x, y0: press.at.y, x1: now.x, y1: now.y };
+	}
+
+	up() {
+		const press = this.press;
+
+		this.press = null;
+		if (!press) return;
+		if (this.aim) return this.release();
+		if (this.box) {
+			const { x0, y0, x1, y1 } = this.box;
+			const [left, right, top, bottom] = [Math.min(x0, x1), Math.max(x0, x1), Math.min(y0, y1), Math.max(y0, y1)];
+
+			this.box = null;
+			this.selected = new Set(
+				this.myUnits()
+					.filter(({ j }) => j[4] >= left && j[4] <= right && j[5] >= top - 20 && j[5] <= bottom + 20)
+					.map(body => body.id),
+			);
+
+			return;
+		}
+		// A tap: a catapult crewed by the men picked out, a man picked out (or let go), or the men sent where it points
+		if (press.cat && this.selected.size) return this.order('crew', press.cat.which);
+		if (press.unit) {
+			const only = this.selected.size === 1 && this.selected.has(press.unit.id);
+
+			this.selected = only ? new Set() : new Set([press.unit.id]);
+
+			return;
+		}
+
+		const wall = this.cur?.walls[this.team];
+		const beyond = wall && (this.team === 0 ? press.at.x > wall.x1 : press.at.x < wall.x0);
+
+		if (this.selected.size && beyond) return this.order('charge');
+		this.selected.clear();
 	}
 
 	pull() {
@@ -283,24 +403,23 @@ export default class BattleScreen extends Screen {
 
 	release() {
 		const aim = this.aim;
-
-		if (!aim) return;
-
 		const [vx, vy] = this.pull();
 
 		this.aim = null;
-
 		if (Math.hypot(vx, vy) < 90) return;
 
 		const cat = this.myCats()[aim.which]?.cat;
 
 		act('fling', { which: aim.which, vx, vy }, { quiet: true }).then(said => {
-			if (!said.ok && cat) this.say(cat.n <= 0 ? '🚫' : '⏳', cat.x, GROUND - 190);
+			if (said.ok || !cat) return;
+			if (cat.n <= 0) this.say('empty', cat.x, GROUND - 210, RED_PENCIL);
+			else if (!cat.cr) this.say('person', cat.x, GROUND - 210, RED_PENCIL);
+			else this.say('reload', cat.x, GROUND - 210);
 		});
 	}
 
-	say(text, x, y) {
-		this.flash = { text, x, y, until: performance.now() + 900 };
+	say(name, x, y, color = PENCIL) {
+		this.flash = { name, x, y, color, until: performance.now() + 900 };
 	}
 
 	item(ref, kind) {
@@ -330,20 +449,48 @@ export default class BattleScreen extends Screen {
 		g.lineCap = g.lineJoin = 'round';
 
 		const cur = this.cur, prev = this.prev;
+		const bodies = ease(prev?.bodies, cur.bodies, t);
 
 		cur.cats.forEach((cat, at) => this.drawCat(g, cat, prev?.cats[at] ? lerp(prev.cats[at].arm, cat.arm, t) : cat.arm));
-		for (const body of ease(prev?.bodies, cur.bodies, t)) this.drawBody(g, body);
+		for (const body of bodies) if (this.selected.has(body.id)) this.drawPicked(g, body);
+		for (const body of bodies) this.drawBody(g, body);
 		for (const wall of cur.walls) this.drawWall(g, wall);
 		for (const prop of ease(prev?.props, cur.props, t)) this.drawProp(g, prop);
 		for (const proj of ease(prev?.projs, cur.projs, t)) this.drawProp(g, proj);
 		this.stepParts(g, dt, cur.walls);
 		if (this.aim) this.drawAim(g);
-		if (this.flash && performance.now() < this.flash.until) {
-			g.font = '40px sans-serif';
-			g.textAlign = 'center';
-			g.fillStyle = '#000';
-			g.fillText(this.flash.text, this.flash.x, this.flash.y);
-		}
+		if (this.box) this.drawBox(g);
+		if (this.flash && performance.now() < this.flash.until) drawIcon(g, this.flash.name, this.flash.x, this.flash.y, 46, this.flash.color);
+		g.restore();
+	}
+
+	// A man picked out: a pencil ring at his feet and a mark over his head
+	drawPicked(g, body) {
+		const j = body.j, ink = teamInk(body.t);
+		const top = Math.min(j[1], j[3]) - 22;
+
+		g.strokeStyle = ink;
+		g.lineWidth = 2.5;
+		g.beginPath();
+		g.ellipse(j[4], GROUND - 1, 16, 5, 0, 0, TAU);
+		g.stroke();
+		g.fillStyle = ink;
+		g.beginPath();
+		g.moveTo(j[0] - 6, top);
+		g.lineTo(j[0] + 6, top);
+		g.lineTo(j[0], top + 8);
+		g.closePath();
+		g.fill();
+	}
+
+	drawBox(g) {
+		const { x0, y0, x1, y1 } = this.box;
+
+		g.save();
+		g.strokeStyle = teamInk(this.team);
+		g.lineWidth = 2;
+		g.setLineDash([8, 6]);
+		g.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
 		g.restore();
 	}
 
@@ -352,6 +499,8 @@ export default class BattleScreen extends Screen {
 
 		if (!rig) return;
 		drawBody(g, rig, body, teamInk(body.t));
+		// One of ours told to hold the wall carries a little shield over his head
+		if (body.u === 'h' && body.t === this.team) drawIcon(g, 'hold', body.j[0], Math.min(body.j[1], body.j[3]) - 26, 16, teamInk(body.t));
 		if (body.w) {
 			const item = this.item(body.w, 'swords');
 
@@ -434,25 +583,30 @@ export default class BattleScreen extends Screen {
 		if (cat.ld && load) placeShape(g, load.shape, { x: end[0], y: end[1] - 3, sx: load.radius * 2, sy: load.radius * 2 }, FILLS.ammo, INK, 1.8);
 		g.restore();
 
-		// Its ammo left, its health, and its reload draining
-		const y = GROUND - 150;
+		// Its ammo left, its crew (red with nobody at it), its health, and its reload draining
+		const y = GROUND - 160, ink = teamInk(cat.t);
 
-		g.fillStyle = teamInk(cat.t);
-		g.font = '18px sans-serif';
-		g.textAlign = 'center';
-		g.fillText(cat.n ? `☄️ ${cat.n}` : '🚫', cat.x, y);
+		g.font = `22px ${HAND}`;
+		g.textAlign = 'left';
+		g.textBaseline = 'middle';
+		drawIcon(g, cat.n ? 'rock' : 'empty', cat.x - 34, y, 22, cat.n ? ink : RED_PENCIL);
+		g.fillStyle = ink;
+		g.fillText(String(cat.n), cat.x - 21, y + 1);
+		drawIcon(g, 'person', cat.x + 8, y, 22, cat.cr ? ink : RED_PENCIL);
+		g.fillStyle = cat.cr ? ink : RED_PENCIL;
+		g.fillText(`${cat.cr}/${MOST_CREW}`, cat.x + 20, y + 1);
 		if (cat.hp < 100) {
 			g.strokeStyle = INK;
 			g.lineWidth = 1.5;
-			g.strokeRect(cat.x - 25, y + 6, 50, 6);
-			g.fillStyle = '#c0392b';
-			g.fillRect(cat.x - 25, y + 6, 50 * clamp(cat.hp / 100, 0, 1), 6);
+			g.strokeRect(cat.x - 25, y + 16, 50, 6);
+			g.fillStyle = RED_PENCIL;
+			g.fillRect(cat.x - 25, y + 16, 50 * clamp(cat.hp / 100, 0, 1), 6);
 		}
 		if (cat.cd > 0 && cat.n > 0) {
 			g.strokeStyle = 'rgba(0,0,0,0.35)';
 			g.lineWidth = 3;
 			g.beginPath();
-			g.arc(cat.x, y + 22, 7, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - cat.cd / RELOAD));
+			g.arc(cat.x, y + 36, 7, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - cat.cd / (cat.rl || 1)));
 			g.stroke();
 		}
 	}
@@ -488,10 +642,10 @@ export default class BattleScreen extends Screen {
 			});
 		});
 
-		// A flag on the middle column, and who's playing that side above it
+		// A flag on the middle column, and who plays that side above it (underlined for the one looking)
 		const mc = wall.cols[1], fx = wall.x0 + 1.5 * WALL.cw;
 		const fy = GROUND - mc.length * WALL.ch - (mc.length ? mc[mc.length - 1][6] : 0);
-		const d = wall.team === 0 ? 1 : -1;
+		const d = wall.team === 0 ? 1 : -1, ink = teamInk(wall.team);
 
 		g.strokeStyle = INK;
 		g.lineWidth = 2;
@@ -499,22 +653,27 @@ export default class BattleScreen extends Screen {
 		g.moveTo(fx, fy);
 		g.lineTo(fx, fy - 40);
 		g.stroke();
-		g.fillStyle = teamInk(wall.team);
+		g.fillStyle = ink;
 		g.beginPath();
 		g.moveTo(fx, fy - 40);
 		g.lineTo(fx + d * (24 + Math.sin(performance.now() / 160) * 3), fy - 33);
 		g.lineTo(fx, fy - 26);
 		g.fill();
 
-		const seat = this.view?.state.seats[wall.team];
-		const who = seat ? this.avatars?.[seat] : this.view?.state.mode === 'cpu' && wall.team === 1 ? '🤖' : '';
+		const state = this.view?.state;
+		let who = null;
 
-		if (who) {
-			g.font = '30px sans-serif';
-			g.textAlign = 'center';
-			g.fillStyle = '#000';
-			g.fillText(wall.team === this.team ? `${who}⬇️` : who, fx, fy - 52);
-		}
+		if (state?.seats[wall.team]) who = 'person';
+		else if (state?.mode === 'cpu' && wall.team === 1) who = 'robot';
+		if (!who) return;
+		drawIcon(g, who, fx, fy - 62, 30, ink);
+		if (wall.team !== this.team) return;
+		g.strokeStyle = ink;
+		g.lineWidth = 2.5;
+		g.beginPath();
+		g.moveTo(fx - 14, fy - 44);
+		g.lineTo(fx + 14, fy - 44);
+		g.stroke();
 	}
 
 	drawAim(g) {
@@ -536,10 +695,7 @@ export default class BattleScreen extends Screen {
 		g.stroke();
 		g.setLineDash([]);
 		g.fillStyle = ink;
-
-		const path = flingPath(from, vx, vy, this.cur.walls);
-
-		path.forEach(([x, y], at) => {
+		flingPath(from, vx, vy, this.cur.walls).forEach(([x, y], at) => {
 			if (at % 4) return;
 			g.globalAlpha = 1 - at / 200;
 			g.beginPath();
@@ -547,11 +703,9 @@ export default class BattleScreen extends Screen {
 			g.fill();
 		});
 		g.globalAlpha = 1;
-		if (cat.cd > 0 || cat.n <= 0) {
-			g.font = '30px sans-serif';
-			g.textAlign = 'center';
-			g.fillText(cat.n <= 0 ? '🚫' : '⏳', cat.x, GROUND - 190);
-		}
+		if (cat.n <= 0) drawIcon(g, 'empty', cat.x, GROUND - 210, 40, RED_PENCIL);
+		else if (!cat.cr) drawIcon(g, 'person', cat.x, GROUND - 210, 40, RED_PENCIL);
+		else if (cat.cd > 0) drawIcon(g, 'reload', cat.x, GROUND - 210, 40, ink);
 	}
 
 	// Blood and dust fly on this page alone; blood that reaches the ground stays there as a pool

@@ -1,7 +1,7 @@
 import { Game as BaseGame, refuse } from '@fatlard1993/web-game-framework';
 
 import { defaultsFor, judge } from './art.js';
-import { DT, SEND_EVERY, World } from './battle.js';
+import { ARMY, DT, ORDERS, World } from './battle.js';
 import { MOST_KEPT, STEPS, TICK_MS, artOf, emptyArt, humanTeams, newDrawing, newState } from './rules.js';
 
 // How long a won battle plays on before its end is called, in battle seconds
@@ -20,7 +20,6 @@ export default class Game extends BaseGame {
 		// Back from the save file after a restart, or new
 		this.state = options.saveState?.state ?? newState(this.options.mode);
 		this.outEvents = [];
-		this.sendAt = [-Infinity, -Infinity];
 		this.world = null;
 		this.shown = '';
 		// A battle isn't saved: after a restart it starts again, with the same art
@@ -61,24 +60,30 @@ export default class Game extends BaseGame {
 			this.finishStep(team);
 		},
 
-		// One more stick man from the reserve, out through the wall
+		// One man from home out to the fight
 		send(player) {
 			const team = this.teamOf(player.id);
 
 			if (this.state.phase !== 'battle' || !this.world) refuse('No battle on');
-			if (this.world.time - this.sendAt[team] < SEND_EVERY) return { sent: false };
-			if (!this.world.deploy(team)) refuse('Nobody left to send');
-			this.sendAt[team] = this.world.time;
 
-			return { sent: true };
+			return { sent: this.world.send(team) };
 		},
 
-		// Charge, or hold by our own wall
-		stance(player) {
+		// Some of our men (their ids, as the page picked them out) told what to do: stay home, hold the wall, charge, or
+		// crew one of our two catapults
+		order(player, { ids, order, which } = {}) {
 			const team = this.teamOf(player.id);
 
-			if (!this.world) refuse('No battle on');
-			this.state.hold[team] = !this.state.hold[team];
+			if (this.state.phase !== 'battle' || !this.world) refuse('No battle on');
+			if (!Array.isArray(ids) || ids.length > ARMY * 4 || !ids.every(Number.isInteger)) refuse('Pick some men first');
+			if (!ORDERS.includes(order)) refuse('No such order');
+			if (order === 'crew' && ![0, 1].includes(which)) refuse('Which catapult?');
+
+			const count = this.world.command(team, ids, order, which);
+
+			if (!count && order === 'crew') refuse('That catapult has all the crew it can take');
+
+			return { count };
 		},
 
 		// One of our two catapults flung: which, and how hard which way
@@ -162,8 +167,7 @@ export default class Game extends BaseGame {
 			for (const { kind } of STEPS) if (!state.art[team][kind]?.length) state.art[team][kind] = defaultsFor(kind);
 		}
 		this.world = new World({ arts: state.art, artOf: artOf(state), auto: [false, state.mode === 'cpu'] });
-		this.world.hold = state.hold = [false, false];
-		this.sendAt = [-Infinity, -Infinity];
+		this.snap = null;
 		state.phase = 'battle';
 		state.result = null;
 		state.battles++;
