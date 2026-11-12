@@ -6,6 +6,8 @@ import { BONES, PI, clamp } from './art.js';
 export const W = 1900, H = 860, GROUND = 780, GRAV = 900, DT = 1 / 60;
 export const SM_H = 80;
 export const WALL = { cols: 3, rows: 7, cw: 34, ch: 22 };
+/** A side's army with no say in it (a test's), how many rocks a side can draw for its catapult in a battle, and how long it
+ * takes to load the next */
 export const ARMY = 12, AMMO = 10, RELOAD = 4.5;
 /** The fastest a catapult flings, in world units a second */
 export const MOST_FLING = 1350;
@@ -59,10 +61,11 @@ export const project = (x, y, z, ax = x) => {
 	return [ax + z * SKEW_X + (x - ax) * k, GROUND - z * SKEW_Y + (y - GROUND) * k];
 };
 
-/** Where a side's k-th man stands at home: in rows behind his wall, four along and three deep */
-export const homeOf = (team, k) => {
-	const x = 270 + (k % 4) * 42 + (Math.floor(k / 4) % 2) * 20;
-	const z = 28 + Math.floor(k / 4) * 62;
+/** Where a side's k-th man of n stands at home: in rows behind his wall, four along, the rows spread front to back */
+export const homeOf = (team, k, n = 12) => {
+	const rows = Math.max(1, Math.ceil(n / 4)), row = Math.floor(k / 4);
+	const x = 270 + (k % 4) * 42 + (row % 2) * 20;
+	const z = rows === 1 ? DEPTH / 2 : 25 + (row * (DEPTH - 50)) / (rows - 1);
 
 	return { x: team === 0 ? x : W - x, z };
 };
@@ -125,10 +128,51 @@ export const flingPath = (from, vx, vy, groundAt = () => GROUND) => {
 	return out;
 };
 
-/** A fling's speed, held to what a catapult can do */
-export const holdFling = (vx, vy) => {
-	const m = Math.hypot(vx, vy);
+/** The lowest and steepest a catapult throws, in radians above level, and always forward */
+export const FLING_ANGLES = [0.35, 1.2];
 
-	return m > MOST_FLING ? [(vx * MOST_FLING) / m, (vy * MOST_FLING) / m] : [vx, vy];
+/** How far a side's catapult can throw: into the enemy's wall, never past it, so men at home behind it are out of reach */
+export const reachOf = team => (team === 0 ? W - 430 - 60 : 430 + 60);
+
+// How far a throw from a side's catapult lands on open ground, at a speed and angle
+const thrownTo = (team, speed, angle) => {
+	const [lx, ly] = catGeometry(CAT_X[team][0], team === 0 ? 1 : -1, CAT_FIRE).launch;
+	const up = speed * Math.sin(angle);
+
+	return (speed * Math.cos(angle) * (up + Math.sqrt(up * up + 2 * GRAV * (GROUND - ly)))) / GRAV;
+};
+
+/** The fastest a side's catapult throws at an angle: as fast as it can, or just enough to reach as far as it may */
+export const reachSpeed = (team, angle) => {
+	const [lx] = catGeometry(CAT_X[team][0], team === 0 ? 1 : -1, CAT_FIRE).launch;
+	const far = Math.abs(reachOf(team) - lx);
+	let low = 0, high = MOST_FLING;
+
+	if (thrownTo(team, high, angle) <= far) return high;
+	for (let i = 0; i < 24; i++) {
+		const mid = (low + high) / 2;
+
+		if (thrownTo(team, mid, angle) > far) high = mid;
+		else low = mid;
+	}
+
+	return low;
+};
+
+/** A throw at an angle (held to the catapult's angles) and a part of its reach (0 to 1), as a speed [vx, vy] */
+export const flingFor = (team, angle, part) => {
+	const held = clamp(angle, ...FLING_ANGLES), speed = clamp(part, 0, 1) * reachSpeed(team, held), dir = team === 0 ? 1 : -1;
+
+	return [Math.cos(held) * speed * dir, -Math.sin(held) * speed];
+};
+
+/** The angle of a throw [vx, vy] for a side, above level, forward */
+export const flingAngle = (team, vx, vy) => Math.atan2(-vy, vx * (team === 0 ? 1 : -1));
+
+/** A throw held to what a side's catapult can do: forward, between its angles, and no further than its reach */
+export const holdFling = (team, vx, vy) => {
+	const angle = clamp(flingAngle(team, vx, vy), ...FLING_ANGLES);
+
+	return flingFor(team, angle, Math.hypot(vx, vy) / reachSpeed(team, angle));
 };
 

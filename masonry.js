@@ -90,8 +90,8 @@ export class Masonry {
 		ground.createFixture(new Edge(Vec2(toM(W + 300), 0), Vec2(toM(W + 300), toM(GROUND))), { friction: 0.9 });
 
 		for (const wall of walls) {
-			for (let c = 0; c < WALL.cols; c++) {
-				for (let r = 0; r < WALL.rows; r++) {
+			for (let c = 0; c < wall.cols; c++) {
+				for (let r = 0; r < wall.rows; r++) {
 					this.addBrick(wall.team, pickArt(wall.team, 'stones'), wall.x0 + (c + 0.5) * WALL.cw, GROUND - (r + 0.5) * WALL.ch, true);
 				}
 			}

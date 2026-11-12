@@ -9,7 +9,6 @@ import {
 	GROUND,
 	H,
 	MOST_CREW,
-	MOST_FLING,
 	SKEW_X,
 	SKEW_Y,
 	W,
@@ -17,12 +16,14 @@ import {
 	beamScale,
 	catGeometry,
 	depthScale,
+	flingAngle,
+	flingFor,
 	flingPath,
-	holdFling,
 	project,
 } from '../field.js';
 import { TEAMS, TICK_MS } from '../rules.js';
 import AimPad from './AimPad.js';
+import RockPad from './RockPad.js';
 import { drawIcon, icon } from './icons.js';
 import { FILLS, GORE, INK, WOOD_INK, drawBlade, drawBody, mixColor, paperBackground, placeShape, teamInk } from './paint.js';
 import { HAND, PENCIL, RED_PENCIL } from './theme.js';
@@ -221,6 +222,11 @@ export default class BattleScreen extends Screen {
 			onHold: () => act('aim', { hold: true }, { quiet: true }),
 			onClose: () => this.dropCats(),
 		});
+		this.rockPad = new RockPad({ appendTo: this, onOpen: () => this.dropCats() });
+		// The rock pad sits in the field's corner, over the controls
+		this.controlsSizer = new ResizeObserver(() => this.elem.style.setProperty('--controls', `${controls.elem.offsetHeight}px`));
+		this.controlsSizer.observe(controls.elem);
+		this.addCleanup('controlsSizer', () => this.controlsSizer.disconnect());
 
 		this.picked = document.createElement('span');
 		this.picked.className = 'picked';
@@ -237,9 +243,21 @@ export default class BattleScreen extends Screen {
 			this.repairButton,
 		);
 		this.input = createInput({
-			keys: { charge: [' '], hold: ['h', 'H'], idle: ['b', 'B'], all: ['a', 'A'], crew: ['c', 'C'], repair: ['r', 'R'], none: ['Escape'] },
+			keys: {
+				charge: [' '],
+				hold: ['h', 'H'],
+				idle: ['b', 'B'],
+				all: ['a', 'A'],
+				crew: ['c', 'C'],
+				repair: ['r', 'R'],
+				none: ['Escape'],
+				rock: ['d', 'D'],
+				keep: ['Enter'],
+			},
 			onPress: name => {
-				if (name === 'all') this.selectAll();
+				if (name === 'rock') this.rockPad.toggle();
+				else if (name === 'keep') this.rockPad.keep();
+				else if (name === 'all') this.selectAll();
 				else if (name === 'none') this.letGo();
 				else if (name === 'crew' || name === 'repair') this.choose(name);
 				else this.order(name);
@@ -297,6 +315,7 @@ export default class BattleScreen extends Screen {
 	pickCat(which) {
 		if (this.catsPicked.has(which)) this.catsPicked.delete(which);
 		else this.catsPicked.add(which);
+		if (this.catsPicked.size) this.rockPad?.toggle(false);
 		this.showPad();
 	}
 
@@ -313,7 +332,7 @@ export default class BattleScreen extends Screen {
 		const cats = this.myCats().filter(({ which, cat }) => this.catsPicked.has(which) && !cat.dead);
 
 		for (const which of [...this.catsPicked]) if (!cats.some(entry => entry.which === which)) this.catsPicked.delete(which);
-		this.pad.show(cats.length, Boolean(cats[0]?.cat.aim), teamInk(this.team));
+		this.pad.show(cats.length, Boolean(cats[0]?.cat.aim), teamInk(this.team), this.team);
 	}
 
 	// Our catapult aimed the way the pad (or a drag from it) was pulled: from now on it fires that way by itself whenever
@@ -323,7 +342,7 @@ export default class BattleScreen extends Screen {
 
 		act('aim', { vx, vy }, { quiet: true }).then(said => {
 			if (!said.ok || !cat) return;
-			if (cat.n <= 0) this.say('empty', cat.x, GROUND - 210, RED_PENCIL);
+			if (cat.n <= 0) this.say(cat.dr > 0 ? 'rock' : 'empty', cat.x, GROUND - 210, RED_PENCIL);
 			else if (!cat.cr) this.say('person', cat.x, GROUND - 210, RED_PENCIL);
 			else this.say('target', cat.x, GROUND - 210, teamInk(this.team));
 		});
@@ -383,6 +402,13 @@ export default class BattleScreen extends Screen {
 			for (const id of this.selected) if (!alive.has(id)) this.selected.delete(id);
 			if (this.selected.size !== before) this.showPicked();
 			if (this.catsPicked.size) this.showPad();
+
+			const mine = this.myCats()[0]?.cat;
+
+			if (this.rockPad && mine) {
+				this.rockPad.sound = sound;
+				this.rockPad.show(mine.dr ?? 0, !mine.n, this.team);
+			}
 		}
 		for (const event of view.events ?? []) this.play(event);
 		this.showCard(view);
@@ -749,11 +775,16 @@ export default class BattleScreen extends Screen {
 		this.letGo();
 	}
 
-	// How hard and which way a drag flings: straight back from where it's pulled, full strength at FULL_PULL pixels
-	pull() {
-		const k = MOST_FLING / FULL_PULL;
+	// How far a drag is pulled, 0 to 1: as far as the catapult reaches at FULL_PULL pixels
+	pullPart() {
+		return clamp(Math.hypot(this.aim.from.x - this.aim.to.x, this.aim.from.y - this.aim.to.y) / FULL_PULL, 0, 1);
+	}
 
-		return holdFling((this.aim.from.x - this.aim.to.x) * k, (this.aim.from.y - this.aim.to.y) * k);
+	// Which way and how far a drag flings: straight back from where it's pulled, held to the catapult's angles
+	pull() {
+		const angle = flingAngle(this.team, this.aim.from.x - this.aim.to.x, this.aim.from.y - this.aim.to.y);
+
+		return flingFor(this.team, angle, this.pullPart());
 	}
 
 	release() {
@@ -1082,13 +1113,14 @@ export default class BattleScreen extends Screen {
 		g.arc(end[0], end[1], 9, arm + Math.PI * 0.5, arm + Math.PI * 1.5, cat.d < 0);
 		g.stroke();
 
-		const load = this.item(cat.l, 'ammo');
+		const load = cat.l && this.item(cat.l, 'ammo');
 
 		if (cat.ld && load) placeShape(g, load.shape, { x: end[0], y: end[1] - 3, sx: load.radius * 2, sy: load.radius * 2 }, FILLS.ammo, INK, 1.8);
 		g.restore();
 
-		// Its ammo left, its crew (red with nobody at it), anyone repairing it, its health, and its reload draining
-		drawIcon(g, cat.n ? 'rock' : 'empty', cat.x - 34, y, 22, cat.n ? ink : RED_PENCIL);
+		// Its rocks on the pile (red when it has none: one to draw, or none left to), its crew (red with nobody at it),
+		// anyone repairing it, its health, and its reload draining
+		drawIcon(g, cat.n || cat.dr > 0 ? 'rock' : 'empty', cat.x - 34, y, 22, cat.n ? ink : RED_PENCIL);
 		g.fillStyle = ink;
 		g.fillText(String(cat.n), cat.x - 21, y + 1);
 		drawIcon(g, 'person', cat.x + 8, y, 22, cat.cr ? ink : RED_PENCIL);
@@ -1202,7 +1234,7 @@ export default class BattleScreen extends Screen {
 		const ink = teamInk(this.team);
 		const [lx, ly] = project(from[0], from[1], cat.z);
 		const f = this.fitting();
-		const strength = Math.hypot(vx, vy) / MOST_FLING;
+		const strength = this.pullPart(), m = Math.hypot(vx, vy) || 1;
 
 		// The pull: a pencil line back from the catapult, as long as the drag (on the page's scale)
 		g.strokeStyle = ink;
@@ -1211,7 +1243,7 @@ export default class BattleScreen extends Screen {
 		g.setLineDash([6, 6]);
 		g.beginPath();
 		g.moveTo(lx, ly);
-		g.lineTo(lx - (vx / MOST_FLING) * (FULL_PULL / f.scale), ly - (vy / MOST_FLING) * (FULL_PULL / f.scale));
+		g.lineTo(lx - (vx / m) * strength * (FULL_PULL / f.scale), ly - (vy / m) * strength * (FULL_PULL / f.scale));
 		g.stroke();
 		g.setLineDash([]);
 		g.fillStyle = ink;
@@ -1229,7 +1261,7 @@ export default class BattleScreen extends Screen {
 		g.font = `22px ${HAND}`;
 		g.textAlign = 'center';
 		g.fillText(`${Math.round(strength * 100)}%`, lx, ly - 30);
-		if (cat.n <= 0) drawIcon(g, 'empty', lx, ly - 60, 40, RED_PENCIL);
+		if (cat.n <= 0) drawIcon(g, cat.dr > 0 ? 'rock' : 'empty', lx, ly - 60, 40, RED_PENCIL);
 		else if (!cat.cr) drawIcon(g, 'person', lx, ly - 60, 40, RED_PENCIL);
 		else if (cat.cd > 0) drawIcon(g, 'reload', lx, ly - 60, 40, ink);
 	}

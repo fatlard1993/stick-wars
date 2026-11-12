@@ -1,9 +1,10 @@
-import { Component, Notify, Whiteboard, styled } from '@vanilla-bean/components';
+import { Component, Notify, styled } from '@vanilla-bean/components';
 import { act, createInput } from '@fatlard1993/web-game-framework/client';
 
 import { DEFAULT_RAW, PAD, WEAPON_AREA, clamp, pick } from '../art.js';
 import { STEPS, TEAMS } from '../rules.js';
 import { icon } from './icons.js';
+import { PEN, Pad, SHEET, inkStrokes, offPad } from './Pad.js';
 import { drawRawFit } from './paint.js';
 import { PENCIL, RED_PENCIL } from './theme.js';
 import { doodle } from './ui.js';
@@ -15,46 +16,6 @@ const PRAISE = {
 	ammo: ['Loaded!', 'That will hurt.', 'Incoming!'],
 	swords: ['Sharp!', 'Brutal.', 'Oh, that is nasty.'],
 };
-// The pen, in pad units: the same weight as the drawings the checks were tuned on
-const PEN = 7;
-const SHEET = '#fffdf6';
-
-// The drawing pad. A pen's place is measured against the pad itself: the Whiteboard's own measure (offsetX) is against
-// whatever the pointer is over, and a stroke that strayed over the toast or the panel beside the pad jumped to wherever
-// that thing's corner put it, drawing long lines nobody drew. Off the pad it's held to the edge, and the edge is where
-// the pen lifts (see offPad). And one pen at a time: a palm resting on the screen doesn't draw a second line.
-class Pad extends Whiteboard {
-	getPosition({ clientX, clientY }) {
-		const box = this.elem.getBoundingClientRect();
-
-		return { x: clamp(clientX - box.left, 0, box.width), y: clamp(clientY - box.top, 0, box.height) };
-	}
-
-	interactionInit(event) {
-		if (this._gesture.active) return;
-		super.interactionInit(event);
-	}
-}
-
-// A stroke with the pen lifted wherever it left the page (or the box a weapon is drawn in): what was past it is dropped,
-// and the stroke goes on as a new one where the pen came back
-const offPad = (line, { x0, y0, x1, y1 }) => {
-	const out = [];
-	let current = [];
-
-	for (const point of line) {
-		const edge = point.x <= x0 || point.y <= y0 || point.x >= x1 || point.y >= y1;
-
-		if (edge) {
-			if (current.length) out.push(current);
-			current = [];
-		} else current.push(point);
-	}
-	if (current.length) out.push(current);
-
-	return out.filter(stroke => stroke.length > 1);
-};
-
 const Screen = styled(
 	Component,
 	({ space }) => `
@@ -413,14 +374,7 @@ export default class DrawScreen extends Screen {
 		if (!this.size) return;
 
 		const g = this.pad.canvas, k = this.size / PAD;
-		const path = strokes => {
-			g.beginPath();
-			for (const s of strokes) {
-				g.moveTo(s[0].x * k, s[0].y * k);
-				for (const p of s) g.lineTo(p.x * k, p.y * k);
-			}
-			g.stroke();
-		};
+		const path = strokes => inkStrokes(g, strokes, k);
 
 		this.pad.clearCanvas();
 		g.lineCap = g.lineJoin = 'round';

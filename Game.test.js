@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
 
 import { DEFAULT_RAW, blobS, cpuArmy, judge, lineS } from './art.js';
-import { AMMO, ARMY, DT, FADE, GROUND, LINGER, World } from './battle.js';
+import { AMMO, DT, FADE, GROUND, LINGER, World } from './battle.js';
 import Game from './Game.js';
-import { STEPS, emptyArt } from './rules.js';
+import { BASE_ARMY, CPU_SIZE, STEPS, emptyArt } from './rules.js';
 
 const quiet = { info() {}, debug() {}, warning() {}, error() {} };
 const server = () => ({ games: {}, publish() {}, socketBroadcast() {} });
@@ -105,7 +105,7 @@ test('two players each draw their own army, and fight once both are done', () =>
 	expect(game.act(owl.id, 'send').error).toBe('You are watching this one');
 });
 
-test('every man stands at home from the start, one crewing each catapult', () => {
+test('every man stands at home from the start, one crewing the catapult', () => {
 	const game = newGame('cpu');
 	const fox = game.addPlayer('🦊');
 
@@ -113,10 +113,93 @@ test('every man stands at home from the start, one crewing each catapult', () =>
 
 	const mine = game.world.stickmen.filter(s => s.team === 0);
 
-	expect(game.world.stickmen).toHaveLength(ARMY * 2);
+	// One of each drawn: no bonus. The computer fights with a middling army.
+	expect(mine).toHaveLength(BASE_ARMY);
+	expect(game.world.stickmen).toHaveLength(BASE_ARMY + CPU_SIZE.army);
 	expect(mine.filter(s => s.order === 'crew')).toHaveLength(1);
-	expect(mine.filter(s => s.order === 'idle')).toHaveLength(ARMY - 1);
-	expect(game.viewFor(fox.id).battle.bodies.filter(b => b.t === 0 && b.u)).toHaveLength(ARMY);
+	expect(mine.filter(s => s.order === 'idle')).toHaveLength(BASE_ARMY - 1);
+	expect(game.viewFor(fox.id).battle.bodies.filter(b => b.t === 0 && b.u)).toHaveLength(BASE_ARMY);
+});
+
+test('drawing more stick men and weapons earns more men, and more stones a bigger wall; the defaults earn nothing', () => {
+	const game = newGame('cpu');
+	const fox = game.addPlayer('🦊');
+
+	for (const { kind } of STEPS) {
+		const many = { stickmen: 3, swords: 3, stones: 5 }[kind] ?? 1;
+
+		for (let k = 0; k < many; k++) expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW[kind]()[k % DEFAULT_RAW[kind]().length] }).ok).toBe(true);
+		game.act(fox.id, 'next');
+	}
+
+	const wall = game.world.walls[0];
+
+	expect(game.world.stickmen.filter(s => s.team === 0)).toHaveLength(BASE_ARMY + 4);
+	expect([wall.cols, wall.rows]).toEqual([4, 9]);
+	expect(game.world.masonry.standing(0)).toHaveLength(36);
+	// The wall's face toward home stays where it was: a thicker wall reaches further out
+	expect(wall.x0).toBe(430);
+
+	const lazy = newGame('cpu');
+	const frog = lazy.addPlayer('🐸');
+
+	for (const _ of STEPS) lazy.act(frog.id, 'next');
+	expect(lazy.world.stickmen.filter(s => s.team === 0)).toHaveLength(BASE_ARMY);
+	expect([lazy.world.walls[0].cols, lazy.world.walls[0].rows]).toEqual([3, 6]);
+});
+
+test('the catapult starts empty: each rock is drawn in battle, up to the most a battle allows, and the computer draws its own', () => {
+	const game = newGame('cpu');
+	const fox = game.addPlayer('🦊');
+
+	drawEverything(game, fox.id);
+
+	const cat = game.world.cats[0];
+	const rock = DEFAULT_RAW.ammo()[0];
+
+	expect(cat.ammo).toBe(0);
+	expect(game.act(fox.id, 'rock', { strokes: [lineS(240, 50, 240, 400)] }).ok).toBe(false);
+	expect(game.act(fox.id, 'rock', { strokes: rock }).result).toEqual({ left: AMMO - 1 });
+	expect(cat.ammo).toBe(1);
+	expect(cat.snapshot().l).toEqual([0, 0]);
+	for (let k = 1; k < AMMO; k++) game.act(fox.id, 'rock', { strokes: rock });
+	expect(game.act(fox.id, 'rock', { strokes: rock }).error).toBe('No more rocks this battle');
+	expect(cat.ammo).toBe(AMMO);
+	for (let i = 0; i < 60 * 10; i++) game.world.step(DT);
+	expect(game.world.drawnRocks[1]).toBeGreaterThan(0);
+	// A rematch starts empty again
+	game.state.phase = 'over';
+	game.act(fox.id, 'again');
+	expect(game.world.cats[0].ammo).toBe(0);
+	expect(game.state.art[0].ammo).toHaveLength(0);
+});
+
+test('a catapult throws forward at a sensible angle, and never past the enemy wall', () => {
+	const { game, fox, world } = soloBattle();
+	const cat = world.cats[0];
+
+	for (let k = 0; k < 4; k++) game.act(fox.id, 'rock', { strokes: DEFAULT_RAW.ammo()[0] });
+	game.act(fox.id, 'order', { ids: world.stickmen.filter(s => s.team === 0 && s.order === 'idle').slice(0, 2).map(s => s.body.id), order: 'crew', which: 0 });
+	for (let i = 0; i < 60 * 6; i++) world.step(DT);
+	// As hard as can be, almost flat, even backwards: held to what it can do
+	for (const [vx, vy] of [[5000, -100], [-900, -900], [3000, -3000]]) {
+		game.act(fox.id, 'aim', { vx, vy });
+
+		const [ax, ay] = cat.aim;
+
+		expect(ax).toBeGreaterThan(0);
+		expect(Math.atan2(-ay, ax)).toBeGreaterThan(0.34);
+		expect(Math.atan2(-ay, ax)).toBeLessThan(1.21);
+	}
+	// Whatever lands, lands short of what's behind the enemy wall
+	let farthest = 0;
+
+	for (let i = 0; i < 60 * 25; i++) {
+		world.step(DT);
+		for (const proj of world.projs) farthest = Math.max(farthest, proj.x);
+	}
+	expect(farthest).toBeGreaterThan(900);
+	expect(farthest).toBeLessThan(world.walls[1].x1);
 });
 
 test('in battle a player sends men out, orders the ones they picked, and crews their catapults', () => {
@@ -150,13 +233,14 @@ test('in battle a player sends men out, orders the ones they picked, and crews t
 	expect(game.act(fox.id, 'order', { ids: picked, order: 'crew', which: 0 }).result).toEqual({ count: 2 });
 	expect(game.act(fox.id, 'order', { ids: picked, order: 'crew', which: 0 }).ok).toBe(true);
 	expect(world.cats[0].crewing()).toHaveLength(3);
+	for (let k = 0; k < 5; k++) game.act(fox.id, 'rock', { strokes: DEFAULT_RAW.ammo()[0] });
 
 	// Aimed, with its crew in place, it fires by itself as often as it can; told to hold, it stops
 	for (let i = 0; i < 60 * 8; i++) world.step(DT);
 	expect(world.cats[0].crew()).toBe(3);
 	expect(game.act(fox.id, 'aim', { vx: 500, vy: -600 }).ok).toBe(true);
 	for (let i = 0; i < 60 * 8; i++) world.step(DT);
-	expect(AMMO - world.cats[0].ammo).toBeGreaterThan(1);
+	expect(5 - world.cats[0].ammo).toBeGreaterThan(1);
 	game.act(fox.id, 'aim', { hold: true });
 
 	const held = world.cats[0].ammo;
@@ -186,7 +270,7 @@ test('a page sees the art once, then the battle every tick with what just happen
 	expect(later.state.kept[0].stickmen).toBe(1);
 	expect(later.battle.walls).toHaveLength(2);
 	game.tick();
-	expect(game.viewFor(fox.id).battle.bodies).toHaveLength(ARMY * 2);
+	expect(game.viewFor(fox.id).battle.bodies).toHaveLength(BASE_ARMY + CPU_SIZE.army);
 });
 
 test('a whole battle runs to a winner, cutting people apart on the way', () => {
@@ -215,7 +299,7 @@ test('the art is saved and the battle is not; a game saved mid-battle comes back
 
 	const save = JSON.parse(JSON.stringify(game.toSaveState()));
 
-	expect(save.version).toBe(1);
+	expect(save.version).toBe(2);
 	expect(save.state.art[0].swords).toHaveLength(1);
 
 	const back = new Game({ saveState: save, server: server(), logger: quiet });
@@ -224,6 +308,24 @@ test('the art is saved and the battle is not; a game saved mid-battle comes back
 	expect(back.state.phase).toBe('battle');
 	expect(back.world).not.toBeNull();
 	expect(back.state.art[0].swords).toEqual(game.state.art[0].swords);
+});
+
+test('a game saved when ammo was still a drawing step loads, each side on the step it was drawing', () => {
+	const game = newGame('duo');
+	const save = JSON.parse(JSON.stringify(game.toSaveState()));
+
+	save.version = 1;
+	save.state.drawing = [
+		{ step: 3, left: 4, done: false },
+		{ step: 4, left: 30, done: false },
+	];
+
+	const back = new Game({ saveState: Game.migrate(save), server: server(), logger: quiet });
+
+	back.dispose();
+	expect(back.state.drawing.map(({ step }) => STEPS[step].kind)).toEqual(['swords', 'swords']);
+	expect(back.state.drawing[0].left).toBe(STEPS[3].seconds);
+	expect(back.state.drawing[1].left).toBe(30);
 });
 
 test('when the opponent leaves, their side is free and the next one to come draws their own army', () => {
@@ -342,10 +444,11 @@ test('a smashed catapult is rebuilt by its repairers, and fires again once its c
 	for (let i = 0; i < 60 * 15 && cat.hp < 100; i++) world.step(DT);
 	expect(cat.hp).toBe(100);
 	game.act(fox.id, 'order', { ids: ids.slice(0, 1), order: 'crew', which: 0 });
+	game.act(fox.id, 'rock', { strokes: DEFAULT_RAW.ammo()[0] });
 	for (let i = 0; i < 60 * 6; i++) world.step(DT);
 	game.act(fox.id, 'aim', { vx: 500, vy: -600 });
 	for (let i = 0; i < 60 * 6; i++) world.step(DT);
-	expect(cat.ammo).toBeLessThan(AMMO);
+	expect(cat.ammo).toBe(0);
 });
 
 test('the dead and the wreckage lie a while, fade, and are gone', () => {

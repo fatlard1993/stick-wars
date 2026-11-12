@@ -6,8 +6,7 @@
 export const STEPS = [
 	{ kind: 'stickmen', seconds: 45, title: 'Draw your stick men' },
 	{ kind: 'stones', seconds: 25, title: 'Draw stones for the wall' },
-	{ kind: 'beams', seconds: 25, title: 'Draw beams for the catapults' },
-	{ kind: 'ammo', seconds: 25, title: 'Draw catapult ammo' },
+	{ kind: 'beams', seconds: 25, title: 'Draw beams for the catapult' },
 	{ kind: 'swords', seconds: 40, title: 'Draw weapons in the box' },
 ];
 
@@ -43,7 +42,29 @@ export const newState = mode => ({
 	battles: 0,
 });
 
-export const emptyArt = () => Object.fromEntries(STEPS.map(({ kind }) => [kind, []]));
+// The catapult's rocks aren't drawn beforehand: each is drawn during the battle (Game's rock), so ammo starts empty
+export const emptyArt = () => ({ ...Object.fromEntries(STEPS.map(({ kind }) => [kind, []])), ammo: [] });
+
+/** How many men a side has with none of the bonus, and how many the bonus can add */
+export const BASE_ARMY = 10, MOST_BONUS = 6;
+
+// Only what was drawn counts toward a bonus, never the defaults (kept drawings carry `drawn`)
+const drawnOf = items => (items ?? []).filter(item => item.drawn).length;
+
+/** A side's army: ten men, and one more for each stick man and each weapon drawn past the first of each */
+export const armySize = art =>
+	BASE_ARMY + Math.min(MOST_BONUS, Math.max(0, drawnOf(art?.stickmen) - 1) + Math.max(0, drawnOf(art?.swords) - 1));
+
+/** The computer's side: a middling army and wall, what a person drawing a fair few of each would get */
+export const CPU_SIZE = { army: BASE_ARMY + MOST_BONUS / 2, wall: { cols: 3, rows: 7 } };
+
+/** A side's wall: six stones high and three thick; a row higher for each stone drawn past the first (three at most),
+ * and a column thicker for five or more */
+export const wallSize = art => {
+	const stones = drawnOf(art?.stones);
+
+	return { cols: 3 + (stones >= 5 ? 1 : 0), rows: 6 + Math.min(3, Math.max(0, stones - 1)) };
+};
 
 export const newDrawing = () => ({ step: 0, left: STEPS[0].seconds, done: false });
 

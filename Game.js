@@ -1,8 +1,20 @@
 import { Game as BaseGame, refuse } from '@fatlard1993/web-game-framework';
 
 import { cpuArmy, defaultsFor, judge } from './art.js';
-import { ARMY, DT, ORDERS, World } from './battle.js';
-import { MOST_KEPT, STEPS, TICK_MS, artOf, emptyArt, humanTeams, newDrawing, newState } from './rules.js';
+import { AMMO, ARMY, DT, ORDERS, World } from './battle.js';
+import {
+	CPU_SIZE,
+	MOST_KEPT,
+	STEPS,
+	TICK_MS,
+	armySize,
+	artOf,
+	emptyArt,
+	humanTeams,
+	newDrawing,
+	newState,
+	wallSize,
+} from './rules.js';
 
 // How long a won battle plays on before its end is called, in battle seconds
 const END_AFTER = 2.2;
@@ -11,8 +23,18 @@ const END_AFTER = 2.2;
 // battle (battle.js), stepped here and sent to every page many times a second. Drawings are judged here too, so what
 // a page keeps is what passed.
 export default class Game extends BaseGame {
-	static version = 1;
-	static migrations = {};
+	static version = 2;
+	static migrations = {
+		// Ammo stopped being a drawing step (rocks are drawn in battle): a side part way through drawing moves on a step
+		// if it was past ammo, and onto weapons if it was on ammo
+		2: save => {
+			for (const drawing of save.state?.drawing ?? []) {
+				if (drawing.done || drawing.step < 3) continue;
+				if (drawing.step === 3) drawing.left = STEPS[3].seconds;
+				else drawing.step--;
+			}
+		},
+	};
 
 	constructor(options) {
 		super(options);
@@ -46,10 +68,31 @@ export default class Game extends BaseGame {
 			const verdict = judge(kind, strokes);
 
 			if (!verdict.ok) refuse(verdict.msg);
-			kept.push(verdict.item);
+			// Drawn by a person, so it counts toward a bigger army or wall (the defaults never do)
+			kept.push({ ...verdict.item, drawn: true });
 			this.artChanged();
 
 			return { kind, kept: kept.length, stats: verdict.item.stats ?? null };
+		},
+
+		// A rock drawn mid-battle, onto our catapult's pile, if it passes the ammo check and we may still draw one
+		rock(player, { strokes } = {}) {
+			const team = this.teamOf(player.id);
+
+			if (this.state.phase !== 'battle' || !this.world) refuse('No battle on');
+			if (this.world.drawnRocks[team] >= AMMO) refuse('No more rocks this battle');
+
+			const verdict = judge('ammo', strokes);
+
+			if (!verdict.ok) refuse(verdict.msg);
+
+			const rocks = this.state.art[team].ammo;
+
+			rocks.push(verdict.item);
+			this.world.addRock(team, rocks.length - 1);
+			this.artChanged();
+
+			return { left: AMMO - this.world.drawnRocks[team] };
 		},
 
 		// Done with this step before the clock runs out
@@ -172,7 +215,21 @@ export default class Game extends BaseGame {
 		for (const team of uses) {
 			for (const { kind } of STEPS) if (!state.art[team][kind]?.length) state.art[team][kind] = defaultsFor(kind);
 		}
-		this.world = new World({ arts: state.art, artOf: artOf(state), auto: [false, state.mode === 'cpu'] });
+		// Every battle a person's catapult starts empty: each rock is drawn during it
+		for (const team of humanTeams(state)) state.art[team].ammo = [];
+
+		const auto = [false, state.mode === 'cpu'];
+		const sides = artOf(state).map((a, team) =>
+			auto[team] ? CPU_SIZE : { army: armySize(state.art[a]), wall: wallSize(state.art[a]) },
+		);
+
+		this.world = new World({
+			arts: state.art,
+			artOf: artOf(state),
+			auto,
+			armies: sides.map(side => side.army),
+			walls: sides.map(side => side.wall),
+		});
 		this.snap = null;
 		state.phase = 'battle';
 		state.result = null;

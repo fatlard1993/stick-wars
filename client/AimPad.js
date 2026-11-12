@@ -1,7 +1,7 @@
 import { Component, styled } from '@vanilla-bean/components';
 
 import { clamp } from '../art.js';
-import { MOST_FLING, holdFling } from '../field.js';
+import { FLING_ANGLES, flingAngle, flingFor } from '../field.js';
 import { icon } from './icons.js';
 import { HAND, PENCIL, RED_PENCIL } from './theme.js';
 import { doodle } from './ui.js';
@@ -104,7 +104,8 @@ export default class AimPad extends Pad {
 	}
 
 	/** Shown for the catapult when it's picked (whether it's aimed, firing by itself), or put away */
-	show(picked, aimed, ink) {
+	show(picked, aimed, ink, team) {
+		this.team = team;
 		this.elem.classList.toggle('hidden', !picked);
 		if (!picked) {
 			this.pull = null;
@@ -132,14 +133,16 @@ export default class AimPad extends Pad {
 		this.context.setTransform(ratio, 0, 0, ratio, 0, 0);
 	}
 
-	// The fling for the pull now: the other way from it, full strength at the pad's edge
+	// How far along the pad's radius it's pulled, 0 to 1: the edge is as far as the catapult reaches
+	part() {
+		return this.pull ? clamp(Math.hypot(this.pull.x, this.pull.y) / (this.size / 2 - 8), 0, 1) : 0;
+	}
+
+	// The fling for the pull now: the other way from it (held to the catapult's angles), as far as it's pulled
 	velocity() {
 		if (!this.pull) return [0, 0];
 
-		const radius = this.size / 2 - 8;
-		const k = MOST_FLING / radius;
-
-		return holdFling(-this.pull.x * k, -this.pull.y * k);
+		return flingFor(this.team, flingAngle(this.team, -this.pull.x, -this.pull.y), this.part());
 	}
 
 	aimed() {
@@ -166,6 +169,16 @@ export default class AimPad extends Pad {
 		g.beginPath();
 		g.arc(c, c, radius, 0, Math.PI * 2);
 		g.stroke();
+		// The way it can throw: forward, between its lowest and steepest
+		const dir = this.team === 1 ? -1 : 1;
+		const toward = a => Math.atan2(-Math.sin(a), Math.cos(a) * dir);
+
+		g.fillStyle = 'rgba(43,43,43,0.07)';
+		g.beginPath();
+		g.moveTo(c, c);
+		g.arc(c, c, radius, toward(FLING_ANGLES[1]), toward(FLING_ANGLES[0]), dir < 0);
+		g.closePath();
+		g.fill();
 		g.fillStyle = PENCIL;
 		g.beginPath();
 		g.arc(c, c, 4, 0, Math.PI * 2);
@@ -181,9 +194,9 @@ export default class AimPad extends Pad {
 		}
 
 		const [vx, vy] = this.velocity();
-		const strength = Math.hypot(vx, vy) / MOST_FLING;
-		const px = c - (vx / MOST_FLING) * radius, py = c - (vy / MOST_FLING) * radius;
-		const ax = c + (vx / MOST_FLING) * radius * 0.8, ay = c + (vy / MOST_FLING) * radius * 0.8;
+		const strength = this.part(), m = Math.hypot(vx, vy) || 1;
+		const px = c - (vx / m) * strength * radius, py = c - (vy / m) * strength * radius;
+		const ax = c + (vx / m) * strength * radius * 0.8, ay = c + (vy / m) * strength * radius * 0.8;
 
 		// The band pulled back, and an arrow the way it flings
 		g.strokeStyle = PENCIL;

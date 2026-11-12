@@ -256,7 +256,7 @@ class Stickman {
 		this.body = new Body(w, w.pickArt(team, 'stickmen'), team, this.face, SM_H * rand(0.9, 1.1));
 		this.body.owner = this;
 		this.body.weapon = { ref: w.pickArt(team, 'swords'), blood: 0 };
-		const home = homeOf(team, k);
+		const home = homeOf(team, k, w.army[team]);
 
 		this.home = home.x;
 		this.homeZ = home.z;
@@ -1071,7 +1071,8 @@ class Catapult {
 		Object.assign(this, { w, team, x, z });
 		this.dir = team === 0 ? 1 : -1;
 		this.hp = 100;
-		this.ammo = AMMO;
+		// Its rocks, each drawn by its side during the battle, thrown in the order they were drawn
+		this.rocks = [];
 		this.cd = rand(0.5, 1.5);
 		this.fireT = -1;
 		this.pend = null;
@@ -1082,9 +1083,19 @@ class Catapult {
 		this.arm = CAT_REST;
 		this.beams = [0, 1, 2, 3].map(() => w.pickArt(team, 'beams'));
 		this.wheels = [w.pickArt(team, 'stones'), w.pickArt(team, 'stones')];
-		this.load = w.pickArt(team, 'ammo');
+		// The rock that's flying off it, between letting go and leaving the bucket
+		this.flying = null;
 		// The way a player has set it to fling, [vx, vy]: it fires that way by itself whenever it's ready
 		this.aim = null;
+	}
+
+	get ammo() {
+		return this.rocks.length;
+	}
+
+	// More rocks to come: its side can still draw some
+	waiting() {
+		return this.w.drawnRocks[this.team] < AMMO;
 	}
 
 	geometry() {
@@ -1108,8 +1119,8 @@ class Catapult {
 	fire(vx, vy) {
 		if (!this.ready()) return false;
 		this.fireT = 0;
-		this.pend = holdFling(vx, vy);
-		this.ammo--;
+		this.pend = holdFling(this.team, vx, vy);
+		this.flying = this.rocks.shift();
 		this.w.sound('launch');
 
 		return true;
@@ -1117,8 +1128,8 @@ class Catapult {
 
 	update(dt) {
 		if (this.dead) return;
-		// Out of ammo, its crew have nothing to do here: they go home, to be sent where they're wanted
-		if (this.ammo <= 0 && this.fireT < 0) for (const s of this.crewing()) Object.assign(s, { order: 'idle', post: null });
+		// Out of rocks with none left to draw, its crew have nothing to do here: they go home, to be sent where they're wanted
+		if (this.ammo <= 0 && !this.waiting() && this.fireT < 0) for (const s of this.crewing()) Object.assign(s, { order: 'idle', post: null });
 		this.cd -= dt;
 		this.shk = Math.max(0, this.shk - dt);
 		// Aimed, it fires as often as it can: crewed, loaded and reloaded
@@ -1129,8 +1140,8 @@ class Catapult {
 			if (this.pend && this.fireT >= 0.13) {
 				const [lx, ly] = this.geometry().launch;
 
-				this.w.projs.push(new Proj(this.w, this.load, lx, ly, this.pend[0], this.pend[1], this.team, this.z));
-				this.load = this.w.pickArt(this.team, 'ammo');
+				this.w.projs.push(new Proj(this.w, this.flying, lx, ly, this.pend[0], this.pend[1], this.team, this.z));
+				this.flying = null;
 				this.pend = null;
 				// One loads it, each more of its crew (up to its most) loads it faster
 				this.cd = RELOAD / (1 + 0.5 * (Math.min(Math.max(this.crew(), 1), MOST_CREW) - 1));
@@ -1194,7 +1205,9 @@ class Catapult {
 			shk: this.shk > 0,
 			b: this.beams.map(ref => [ref.a, ref.i]),
 			wh: this.wheels.map(ref => [ref.a, ref.i]),
-			l: [this.load.a, this.load.i],
+			...((this.flying ?? this.rocks[0]) && { l: [(this.flying ?? this.rocks[0]).a, (this.flying ?? this.rocks[0]).i] }),
+			// How many rocks its side can still draw
+			dr: AMMO - this.w.drawnRocks[this.team],
 			// Something sits in the bucket: loaded and nearly ready, or just about to fly
 			ld: this.ammo > 0 && this.cd < 0.4 && (this.fireT < 0 || Boolean(this.pend)),
 		};
@@ -1209,16 +1222,26 @@ export class World {
 	 * @param {Array<object>} options.arts - Each side's art: { stickmen: [...], stones: [...], ... }, by team
 	 * @param {Array<number>} [options.artOf] - Whose art each side fights with (default each its own)
 	 * @param {Array<boolean>} [options.auto] - Which sides the computer plays
+	 * @param {Array<number>} [options.armies] - How many men each side has
+	 * @param {Array<object>} [options.walls] - How big each side's wall is, { cols, rows }
 	 */
-	constructor({ arts, artOf = [0, 1], auto = [false, true] }) {
+	constructor({ arts, artOf = [0, 1], auto = [false, true], armies = [ARMY, ARMY], walls = [WALL, WALL] }) {
 		this.arts = arts;
+		this.army = armies;
+		// How many rocks each side has drawn for its catapult so far
+		this.drawnRocks = [0, 0];
 		this.artOf = artOf;
 		this.auto = auto;
 		this.stickmen = [];
 		this.bodies = [];
 		this.props = [];
 		this.projs = [];
-		this.walls = WALL_X.map((x0, team) => ({ team, x0, x1: x0 + WALL.cols * WALL.cw, isWall: true }));
+		// Each wall's face toward home stays put; a thicker one reaches further out into the field
+		this.walls = walls.map(({ cols, rows }, team) => {
+			const home = team === 0 ? WALL_X[0] : WALL_X[1] + WALL.cols * WALL.cw, x0 = team === 0 ? home : home - cols * WALL.cw;
+
+			return { team, x0, x1: x0 + cols * WALL.cw, cols, rows, isWall: true };
+		});
 		this.masonry = new Masonry({
 			walls: this.walls,
 			pickArt: (team, kind) => this.pickArt(team, kind),
@@ -1236,11 +1259,14 @@ export class World {
 		this.overT = 0;
 		this.events = [];
 		this.shaking = 0;
-		this.ai = [{ deploy: 2 }, { deploy: 3 }];
+		this.ai = [
+			{ deploy: 2, rock: 2 },
+			{ deploy: 3, rock: 2 },
+		];
 		this.sentAt = [-Infinity, -Infinity];
 		// Every side's whole army out from the start, standing at home, one man crewing each catapult
 		for (let team = 0; team < 2; team++) {
-			for (let k = 0; k < ARMY; k++) {
+			for (let k = 0; k < this.army[team]; k++) {
 				const man = new Stickman(this, team, k);
 
 				this.stickmen.push(man);
@@ -1381,7 +1407,18 @@ export class World {
 		const cat = this.cats.find(c => c.team === team);
 
 		if (!cat) return false;
-		cat.aim = aim ? holdFling(aim[0], aim[1]) : null;
+		cat.aim = aim ? holdFling(team, aim[0], aim[1]) : null;
+
+		return true;
+	}
+
+	/** A rock its side just drew (which of its ammo drawings) put on its catapult's pile, while it may draw more */
+	addRock(team, i) {
+		const cat = this.cats.find(c => c.team === team);
+
+		if (!cat || this.drawnRocks[team] >= AMMO) return false;
+		this.drawnRocks[team]++;
+		cat.rocks.push({ k: 'ammo', a: this.artOf[team], i });
 
 		return true;
 	}
@@ -1548,6 +1585,15 @@ export class World {
 			const mine = this.stickmen.filter(s => s.team === t && s.alive()).length;
 			const theirs = this.stickmen.filter(s => s.team !== t && s.alive()).length;
 
+			// The computer draws its rocks too, one every few seconds, from its own drawings
+			ai.rock -= dt;
+			if (ai.rock <= 0) {
+				const drawn = this.arts[this.artOf[t]].ammo?.length ?? 0;
+
+				if (drawn) this.addRock(t, (Math.random() * drawn) | 0);
+				ai.rock = rand(3, 6);
+			}
+
 			if (ai.deploy <= 0) {
 				this.send(t);
 				ai.deploy = theirs > mine ? rand(0.6, 1.4) : rand(1.4, 3);
@@ -1564,13 +1610,13 @@ export class World {
 			const broken =
 				this.masonry.missing(t) >= 4
 					? 'wall'
-					: this.cats.filter(c => c.team === t).findIndex(c => c.dead && c.ammo > 0);
+					: this.cats.filter(c => c.team === t).findIndex(c => c.dead && (c.ammo > 0 || c.waiting()));
 
 			if (broken !== -1 && repairing < 2 && home.length > 2) this.command(t, [home[0].body.id], 'repair', broken);
 
 			// A catapult left with nobody to fire it gets someone from home while it has ammo
 			for (const c of this.cats) {
-				if (c.team !== t || c.dead || c.ammo <= 0 || c.crewing().length) continue;
+				if (c.team !== t || c.dead || (c.ammo <= 0 && !c.waiting()) || c.crewing().length) continue;
 
 				const spare = this.stickmen.find(s => s.team === t && s.alive() && s.order === 'idle');
 
@@ -1625,7 +1671,7 @@ export class World {
 		const [lx, ly] = c.geometry().launch;
 		const dx = Math.abs(tx - lx), dy = ty - ly, sgn = Math.sign(tx - lx) || 1;
 
-		for (const th of [0.95, 0.8, 1.1, 0.65, 1.25]) {
+		for (const th of [0.95, 0.8, 1.1, 0.65, 1.18]) {
 			const cs = Math.cos(th), den = 2 * cs * cs * (dy + dx * Math.tan(th));
 
 			if (den <= 0) continue;
