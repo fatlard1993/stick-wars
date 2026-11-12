@@ -949,7 +949,16 @@ class Proj extends Prop {
 		Object.assign(this, w.masonry.read(this.body));
 		this.life += dt;
 
-		const sp = Math.hypot(this.vx, this.vy), was = [this.vx, this.vy];
+		// Over the top of the enemy's wall and down its far side, it drops dead there: nothing behind a wall is in reach
+		const wall = w.walls[1 - this.team];
+
+		if (this.team === 0 ? this.x > wall.x1 : this.x < wall.x0) this.dropped = true;
+		if (this.dropped) {
+			this.vx = 0;
+			w.masonry.setSpeed(this.body, 0, Math.max(0, this.vy));
+		}
+
+		const sp = this.dropped ? 0 : Math.hypot(this.vx, this.vy), was = [this.vx, this.vy];
 
 		for (const c of w.cats) {
 			if (c.dead || c.team === this.team || this.hitSet.has(c) || sp < 120 || Math.abs(c.z - this.z) > LANE * 3) continue;

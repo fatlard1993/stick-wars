@@ -110,12 +110,15 @@ export class Masonry {
 		for (const brick of this.bricks) {
 			brick.body.setAngularDamping(4);
 			brick.body.setLinearDamping(1.5);
+			// Held upright while settling: a tall wall of lumpy stones sinks into itself instead of toppling stone by stone
+			brick.body.setFixedRotation(true);
 		}
 		for (let i = 0; i < 300; i++) this.physics.step(1 / 60, 8, 3);
 		for (const brick of this.bricks) {
 			const wall = this.walls.find(w => w.team === brick.team);
 			const { x, y } = this.read(brick.body);
 
+			brick.body.setFixedRotation(false);
 			brick.body.setAngularDamping(1.5);
 			brick.body.setLinearDamping(0.05);
 			brick.body.setLinearVelocity(Vec2(0, 0));
