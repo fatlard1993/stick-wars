@@ -68,6 +68,7 @@ const Screen = styled(
 
 		@media (max-width: 767px) {
 			flex-direction: column;
+			justify-content: flex-start;
 		}
 	`,
 );
@@ -83,7 +84,18 @@ const Column = styled(
 	`,
 );
 
-const Main = styled(Column, () => 'flex: 1; max-width: 900px;');
+const Main = styled(
+	Column,
+	() => `
+		flex: 1;
+		max-width: 900px;
+
+		/* A phone held upright: everything stacked from the top, not spread over the height */
+		@media (max-width: 767px) {
+			flex: none;
+		}
+	`,
+);
 
 const Side = styled(
 	Column,
@@ -105,6 +117,10 @@ const Heading = styled(
 		gap: ${space.md};
 		font-size: 2em;
 		white-space: nowrap;
+
+		@media (max-width: 767px) {
+			font-size: 1.4em;
+		}
 
 		& .dots { margin-left: auto; display: flex; gap: 6px; }
 		& .dots i { width: 14px; height: 14px; border: 2.5px solid ${PENCIL}; border-radius: 50% 45% 50% 40%; }
@@ -142,6 +158,14 @@ const PadBox = styled(
 		display: flex;
 		align-items: center;
 		justify-content: center;
+
+		/* On a narrow phone the pad is as wide as the screen, square, with the tools right under it */
+		@media (max-width: 767px) {
+			flex: none;
+			width: 100%;
+			aspect-ratio: 1;
+			max-height: 62vh;
+		}
 
 		& canvas {
 			border: 3px solid ${PENCIL};

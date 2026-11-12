@@ -26,19 +26,19 @@ Every side fights with its own drawings. Against a friend, each draws their own;
 
 ### The battle
 
-The field runs back into the page: men, catapults and rubble stand nearer or further, and men cross the field to meet whoever they fight. Each side has a wall of its stones, two catapults of its beams with 6 shots each (one forward, one back), and 12 stick men standing in rows at home behind the wall from the start, one crewing each catapult. Each man is one of the side's drawings, carrying one of its weapons.
+The field runs back into the page: men, catapults and rubble stand nearer or further, and men cross the field to meet whoever they fight. Each side has a wall of its stones, a catapult of its beams with 10 shots, and 12 stick men standing in rows at home behind the wall from the start, one of them crewing the catapult. Each man is one of the side's drawings, carrying one of its weapons.
 
 Every man has a job, and choosing them is the game:
 
 - **Fight**: the running man (Space) sends them charging; the shield (H) has them hold just outside your wall; the tent (B) brings them home.
-- **Shoot**: crew a catapult with the catapult button (C) then a tap on it, or with men picked, just tap it. A catapult only fires with crew at it, loads faster with up to three, and sends its crew home when its ammo runs out. Over each catapult: its ammo, its crew (red when nobody's at it), and a hammer while it's being repaired.
+- **Shoot**: crew the catapult with the catapult button (C) then a tap on it, or with men picked, just tap it. It only fires with crew at it, loads faster with up to three, and sends its crew home when its ammo runs out. Over it: whether it's aimed (the target, red until it is), its ammo, its crew (red when nobody's at it), and a hammer while it's being repaired.
 - **Repair**: the hammer button (R), then tap a catapult or your wall; or with men picked, tap your wall. Repairers patch cracked stones and set new ones into the wall's gaps, mend a damaged catapult, and even rebuild a smashed one from its wreck, slowly, to fight on with whatever ammo it had.
 
 **Looking around**: on a small screen (a phone) the battle is zoomed in so the men stay readable, starting over your own side: two fingers pan along the field and pinch to zoom. On a computer, the scroll wheel zooms and the arrow keys pan. Held upright, a phone shows the whole battlefield in a strip across the top, with what the main view shows boxed on it: tap or drag along the strip to look there.
 
 **Picking men**: tap one, or drag a box around several (the dashed box button, A, picks everyone; Esc lets go). The count of who's picked sits by the buttons. With nobody picked, fight orders go to everyone not crewing or repairing. Tapping past your wall with men picked sends them charging.
 
-**Flinging**: tap your catapults (with no men picked) to pick them out, and an aiming pad opens in the middle of the screen. Pull back from its centre like a slingshot: the further, the harder (its edge is full strength), and each picked catapult shows on the field where it would land. Let go, and every one of them that's ready flings. The cross on the pad (or Esc) puts it away. Dragging straight from a catapult flings it too.
+**Aiming**: tap your catapult (with no men picked) and an aiming pad opens in the middle of the screen. Pull back from its centre like a slingshot: the further, the harder (its edge is full strength), and the field shows where it would land. Let go, and that's its aim: from then on it fires that way by itself as often as it can, its aim drawn as a dotted arc on the field (and the overview). Aim it again any time; the pause on the pad holds its fire. Dragging straight from the catapult aims it too.
 
 The walls are real stones: each block is one of the side's stone drawings, its outline its shape, stacked and resting. A boulder knocks stones loose, and whatever loses its support falls the way its shape makes it fall. A stone takes as much battering as its drawn size gives it, then cracks into rubble. Men climb rubble a stone high at a time, and hack at what's taller.
 

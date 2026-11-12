@@ -6,15 +6,13 @@ import { BONES, PI, clamp } from './art.js';
 export const W = 1900, H = 860, GROUND = 780, GRAV = 900, DT = 1 / 60;
 export const SM_H = 80;
 export const WALL = { cols: 3, rows: 7, cw: 34, ch: 22 };
-export const ARMY = 12, AMMO = 6, RELOAD = 4.5;
+export const ARMY = 12, AMMO = 10, RELOAD = 4.5;
 /** The fastest a catapult flings, in world units a second */
 export const MOST_FLING = 1350;
 export const CAT_REST = PI - 0.3, CAT_FIRE = 1.5 * PI + 0.35, CAT_ARM = 74, CAT_PIV = -56;
 export const WALL_X = [430, W - 430 - WALL.cols * WALL.cw];
-export const CAT_X = [
-	[90, 220],
-	[W - 90, W - 220],
-];
+/** Each side's catapult, behind its wall among its army's rows */
+export const CAT_X = [[170], [W - 170]];
 /** How long a side waits between sending stick men out one at a time, in seconds */
 export const SEND_EVERY = 0.4;
 /** How many can crew one catapult: one to fire it at all, each more loading it faster */
@@ -45,7 +43,7 @@ export const SKEW_X = 0.28, SKEW_Y = 0.55, BACK_SCALE = 0.82;
 /** How close in depth two men must be to cross blades */
 export const LANE = 16;
 /** Where the side's two catapults stand in depth: one forward, one back */
-export const CAT_Z = [55, 140];
+export const CAT_Z = [95];
 
 /** How small a thing at depth z is drawn */
 export const depthScale = z => 1 - (1 - BACK_SCALE) * (z / DEPTH);

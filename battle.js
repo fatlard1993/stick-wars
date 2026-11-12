@@ -1083,6 +1083,8 @@ class Catapult {
 		this.beams = [0, 1, 2, 3].map(() => w.pickArt(team, 'beams'));
 		this.wheels = [w.pickArt(team, 'stones'), w.pickArt(team, 'stones')];
 		this.load = w.pickArt(team, 'ammo');
+		// The way a player has set it to fling, [vx, vy]: it fires that way by itself whenever it's ready
+		this.aim = null;
 	}
 
 	geometry() {
@@ -1119,6 +1121,8 @@ class Catapult {
 		if (this.ammo <= 0 && this.fireT < 0) for (const s of this.crewing()) Object.assign(s, { order: 'idle', post: null });
 		this.cd -= dt;
 		this.shk = Math.max(0, this.shk - dt);
+		// Aimed, it fires as often as it can: crewed, loaded and reloaded
+		if (this.aim && this.ready()) this.fire(...this.aim);
 		if (this.fireT >= 0) {
 			this.fireT += dt;
 			this.arm = lerp(CAT_REST, CAT_FIRE, easeIn(clamp(this.fireT / 0.16, 0, 1)));
@@ -1182,6 +1186,7 @@ class Catapult {
 			rl: Math.round((RELOAD / (1 + 0.5 * (Math.min(Math.max(this.crew(), 1), MOST_CREW) - 1))) * 10) / 10,
 			cr: this.crew(),
 			cw: this.crewing().length,
+			...(this.aim && { aim: this.aim.map(v => Math.round(v)) }),
 			rp: this.w.stickmen.filter(s => s.order === 'repair' && s.post === this && s.alive()).length,
 			...(this.dead && { rb: Math.round(this.rebuilt * 100) / 100 }),
 			arm: Math.round(this.arm * 100) / 100,
@@ -1242,11 +1247,10 @@ export class World {
 				this.addBody(man.body);
 			}
 
-			const [first, second] = this.stickmen.filter(s => s.team === team);
-			const [catA, catB] = this.cats.filter(c => c.team === team);
+			const [first] = this.stickmen.filter(s => s.team === team);
+			const [cat] = this.cats.filter(c => c.team === team);
 
-			Object.assign(first, { order: 'crew', post: catA });
-			Object.assign(second, { order: 'crew', post: catB });
+			Object.assign(first, { order: 'crew', post: cat });
 		}
 	}
 
@@ -1372,11 +1376,14 @@ export class World {
 		return this.command(team, [home[0].body.id], 'charge') > 0;
 	}
 
-	/** A side's catapult flung by a player: which of its two, and how hard which way */
-	fling(team, which, vx, vy) {
-		const cat = this.cats.filter(c => c.team === team)[which];
+	/** A side's catapult set to fling one way from now on (held to what it can do), or with null, to hold its fire */
+	setAim(team, aim) {
+		const cat = this.cats.find(c => c.team === team);
 
-		return Boolean(cat?.fire(vx, vy));
+		if (!cat) return false;
+		cat.aim = aim ? holdFling(aim[0], aim[1]) : null;
+
+		return true;
 	}
 
 	// Cut bone b (and everything hanging off it) away from body. Returns the severed piece.

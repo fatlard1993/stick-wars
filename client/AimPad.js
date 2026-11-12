@@ -42,13 +42,13 @@ const Pad = styled(
 );
 
 /**
- * The aiming pad: shown while catapults are picked out, in the middle of the screen where there's room to pull. Pulled
- * back from its centre like a slingshot, it flings the other way, full strength at its edge; let go, and every picked
- * catapult fires that way.
- * @param {object} options - { onAim(velocity or null), onFire(velocity), onClose() }
+ * The aiming pad: shown while the catapult is picked out, in the middle of the screen where there's room to pull. Pulled
+ * back from its centre like a slingshot, it aims the other way, full strength at its edge; let go, and that's the
+ * catapult's aim, which it fires at by itself whenever it's ready, until it's aimed again or told to hold its fire.
+ * @param {object} options - { onAim(velocity or null) while pulling, onFire(velocity) on letting go, onHold(), onClose() }
  */
 export default class AimPad extends Pad {
-	static schema = { onAim: { data: true }, onFire: { data: true }, onClose: { data: true } };
+	static schema = { onAim: { data: true }, onFire: { data: true }, onClose: { data: true }, onHold: { data: true } };
 
 	build() {
 		super.build();
@@ -61,9 +61,10 @@ export default class AimPad extends Pad {
 		this.label = document.createElement('span');
 		bar.append(this.label);
 
-		const close = doodle('empty', { title: 'Put the catapults down (Esc)', addClass: 'close', onPress: () => this.options.onClose?.() });
+		const close = doodle('empty', { title: 'Done aiming (Esc)', addClass: 'close', onPress: () => this.options.onClose?.() });
 
-		bar.append(close.elem);
+		this.holdButton = doodle('pause', { title: 'Hold its fire', onPress: () => this.options.onHold?.() });
+		bar.append(this.holdButton.elem, close.elem);
 		this.canvas = document.createElement('canvas');
 		this.elem.append(bar, this.canvas);
 		this.context = this.canvas.getContext('2d');
@@ -102,8 +103,8 @@ export default class AimPad extends Pad {
 		this.canvas.addEventListener('pointercancel', release);
 	}
 
-	/** Shown for some picked catapults (how many, and how many are ready), or put away for none */
-	show(picked, ready, ink) {
+	/** Shown for the catapult when it's picked (whether it's aimed, firing by itself), or put away */
+	show(picked, aimed, ink) {
 		this.elem.classList.toggle('hidden', !picked);
 		if (!picked) {
 			this.pull = null;
@@ -111,7 +112,8 @@ export default class AimPad extends Pad {
 			return;
 		}
 		this.ink = ink;
-		this.label.replaceChildren(icon('catapult', { size: '1.3em', color: ink }), `${ready}/${picked}`);
+		this.label.replaceChildren(icon('catapult', { size: '1.3em', color: ink }), icon('target', { size: '1.3em', color: aimed ? ink : RED_PENCIL }));
+		this.holdButton.elem.style.visibility = aimed ? 'visible' : 'hidden';
 		this.fit();
 		this.draw();
 	}
@@ -173,6 +175,7 @@ export default class AimPad extends Pad {
 			g.textAlign = 'center';
 			g.fillStyle = 'rgba(43,43,43,0.6)';
 			g.fillText('pull back to aim', c, c + radius * 0.45);
+			g.fillText('it fires by itself', c, c + radius * 0.62);
 
 			return;
 		}

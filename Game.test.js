@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 
 import { DEFAULT_RAW, blobS, cpuArmy, judge, lineS } from './art.js';
-import { ARMY, DT, FADE, GROUND, LINGER, World } from './battle.js';
+import { AMMO, ARMY, DT, FADE, GROUND, LINGER, World } from './battle.js';
 import Game from './Game.js';
 import { STEPS, emptyArt } from './rules.js';
 
@@ -114,8 +114,8 @@ test('every man stands at home from the start, one crewing each catapult', () =>
 	const mine = game.world.stickmen.filter(s => s.team === 0);
 
 	expect(game.world.stickmen).toHaveLength(ARMY * 2);
-	expect(mine.filter(s => s.order === 'crew')).toHaveLength(2);
-	expect(mine.filter(s => s.order === 'idle')).toHaveLength(ARMY - 2);
+	expect(mine.filter(s => s.order === 'crew')).toHaveLength(1);
+	expect(mine.filter(s => s.order === 'idle')).toHaveLength(ARMY - 1);
 	expect(game.viewFor(fox.id).battle.bodies.filter(b => b.t === 0 && b.u)).toHaveLength(ARMY);
 });
 
@@ -151,21 +151,24 @@ test('in battle a player sends men out, orders the ones they picked, and crews t
 	expect(game.act(fox.id, 'order', { ids: picked, order: 'crew', which: 0 }).ok).toBe(true);
 	expect(world.cats[0].crewing()).toHaveLength(3);
 
-	// Crew in place, it flings; with nobody at it, it doesn't
-	// Long enough to walk back from holding the wall
+	// Aimed, with its crew in place, it fires by itself as often as it can; told to hold, it stops
 	for (let i = 0; i < 60 * 8; i++) world.step(DT);
-	for (const cat of world.cats) cat.cd = 0;
 	expect(world.cats[0].crew()).toBe(3);
-	expect(game.act(fox.id, 'fling', { which: 0, vx: 500, vy: -600 }).ok).toBe(true);
-	expect(world.cats[0].ammo).toBe(5);
+	expect(game.act(fox.id, 'aim', { vx: 500, vy: -600 }).ok).toBe(true);
+	for (let i = 0; i < 60 * 8; i++) world.step(DT);
+	expect(AMMO - world.cats[0].ammo).toBeGreaterThan(1);
+	game.act(fox.id, 'aim', { hold: true });
 
-	const crew1 = world.cats[1].crewing().map(s => s.body.id);
+	const held = world.cats[0].ammo;
 
-	game.act(fox.id, 'order', { ids: crew1, order: 'idle' });
-	for (let i = 0; i < 60 * 3; i++) world.step(DT);
-	world.cats[1].cd = 0;
-	expect(game.act(fox.id, 'fling', { which: 1, vx: 500, vy: -600 }).error).toBe('Not ready');
-	expect(game.act(fox.id, 'fling', { which: 7, vx: 1, vy: 1 }).ok).toBe(false);
+	for (let i = 0; i < 60 * 8; i++) world.step(DT);
+	expect(world.cats[0].ammo).toBe(held);
+	// With nobody at it, it doesn't fire however it's aimed
+	game.act(fox.id, 'order', { ids: world.cats[0].crewing().map(s => s.body.id), order: 'idle' });
+	game.act(fox.id, 'aim', { vx: 500, vy: -600 });
+	for (let i = 0; i < 60 * 8; i++) world.step(DT);
+	expect(world.cats[0].ammo).toBe(held);
+	expect(game.act(fox.id, 'aim', { vx: 'up' }).ok).toBe(false);
 });
 
 test('a page sees the art once, then the battle every tick with what just happened', () => {
@@ -340,8 +343,9 @@ test('a smashed catapult is rebuilt by its repairers, and fires again once its c
 	expect(cat.hp).toBe(100);
 	game.act(fox.id, 'order', { ids: ids.slice(0, 1), order: 'crew', which: 0 });
 	for (let i = 0; i < 60 * 6; i++) world.step(DT);
-	cat.cd = 0;
-	expect(game.act(fox.id, 'fling', { which: 0, vx: 500, vy: -600 }).ok).toBe(true);
+	game.act(fox.id, 'aim', { vx: 500, vy: -600 });
+	for (let i = 0; i < 60 * 6; i++) world.step(DT);
+	expect(cat.ammo).toBeLessThan(AMMO);
 });
 
 test('the dead and the wreckage lie a while, fade, and are gone', () => {

@@ -217,7 +217,8 @@ export default class BattleScreen extends Screen {
 		this.pad = new AimPad({
 			appendTo: this,
 			onAim: v => (this.padAim = v),
-			onFire: v => this.fireAll(v),
+			onFire: v => this.setAim(v),
+			onHold: () => act('aim', { hold: true }, { quiet: true }),
 			onClose: () => this.dropCats(),
 		});
 
@@ -305,27 +306,27 @@ export default class BattleScreen extends Screen {
 		this.showPad();
 	}
 
-	// The aiming pad for the picked catapults that still stand: how many, and how many could fire now
+	// The aiming pad while our catapult is picked and still stands, saying whether it's aimed
 	showPad() {
 		if (!this.pad) return;
 
 		const cats = this.myCats().filter(({ which, cat }) => this.catsPicked.has(which) && !cat.dead);
 
 		for (const which of [...this.catsPicked]) if (!cats.some(entry => entry.which === which)) this.catsPicked.delete(which);
-		this.pad.show(cats.length, cats.filter(({ cat }) => cat.n > 0 && cat.cr > 0 && cat.cd <= 0).length, teamInk(this.team));
+		this.pad.show(cats.length, Boolean(cats[0]?.cat.aim), teamInk(this.team));
 	}
 
-	// Every picked catapult flings the way the pad was pulled; one that can't says why over it
-	fireAll([vx, vy]) {
-		for (const { which, cat } of this.myCats()) {
-			if (!this.catsPicked.has(which) || cat.dead) continue;
-			act('fling', { which, vx, vy }, { quiet: true }).then(said => {
-				if (said.ok) return;
-				if (cat.n <= 0) this.say('empty', cat.x, GROUND - 210, RED_PENCIL);
-				else if (!cat.cr) this.say('person', cat.x, GROUND - 210, RED_PENCIL);
-				else this.say('reload', cat.x, GROUND - 210);
-			});
-		}
+	// Our catapult aimed the way the pad (or a drag from it) was pulled: from now on it fires that way by itself whenever
+	// it can. What would stop it is said over it: no ammo, or nobody crewing it.
+	setAim([vx, vy]) {
+		const cat = this.myCats()[0]?.cat;
+
+		act('aim', { vx, vy }, { quiet: true }).then(said => {
+			if (!said.ok || !cat) return;
+			if (cat.n <= 0) this.say('empty', cat.x, GROUND - 210, RED_PENCIL);
+			else if (!cat.cr) this.say('person', cat.x, GROUND - 210, RED_PENCIL);
+			else this.say('target', cat.x, GROUND - 210, teamInk(this.team));
+		});
 	}
 
 	showPicked() {
@@ -760,16 +761,8 @@ export default class BattleScreen extends Screen {
 		const [vx, vy] = this.pull();
 
 		this.aim = null;
-		if (Math.hypot(vx, vy) < 90) return;
-
-		const cat = this.myCats()[aim.which]?.cat;
-
-		act('fling', { which: aim.which, vx, vy }, { quiet: true }).then(said => {
-			if (said.ok || !cat) return;
-			if (cat.n <= 0) this.say('empty', cat.x, GROUND - 210, RED_PENCIL);
-			else if (!cat.cr) this.say('person', cat.x, GROUND - 210, RED_PENCIL);
-			else this.say('reload', cat.x, GROUND - 210);
-		});
+		if (Math.hypot(vx, vy) < 90 || !aim) return;
+		this.setAim([vx, vy]);
 	}
 
 	say(name, x, y, color = PENCIL) {
@@ -809,7 +802,7 @@ export default class BattleScreen extends Screen {
 		g.scale(f.scale, f.scale);
 		this.drawWorld(g, scene);
 		if (this.mode) this.drawTargets(g);
-		if (this.catsPicked.size) this.drawPickedCats(g);
+		this.drawArcs(g, 1);
 		if (this.aim) this.drawAim(g);
 		if (this.box) this.drawBox(g);
 		if (this.flash && performance.now() < this.flash.until) drawIcon(g, this.flash.name, this.flash.x, this.flash.y, 46, this.flash.color);
@@ -883,6 +876,8 @@ export default class BattleScreen extends Screen {
 		g.scale(ov.scale, ov.scale);
 		g.translate(0, -ov.top);
 		this.drawWorld(g, scene);
+		// Drawn bigger, to read at the strip's size
+		this.drawArcs(g, 0.8 / ov.scale);
 
 		const seen = this.stage.width / f.scale;
 
@@ -1100,6 +1095,8 @@ export default class BattleScreen extends Screen {
 		g.fillStyle = cat.cr ? ink : RED_PENCIL;
 		g.fillText(`${cat.cr}/${MOST_CREW}`, cat.x + 20, y + 1);
 		if (cat.rp) drawIcon(g, 'hammer', cat.x + 62, y, 20, ink);
+		// Ours: aimed (firing by itself whenever it can) in our ink, not yet in red
+		if (cat.t === this.team) drawIcon(g, 'target', cat.x - 60, y, 22, cat.aim ? ink : RED_PENCIL);
 		if (cat.hp < 100) {
 			g.strokeStyle = INK;
 			g.lineWidth = 1.5;
@@ -1152,36 +1149,43 @@ export default class BattleScreen extends Screen {
 		g.stroke();
 	}
 
-	// Picked catapults ringed in their side's ink, and while the pad's pulled, where each would fling
-	drawPickedCats(g) {
+	// Our catapult's aim as a dotted arc where its shots will go (bold while the pad's being pulled), and a ring round it
+	// while it's picked. `k` is how much bigger to draw the dots and lines, for the small overview.
+	drawArcs(g, k) {
 		const ink = teamInk(this.team);
 
 		for (const { which, cat } of this.myCats()) {
-			if (!this.catsPicked.has(which) || cat.dead) continue;
+			if (cat.dead) continue;
 
-			const [cx, cy] = project(cat.x, GROUND - 40, cat.z);
+			const picked = this.catsPicked.has(which);
+			const aim = picked && this.padAim ? this.padAim : cat.aim;
 
-			g.save();
-			g.strokeStyle = ink;
-			g.lineWidth = 3;
-			g.setLineDash([10, 7]);
-			g.beginPath();
-			g.ellipse(cx, cy, 68, 52, 0, 0, TAU);
-			g.stroke();
-			g.restore();
-			if (!this.padAim) continue;
+			if (picked) {
+				const [cx, cy] = project(cat.x, GROUND - 40, cat.z);
+
+				g.save();
+				g.strokeStyle = ink;
+				g.lineWidth = 3 * k;
+				g.setLineDash([10 * k, 7 * k]);
+				g.beginPath();
+				g.ellipse(cx, cy, 68, 52, 0, 0, TAU);
+				g.stroke();
+				g.restore();
+			}
+			if (!aim) continue;
 
 			const from = catGeometry(cat.x, cat.d, cat.arm).launch;
+			const live = picked && this.padAim;
 
 			g.fillStyle = ink;
-			flingPath(from, this.padAim[0], this.padAim[1], x => this.groundAt(x)).forEach(([x, y], at) => {
+			flingPath(from, aim[0], aim[1], x => this.groundAt(x)).forEach(([x, y], at) => {
 				if (at % 4) return;
 
 				const [px, py] = project(x, y, cat.z, x);
 
-				g.globalAlpha = 1 - at / 200;
+				g.globalAlpha = (live ? 1 : 0.65) * (1 - at / 260);
 				g.beginPath();
-				g.arc(px, py, 3, 0, TAU);
+				g.arc(px, py, (live ? 3 : 2.5) * k, 0, TAU);
 				g.fill();
 			});
 			g.globalAlpha = 1;
