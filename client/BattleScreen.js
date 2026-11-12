@@ -678,11 +678,18 @@ export default class BattleScreen extends Screen {
 
 			scene.push({ z: cat.z, draw: () => atDepth(g, cat.x, cat.z, () => this.drawCat(g, cat, arm)) });
 		});
+		// The dead and the wreckage fade away after a while (the server says how far): drawn see-through as they go
+		const fading = (alpha, draw) => () => {
+			g.globalAlpha = alpha ?? 1;
+			draw();
+			g.globalAlpha = 1;
+		};
+
 		for (const body of ease(prev?.bodies, cur.bodies, t)) {
-			scene.push({ z: body.z, draw: () => atDepth(g, body.j[4], body.z, () => this.drawBody(g, body)) });
+			scene.push({ z: body.z, draw: fading(body.fa, () => atDepth(g, body.j[4], body.z, () => this.drawBody(g, body))) });
 		}
 		for (const thing of [...ease(prev?.props, cur.props, t), ...ease(prev?.projs, cur.projs, t)]) {
-			scene.push({ z: thing.z, draw: () => atDepth(g, thing.x, thing.z, () => this.drawProp(g, thing)) });
+			scene.push({ z: thing.z, draw: fading(thing.f, () => atDepth(g, thing.x, thing.z, () => this.drawProp(g, thing))) });
 		}
 		// A wall's stones drawn as its thickness, layer on layer; a stone fallen loose lies where it lies
 		for (let layer = 0; layer < WALL_LAYERS; layer++) {
@@ -690,7 +697,9 @@ export default class BattleScreen extends Screen {
 
 			scene.push({ z, draw: () => bricks.forEach(brick => brick[10] < 0 && atDepth(g, brick[4], z, () => this.drawBrick(g, brick, layer === WALL_LAYERS - 1))) });
 		}
-		for (const brick of bricks) if (brick[10] >= 0) scene.push({ z: brick[10], draw: () => atDepth(g, brick[4], brick[10], () => this.drawBrick(g, brick, true)) });
+		for (const brick of bricks) {
+			if (brick[10] >= 0) scene.push({ z: brick[10], draw: fading(brick[13], () => atDepth(g, brick[4], brick[10], () => this.drawBrick(g, brick, true))) });
+		}
 		for (const wall of cur.walls) scene.push({ z: 4, draw: () => this.drawFlag(g, wall) });
 
 		scene.sort((a, b) => b.z - a.z);

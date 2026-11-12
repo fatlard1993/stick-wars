@@ -22,6 +22,9 @@ import {
 
 import { Masonry } from './masonry.js';
 import {
+	FADE,
+	LINGER,
+	faded,
 	ADJ,
 	AMMO,
 	ARMY,
@@ -233,6 +236,7 @@ class Body {
 			j: joints,
 			...(wp && { w: [wp.ref.a, wp.ref.i, Math.round(wp.blood * 100) / 100], wo: Math.round(this.wOff * 100) / 100 }),
 			...(this.stumps.length && { st: this.stumps.map(st => st.j) }),
+			...(this.deadAt !== undefined && this.w.time - this.deadAt > LINGER.body && { fa: Math.round(faded(this.w.time - this.deadAt, LINGER.body) * 100) / 100 }),
 			// A man still in the fight: can be picked out and told what to do
 			...(this.owner?.alive() && this.kin && { u: ORDER_CODE[this.owner.order] }),
 		};
@@ -792,7 +796,11 @@ class Stickman {
 			this.w.slowmo(0.35);
 			this.die(ix * 0.5, 0);
 		} else if (b >= 6 && !this.dead && !this.incap) this.goIncap();
-		if (!this.hasArm()) this.atk = null;
+		// With no arms left to fight with, he only bleeds now, until he's gone
+		if (!this.hasArm()) {
+			this.atk = null;
+			this.bleed = Math.max(this.bleed, 6);
+		}
 	}
 
 	goIncap() {
@@ -821,6 +829,7 @@ class Stickman {
 			p.px = p.x - vx - ix;
 			p.py = p.y - vy + iy;
 		}
+		b.deadAt = this.w.time;
 		this.w.stats.kills[1 - this.team]++;
 	}
 }
@@ -834,6 +843,7 @@ class Prop {
 	constructor(w, ref, x, y, sx, sy, fill, ox = 0, lw = 1.6) {
 		Object.assign(this, { w, ref, x, y, sx, sy, fill, ox, lw });
 		this.id = PROP_ID++;
+		this.born = w.time;
 		this.vx = 0;
 		this.vy = 0;
 		this.a = 0;
@@ -910,6 +920,7 @@ class Prop {
 			...(this.ox && { ox: this.ox }),
 			c: this.fill,
 			...(this.blood && { b: Math.round(this.blood * 100) / 100 }),
+			...(this.w.time - this.born > LINGER.prop && { f: Math.round(faded(this.w.time - this.born, LINGER.prop) * 100) / 100 }),
 		};
 	}
 }
@@ -956,6 +967,7 @@ class Proj extends Prop {
 		if (this.vx !== was[0] || this.vy !== was[1]) w.masonry.setSpeed(this.body, this.vx, this.vy);
 		if ((sp < 30 && this.y >= w.groundAt(this.x) - this.rad - 2) || this.life > 12 || this.x < -100 || this.x > W + 100) {
 			this.spent = true;
+			this.born = w.time;
 			this.round = true;
 			w.masonry.remove(this.body);
 			this.body = null;
@@ -1385,6 +1397,8 @@ export class World {
 		body.stumps.push({ j: pj, t: 3.5, ph: rand(0, TAU), dx, dy });
 		g.stumps.push({ j: pj, t: 2, ph: rand(0, TAU), dx: -dx, dy: -dy });
 		this.spray(A.x, A.y, 30, dx, dy, 0.4, 260, body.z);
+		// A part cut off is dead from the moment it's cut
+		g.deadAt = this.time;
 		this.addBody(g);
 		g.dropWeapon();
 		body.wake();
@@ -1471,16 +1485,18 @@ export class World {
 	step(dt) {
 		this.time += dt;
 		this.knocks = 0;
-		this.masonry.step(dt);
+		this.masonry.step(dt, this.time);
 		for (const s of this.stickmen) s.update(dt);
 		this.stickmen = this.stickmen.filter(s => !s.dead);
 		this.separate(dt);
 		for (const b of this.bodies) b.update(dt);
-		this.bodies = this.bodies.filter(b => !b.empty());
+		// Empty bodies, and the dead once they've faded, are gone
+		this.bodies = this.bodies.filter(b => !b.empty() && !(b.deadAt !== undefined && this.time - b.deadAt > LINGER.body + FADE));
 		for (const c of this.cats) c.update(dt);
 		for (const p of this.projs) p.step(dt);
 		this.projs = this.projs.filter(p => !p.spent);
 		for (const p of this.props) p.update(dt);
+		this.props = this.props.filter(p => this.time - p.born < LINGER.prop + FADE);
 		if (this.props.length > 140) this.props.splice(0, this.props.length - 140);
 		this.runAI(dt);
 		this.checkOver(dt);
@@ -1529,6 +1545,11 @@ export class World {
 				this.send(t);
 				ai.deploy = theirs > mine ? rand(0.6, 1.4) : rand(1.4, 3);
 			}
+
+			// Down to its last few with nobody fighting, everyone goes: a battle must end
+			const left = this.stickmen.filter(s => s.team === t && s.alive());
+
+			if (left.length <= 3 && !left.some(s => s.order === 'charge')) this.command(t, left.map(s => s.body.id), 'charge');
 
 			// A wall knocked about, or a catapult smashed while it still had ammo, gets someone from home to fix it
 			const repairing = this.stickmen.filter(s => s.team === t && s.alive() && s.order === 'repair').length;

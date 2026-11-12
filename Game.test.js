@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 
 import { DEFAULT_RAW, blobS, judge, lineS } from './art.js';
-import { ARMY, DT, GROUND, World } from './battle.js';
+import { ARMY, DT, FADE, GROUND, LINGER, World } from './battle.js';
 import Game from './Game.js';
 import { STEPS, emptyArt } from './rules.js';
 
@@ -338,4 +338,39 @@ test('a smashed catapult is rebuilt by its repairers, and fires again once its c
 	for (let i = 0; i < 60 * 6; i++) world.step(DT);
 	cat.cd = 0;
 	expect(game.act(fox.id, 'fling', { which: 0, vx: 500, vy: -600 }).ok).toBe(true);
+});
+
+test('the dead and the wreckage lie a while, fade, and are gone', () => {
+	const { world } = soloBattle();
+	const man = world.stickmen.find(s => s.team === 1);
+
+	man.die(0, 0);
+	world.cats[0].damage(500);
+
+	const body = man.body;
+	const wreck = world.props.length;
+
+	expect(wreck).toBeGreaterThan(0);
+	for (let i = 0; i < 60 * (LINGER.body + FADE / 2); i++) world.step(DT);
+
+	const fading = world.snapshot().bodies.find(b => b.id === body.id);
+
+	expect(fading.fa).toBeGreaterThan(0);
+	expect(fading.fa).toBeLessThan(1);
+	expect(world.props).toHaveLength(0);
+	for (let i = 0; i < 60 * FADE; i++) world.step(DT);
+	expect(world.bodies.includes(body)).toBe(false);
+});
+
+test('a stone knocked out of the wall fades once it has lain loose a while, and is out of the way', () => {
+	const { world } = soloBattle();
+	// The top stone of the wall, knocked off it
+	const top = world.masonry.standing(1).sort((a, b) => world.masonry.read(a.body).y - world.masonry.read(b.body).y)[0];
+
+	world.masonry.setSpeed(top.body, -250, -150);
+	top.body.setAwake(true);
+	for (let i = 0; i < 60 * 2; i++) world.step(DT);
+	expect(top.loose).toBe(true);
+	for (let i = 0; i < 60 * (LINGER.brick + FADE + 4); i++) world.step(DT);
+	expect(world.masonry.bricks.filter(b => b.loose)).toHaveLength(0);
 });

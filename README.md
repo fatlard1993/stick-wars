@@ -42,7 +42,9 @@ The walls are real stones: each block is one of the side's stone drawings, its o
 
 Men charging march at the nearest enemy and fight; the rest fight whoever comes close. Blades only reach men in about the same lane, and cut where they actually pass: arms, legs, heads, or a torso in half. A head or a torso cut off kills; a lost leg leaves a man crawling until he bleeds out, and he no longer counts. Cut-off parts fly, stumps spurt, and a boulder landing on someone flattens them. Blades fall from dead hands and get bloodier as they're used.
 
-The last side with anyone standing wins. Then fight again with the same armies (the circling arrows), or draw new ones (the pencil).
+So the field stays readable, the dead, cut-off parts, rubble, dropped weapons and fallen stones lie a while, then fade away (a fallen stone stops being in anyone's way as it goes). The blood stays.
+
+The last side with anyone standing wins. A man with no arms left can't fight, and bleeds out. Then fight again with the same armies (the circling arrows), or draw new ones (the pencil).
 
 If a player's page closes, their drawing clock and the battle wait for them. If they leave the game (the door), their side is free for the next person to join, who draws their own army.
 

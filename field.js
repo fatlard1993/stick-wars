@@ -1,7 +1,7 @@
 // The field the battle is fought on, and the geometry the server's battle (battle.js) and the page (client/) share:
 // its size, where things stand, how its depth is drawn, catapults' shape, a fling's path, the orders men take.
 
-import { BONES, PI } from './art.js';
+import { BONES, PI, clamp } from './art.js';
 
 export const W = 1900, H = 860, GROUND = 780, GRAV = 900, DT = 1 / 60;
 export const SM_H = 80;
@@ -29,6 +29,14 @@ export const ORDER_CODE = { idle: 'i', crew: 'w', repair: 'r', hold: 'h', charge
 export const REBUILD_PER_BLOW = 0.06;
 /** How much one blow mends a damaged catapult */
 export const MEND_PER_BLOW = 8;
+
+/** How long the dead and the wreckage lie before they fade (seconds): men and their parts, loose things, fallen stones */
+export const LINGER = { body: 8, prop: 6, brick: 6 };
+/** How long fading takes, in seconds */
+export const FADE = 2.5;
+
+/** How much of something is left as it fades: 1 until it's lain its while, then down to 0 */
+export const faded = (age, linger) => clamp(1 - (age - linger) / FADE, 0, 1);
 
 /** How deep the field runs, front to back, in world units */
 export const DEPTH = 190;

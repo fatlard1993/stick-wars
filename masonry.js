@@ -1,7 +1,7 @@
 import { Circle, Edge, Polygon, Vec2, World as Physics } from 'planck';
 
 import { TAU, clamp, rand } from './art.js';
-import { DEPTH, GRAV, GROUND, W, WALL } from './field.js';
+import { DEPTH, FADE, GRAV, GROUND, LINGER, W, WALL, faded } from './field.js';
 
 // The walls as real stones, on the server: every block is one of the side's stone drawings, its outline its shape in a
 // rigid-body world (planck), stacked into the wall and left resting until something disturbs it. A boulder knocks
@@ -123,6 +123,7 @@ export class Masonry {
 			brick.body.setAwake(false);
 			brick.home = { x, y };
 			brick.loose = x < wall.x0 - WALL.cw * 0.5 || x > wall.x1 + WALL.cw * 0.5;
+			brick.looseAt = 0;
 		}
 		for (const wall of this.walls) wall.full = this.bricks.filter(brick => brick.team === wall.team && !brick.loose).length;
 		this.settling = false;
@@ -233,11 +234,27 @@ export class Masonry {
 		this.onBreak(brick, { x, y, a, vx, vy });
 	}
 
-	step(dt) {
+	step(dt, time = 0) {
+		this.time = time;
 		this.physics.step(dt, 8, 3);
 		for (const brick of this.broken) this.breakBrick(brick);
 		this.broken.clear();
+		// A stone lying loose has its while, then fades away and is no longer in anyone's way
+		for (const brick of this.bricks.filter(b => b.loose && time - b.looseAt > LINGER.brick + FADE)) this.clearBrick(brick);
 		this.measure();
+	}
+
+	// A stone gone without a crack: out of the world, what rested on it woken
+	clearBrick(brick) {
+		const { x, y } = this.read(brick.body);
+
+		this.remove(brick.body);
+		this.bricks = this.bricks.filter(other => other !== brick);
+		for (const other of this.bricks) {
+			const p = this.read(other.body);
+
+			if (Math.abs(p.x - x) < WALL.cw * 1.3 && Math.abs(p.y - y) < WALL.ch * 2) other.body.setAwake(true);
+		}
 	}
 
 	// Where the top of everything is, all along the field, and of each side's stones alone; and which stones have left
@@ -262,6 +279,7 @@ export class Masonry {
 				const dx = Math.abs(toPx(p.x) - brick.home.x), dy = Math.abs(toPx(p.y) - brick.home.y);
 
 				brick.loose = dx > WALL.cw * 1.2 || dy > WALL.ch * 2;
+				if (brick.loose) brick.looseAt = this.time ?? 0;
 			}
 		}
 	}
@@ -358,7 +376,7 @@ export class Masonry {
 		return this.bricks.map(brick => {
 			const { x, y, a } = this.read(brick.body);
 
-			return [brick.id, brick.team, brick.ref.a, brick.ref.i, Math.round(x), Math.round(y), r2(a), r2(clamp(brick.hp / brick.max, 0, 1)), r2(brick.sx), r2(brick.sy), brick.loose ? Math.round(brick.z) : -1, r2(brick.cr[0]), r2(brick.cr[1])];
+			return [brick.id, brick.team, brick.ref.a, brick.ref.i, Math.round(x), Math.round(y), r2(a), r2(clamp(brick.hp / brick.max, 0, 1)), r2(brick.sx), r2(brick.sy), brick.loose ? Math.round(brick.z) : -1, r2(brick.cr[0]), r2(brick.cr[1]), brick.loose ? r2(faded(this.time - brick.looseAt, LINGER.brick)) : 1];
 		});
 	}
 }
