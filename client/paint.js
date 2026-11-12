@@ -2,7 +2,7 @@
 // ammo, weapons) filled and inked, a stick man skinned onto its joints, and the lined-paper battlefield.
 
 import { BONES, TAU, allPts, bboxOf, clamp } from '../art.js';
-import { ADJ, GROUND, H, W } from '../battle.js';
+import { ADJ, DEPTH, GROUND, H, SKEW_X, SKEW_Y, W } from '../field.js';
 import { TEAMS } from '../rules.js';
 
 export const INK = '#2b2b2b';
@@ -187,16 +187,39 @@ export const paperBackground = () => {
 		for (let k = 0; k < 4; k++) g.arc(cx + (k - 1.5) * 34 * s, cy + (k % 2 ? -10 : 4) * s, 26 * s, Math.PI * 0.9, Math.PI * 2.1);
 		g.stroke();
 	}
+	// The field: a ground plane running back from the front edge, up and a little right, hatched in pencil
+	const backY = GROUND - DEPTH * SKEW_Y, backX = DEPTH * SKEW_X;
+
 	g.fillStyle = '#ece3cd';
+	g.beginPath();
+	g.moveTo(-50, GROUND);
+	g.lineTo(W + 50, GROUND);
+	g.lineTo(W + 50 + backX, backY);
+	g.lineTo(-50 + backX, backY);
+	g.closePath();
+	g.fill();
+	g.fillStyle = '#e4d9bf';
 	g.fillRect(0, GROUND, W, H - GROUND);
-	g.strokeStyle = 'rgba(80,70,50,0.18)';
+	g.save();
+	g.beginPath();
+	g.rect(0, backY, W, H - backY);
+	g.clip();
+	g.strokeStyle = 'rgba(80,70,50,0.14)';
 	g.lineWidth = 1.2;
-	for (let x = 0; x < W + 100; x += 9) {
+	for (let x = -200; x < W + 200; x += 11) {
 		g.beginPath();
-		g.moveTo(x, GROUND + 4);
+		g.moveTo(x + backX, backY);
+		g.lineTo(x, GROUND);
 		g.lineTo(x - 30, H);
 		g.stroke();
 	}
+	g.restore();
+	g.strokeStyle = 'rgba(58,58,58,0.45)';
+	g.lineWidth = 2;
+	g.beginPath();
+	g.moveTo(0, backY);
+	g.lineTo(W, backY);
+	g.stroke();
 	g.strokeStyle = '#3a3a3a';
 	g.lineWidth = 3;
 	g.beginPath();
@@ -208,15 +231,15 @@ export const paperBackground = () => {
 	}
 	g.stroke();
 	g.lineWidth = 1.5;
-	g.strokeStyle = 'rgba(60,90,40,0.6)';
-	for (let i = 0; i < 70; i++) {
-		const x = Math.random() * W;
+	g.strokeStyle = 'rgba(60,90,40,0.5)';
+	for (let i = 0; i < 160; i++) {
+		const z = Math.random() * DEPTH, x = Math.random() * W + z * SKEW_X, y = GROUND - z * SKEW_Y;
 
 		g.beginPath();
-		g.moveTo(x - 4, GROUND - 6);
-		g.lineTo(x, GROUND);
-		g.lineTo(x + 2, GROUND - 8);
-		g.lineTo(x + 3, GROUND);
+		g.moveTo(x - 4, y - 6);
+		g.lineTo(x, y);
+		g.lineTo(x + 2, y - 8);
+		g.lineTo(x + 3, y);
 		g.stroke();
 	}
 

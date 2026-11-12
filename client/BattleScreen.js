@@ -3,7 +3,24 @@ import { act, createInput } from '@fatlard1993/web-game-framework/client';
 import { Stage } from '@fatlard1993/web-game-framework/ui';
 
 import { TAU, clamp, lerp, rand, segDist } from '../art.js';
-import { GRAV, GROUND, H, MOST_CREW, W, WALL, beamScale, catGeometry, flingPath, groundAt, holdFling } from '../battle.js';
+import {
+	DEPTH,
+	GRAV,
+	GROUND,
+	H,
+	MOST_CREW,
+	MOST_FLING,
+	SKEW_X,
+	SKEW_Y,
+	W,
+	WALL,
+	beamScale,
+	catGeometry,
+	depthScale,
+	flingPath,
+	holdFling,
+	project,
+} from '../field.js';
 import { TEAMS, TICK_MS } from '../rules.js';
 import { drawIcon, icon } from './icons.js';
 import { FILLS, GORE, INK, WOOD_INK, drawBody, drawShape, mixColor, paperBackground, placeShape, teamInk } from './paint.js';
@@ -11,10 +28,14 @@ import { HAND, PENCIL, RED_PENCIL } from './theme.js';
 import { count, doodle } from './ui.js';
 
 const DUST = { stone: '#9b9488', wood: '#b98a55' };
-// How far back a drag flings: world units of drag to speed
-const PULL = 3.6;
+// A full-strength fling is a drag this long on the screen, in CSS pixels, whatever the screen's size
+const FULL_PULL = 130;
 // How far a press may wander and still be a tap, in screen pixels
 const TAP = 8;
+// The wall's thickness is drawn as this many layers of its stones, back to front
+const WALL_LAYERS = 6;
+// The height map's step, in world units
+const BUCKET = 4;
 
 const Screen = styled(
 	Component,
@@ -33,9 +54,13 @@ const Controls = styled(
 	({ space }) => `
 		display: flex;
 		justify-content: center;
+		align-items: center;
 		flex-wrap: wrap;
 		gap: ${space.md};
 		padding: ${space.sm};
+
+		& .picked { display: inline-flex; align-items: center; gap: 4px; font-size: 1.4em; min-width: 3em; }
+		& .gap { width: ${space.lg}; }
 	`,
 );
 
@@ -73,15 +98,50 @@ const ease = (prev, cur, t, key = 'id') => {
 		const was = before.get(item[key]);
 
 		if (!was) return item;
-		if (item.j) return { ...item, j: item.j.map((v, i) => lerp(was.j[i] ?? v, v, t)) };
+		if (item.j) return { ...item, z: lerp(was.z ?? item.z, item.z, t), j: item.j.map((v, i) => lerp(was.j[i] ?? v, v, t)) };
 
 		return { ...item, x: lerp(was.x, item.x, t), y: lerp(was.y, item.y, t), a: lerp(was.a, item.a, t) };
 	});
 };
 
+// Stones as the snapshot sends them, eased the same way: [id, team, side, index, x, y, angle, health, sx, sy, z, cracks]
+const easeBricks = (prev, cur, t) => {
+	if (!prev) return cur;
+
+	const before = new Map(prev.map(brick => [brick[0], brick]));
+
+	return cur.map(brick => {
+		const was = before.get(brick[0]);
+
+		if (!was) return brick;
+
+		const out = brick.slice();
+
+		out[4] = lerp(was[4], brick[4], t);
+		out[5] = lerp(was[5], brick[5], t);
+		out[6] = lerp(was[6], brick[6], t);
+
+		return out;
+	});
+};
+
+// A thing standing at depth z drawn by fn in its own world coordinates: slid back up the field, shrunk with distance
+// about its ground point at x
+const atDepth = (g, x, z, fn) => {
+	const [px, py] = project(x, GROUND, z);
+	const k = depthScale(z);
+
+	g.save();
+	g.translate(px, py);
+	g.scale(k, k);
+	g.translate(-x, -GROUND);
+	fn();
+	g.restore();
+};
+
 // The battle as every page sees it, and for the two who play it, their army to command: pick men out by tapping them
-// or dragging a box, then send them to fight, hold the wall, go home, or crew a catapult (tap it); drag back from a
-// catapult to fling
+// or dragging a box, then send them to fight, hold the wall, go home, crew a catapult or repair one (or the wall); drag
+// from a catapult to fling
 export default class BattleScreen extends Screen {
 	build() {
 		super.build();
@@ -95,7 +155,9 @@ export default class BattleScreen extends Screen {
 		this.box = null;
 		this.press = null;
 		this.flash = null;
+		this.mode = null;
 		this.selected = new Set();
+		this.tops = new Float32Array(Math.ceil(W / BUCKET) + 1).fill(GROUND);
 
 		this.stage = new Stage({ appendTo: this });
 		this.card = new Card({ appendTo: this });
@@ -124,40 +186,81 @@ export default class BattleScreen extends Screen {
 
 		const controls = new Controls({ appendTo: this });
 
+		this.picked = document.createElement('span');
+		this.picked.className = 'picked';
+		this.crewButton = doodle('catapult', { title: 'Crew a catapult: then tap it', size: '2em', onPress: () => this.choose('crew') });
+		this.repairButton = doodle('hammer', { title: 'Repair: then tap a catapult or the wall', size: '2em', onPress: () => this.choose('repair') });
+		controls.elem.append(this.picked);
 		controls.append(
+			doodle('all', { title: 'Pick out everyone (A)', size: '2em', onPress: () => this.selectAll() }),
+			new Component({ addClass: 'gap' }),
 			doodle('charge', { title: 'Charge (Space)', size: '2em', onPress: () => this.order('charge') }),
 			doodle('hold', { title: 'Hold the wall (H)', size: '2em', onPress: () => this.order('hold') }),
 			doodle('base', { title: 'Go home (B)', size: '2em', onPress: () => this.order('idle') }),
-			doodle('all', { title: 'Pick out everyone (A)', size: '2em', onPress: () => this.selectAll() }),
+			this.crewButton,
+			this.repairButton,
 		);
 		this.input = createInput({
-			keys: { charge: [' '], hold: ['h', 'H'], idle: ['b', 'B'], all: ['a', 'A'], none: ['Escape'] },
-			onPress: name => (name === 'all' ? this.selectAll() : name === 'none' ? this.selected.clear() : this.order(name)),
+			keys: { charge: [' '], hold: ['h', 'H'], idle: ['b', 'B'], all: ['a', 'A'], crew: ['c', 'C'], repair: ['r', 'R'], none: ['Escape'] },
+			onPress: name => {
+				if (name === 'all') this.selectAll();
+				else if (name === 'none') this.letGo();
+				else if (name === 'crew' || name === 'repair') this.choose(name);
+				else this.order(name);
+			},
 		});
 		this.input.pointer(this.stage.elem, {
 			onDown: point => this.down(point),
 			onMove: point => this.move(point),
-			onUp: () => this.up(),
+			onUp: point => this.up(point),
 		});
 		this.addCleanup('input', () => this.input.destroy());
+		this.showPicked();
 	}
 
-	// The men picked out told what to do; with none picked, charging sends one man from home
+	// Who an order is for: the men picked out, or with nobody picked, everyone not busy at a catapult or the wall
+	orderedIds() {
+		if (this.selected.size) return [...this.selected];
+
+		return this.myUnits()
+			.filter(body => body.u !== 'w' && body.u !== 'r')
+			.map(body => body.id);
+	}
+
 	order(order, which) {
-		const ids = [...this.selected];
+		const ids = this.orderedIds();
 
-		if (!ids.length) {
-			if (order === 'charge')
-				act('send', undefined, { quiet: true }).then(said => {
-					if (!said.ok || !said.result?.sent) this.say('empty', this.team === 0 ? 300 : W - 300, GROUND - 200, RED_PENCIL);
-				});
-
-			return;
-		}
+		this.mode = null;
+		this.showPicked();
+		if (!ids.length) return this.say('empty', this.team === 0 ? 300 : W - 300, GROUND - 220, RED_PENCIL);
 		act('order', { ids, order, which }, { quiet: true }).then(said => {
-			if (!said.ok && order === 'crew') this.say('person', this.myCats()[which]?.cat.x ?? W / 2, GROUND - 200, RED_PENCIL);
+			if (said.ok) return;
+
+			const cat = typeof which === 'number' ? this.myCats()[which]?.cat : null;
+
+			this.say('empty', cat ? cat.x : W / 2, GROUND - 220, RED_PENCIL);
 		});
-		if (order === 'crew' || order === 'charge') this.selected.clear();
+		if (order !== 'hold' && order !== 'idle') this.selected.clear();
+		this.showPicked();
+	}
+
+	// Crewing or repairing waits for its target: the next tap on a catapult (or, for repairs, the wall)
+	choose(mode) {
+		this.mode = this.mode === mode ? null : mode;
+		this.showPicked();
+	}
+
+	letGo() {
+		this.selected.clear();
+		this.mode = null;
+		this.showPicked();
+	}
+
+	showPicked() {
+		if (!this.picked) return;
+		this.picked.replaceChildren(icon('person', { size: '1.2em' }), this.selected.size ? String(this.selected.size) : 'all');
+		this.crewButton.elem.setAttribute('aria-pressed', String(this.mode === 'crew'));
+		this.repairButton.elem.setAttribute('aria-pressed', String(this.mode === 'repair'));
 	}
 
 	myUnits() {
@@ -166,6 +269,7 @@ export default class BattleScreen extends Screen {
 
 	selectAll() {
 		this.selected = new Set(this.myUnits().map(body => body.id));
+		this.showPicked();
 	}
 
 	/**
@@ -188,7 +292,7 @@ export default class BattleScreen extends Screen {
 			this.parts = [];
 			this.prev = null;
 			this.cur = null;
-			this.selected.clear();
+			this.letGo();
 		}
 		if (battle) {
 			// A view sent after an action carries the same picture: it isn't a new tick
@@ -197,42 +301,65 @@ export default class BattleScreen extends Screen {
 				this.curAt = performance.now();
 			}
 			this.cur = battle;
+			this.measure(battle.bricks);
 
 			// The dead can't be picked
 			const alive = new Set(this.myUnits().map(body => body.id));
+			const before = this.selected.size;
 
 			for (const id of this.selected) if (!alive.has(id)) this.selected.delete(id);
+			if (this.selected.size !== before) this.showPicked();
 		}
 		for (const event of view.events ?? []) this.play(event);
 		this.showCard(view);
 	}
 
+	// Where the top of the stones is, along the field: for blood to land on, and a fling's path to stop at
+	measure(bricks) {
+		this.tops.fill(GROUND);
+		for (const brick of bricks ?? []) {
+			const x = brick[4], top = brick[5] - WALL.ch / 2;
+			const from = clamp(Math.floor((x - WALL.cw / 2) / BUCKET), 0, this.tops.length - 1);
+			const to = clamp(Math.ceil((x + WALL.cw / 2) / BUCKET), 0, this.tops.length - 1);
+
+			for (let i = from; i <= to; i++) if (top < this.tops[i]) this.tops[i] = top;
+		}
+	}
+
+	groundAt(x) {
+		return this.tops[clamp(Math.round(x / BUCKET), 0, this.tops.length - 1)];
+	}
+
 	play(event) {
+		const z = event.z ?? 0;
+
 		if (event.e === 'blood') {
 			for (let i = 0; i < event.n; i++) {
 				const a = event.a + rand(-event.sp, event.sp) * Math.PI, v = event.v * rand(0.3, 1.2);
 
-				this.parts.push({ x: event.x, y: event.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, s: rand(1.5, 3.6), blood: true, life: 3 });
+				this.parts.push({ x: event.x, y: event.y, z, vx: Math.cos(a) * v, vy: Math.sin(a) * v, s: rand(1.5, 3.6), blood: true, life: 3 });
 			}
 		} else if (event.e === 'dust') {
 			for (let i = 0; i < event.n; i++) {
 				const a = rand(0, TAU), v = rand(20, 140);
 
-				this.parts.push({ x: event.x, y: event.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, s: rand(2, 5), life: rand(0.4, 0.9), c: DUST[event.c] ?? DUST.stone });
+				this.parts.push({ x: event.x, y: event.y, z, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, s: rand(2, 5), life: rand(0.4, 0.9), c: DUST[event.c] ?? DUST.stone });
 			}
 		} else if (event.e === 'splat') {
-			for (let i = 0; i < 30; i++) this.splat(event.x + rand(-40, 40), GROUND, rand(2, 6));
+			for (let i = 0; i < 30; i++) this.splat(event.x + rand(-40, 40), clamp(z + rand(-12, 12), 0, DEPTH), rand(2, 6));
 		} else if (event.e === 'sound') this.sound?.play(event.n);
 		else if (event.e === 'shake') this.shake = Math.min(14, this.shake + event.v);
 		if (this.parts.length > 3000) this.parts.splice(0, this.parts.length - 3000);
 	}
 
-	splat(x, y, s) {
+	// A pool of blood on the field, where it landed
+	splat(x, z, s) {
 		const g = this.decal.getContext('2d');
+		const [px, py] = project(x, GROUND, z);
 
 		g.fillStyle = `rgba(${(110 + Math.random() * 60) | 0},0,0,0.85)`;
 		g.beginPath();
-		g.ellipse(x, y - rand(0, 1.5), s * rand(1.2, 3), s * rand(0.4, 0.9), 0, 0, TAU);
+		g.ellipse(px, py - rand(0, 1.5), s * rand(1.2, 3), s * rand(0.4, 0.9), 0, 0, TAU);
 		g.fill();
 	}
 
@@ -304,7 +431,8 @@ export default class BattleScreen extends Screen {
 		return { scale, left: (width - W * scale) / 2, top: (height - H * scale) / 2 };
 	}
 
-	toWorld({ x, y }) {
+	// A point on the stage as a point on the drawn page of the world (before depth: what's drawn there)
+	toPage({ x, y }) {
 		const f = this.fitting();
 
 		return f ? { x: (x - f.left) / f.scale, y: (y - f.top) / f.scale } : { x: 0, y: 0 };
@@ -314,18 +442,38 @@ export default class BattleScreen extends Screen {
 		return (this.cur?.cats ?? []).filter(c => c.t === this.team).map((cat, which) => ({ cat, which }));
 	}
 
-	// One of our catapults under a point, if there is one
+	// One of our catapults under a point of the page (a smashed one too: it can be repaired)
 	catAt({ x, y }) {
-		return this.myCats().find(({ cat }) => !cat.dead && Math.abs(cat.x - x) < 60 && y > GROUND - 110 && y < GROUND + 10) ?? null;
+		return (
+			this.myCats().find(({ cat }) => {
+				const [cx, cy] = project(cat.x, GROUND - 40, cat.z);
+
+				return Math.abs(cx - x) < 70 && Math.abs(cy - y) < 70;
+			}) ?? null
+		);
 	}
 
-	// One of our men under a point, if there is one: near his body or his head
+	// Our wall under a point of the page: anywhere on its stones' band, front to back
+	wallAt({ x, y }) {
+		const wall = this.cur?.walls[this.team];
+
+		if (!wall) return false;
+
+		const back = GROUND - DEPTH * SKEW_Y;
+
+		return x > wall.x0 - 10 && x < wall.x1 + DEPTH * SKEW_X + 10 && y > back - 170 && y < GROUND + 10;
+	}
+
+	// One of our men under a point of the page: near his body or his head, as drawn at his depth
 	unitAt({ x, y }) {
-		let best = null, bd = 16;
+		let best = null, bd = 18;
 
 		for (const body of this.myUnits()) {
 			const j = body.j;
-			const d = Math.min(segDist(x, y, j[2], j[3], j[4], j[5]).d, Math.hypot(x - j[0], y - j[1]));
+			const [hx, hy] = project(j[0], j[1], body.z, j[4]);
+			const [nx, ny] = project(j[2], j[3], body.z, j[4]);
+			const [px, py] = project(j[4], j[5], body.z, j[4]);
+			const d = Math.min(segDist(x, y, nx, ny, px, py).d, Math.hypot(x - hx, y - hy));
 
 			if (d < bd) {
 				bd = d;
@@ -339,8 +487,7 @@ export default class BattleScreen extends Screen {
 	down(point) {
 		if (this.view?.state.phase !== 'battle' || this.view.away.length) return;
 
-		const at = this.toWorld(point);
-
+		const at = this.toPage(point);
 		// A man under the press is picked over the catapult he crews
 		const unit = this.unitAt(at);
 
@@ -351,13 +498,14 @@ export default class BattleScreen extends Screen {
 		const press = this.press;
 
 		if (!press) return;
-
-		const now = this.toWorld(point);
-
 		if (!press.moved && Math.hypot(point.x - press.from.x, point.y - press.from.y) > TAP) press.moved = true;
 		if (!press.moved) return;
-		// A drag from a catapult pulls it back; anywhere else it draws a box to pick men out with
-		if (press.cat) this.aim = { which: press.cat.which, sx: press.at.x, sy: press.at.y, cx: now.x, cy: now.y };
+
+		const now = this.toPage(point);
+
+		// A drag from one of our standing catapults pulls it back (any way: it flings the other); anywhere else it draws a
+		// box to pick men out with
+		if (press.cat && !press.cat.cat.dead) this.aim = { which: press.cat.which, from: press.from, to: point };
 		else this.box = { x0: press.at.x, y0: press.at.y, x1: now.x, y1: now.y };
 	}
 
@@ -374,31 +522,43 @@ export default class BattleScreen extends Screen {
 			this.box = null;
 			this.selected = new Set(
 				this.myUnits()
-					.filter(({ j }) => j[4] >= left && j[4] <= right && j[5] >= top - 20 && j[5] <= bottom + 20)
+					.filter(({ j, z }) => {
+						const [px, py] = project(j[4], j[5], z, j[4]);
+
+						return px >= left && px <= right && py >= top - 30 && py <= bottom + 30;
+					})
 					.map(body => body.id),
 			);
+			this.showPicked();
 
 			return;
 		}
-		// A tap: a catapult crewed by the men picked out, a man picked out (or let go), or the men sent where it points
-		if (press.cat && this.selected.size) return this.order('crew', press.cat.which);
+
+		// A tap: on a catapult (crew it, or repair it when repairing is chosen), on our wall (repair it), on a man (pick
+		// him out, or let him go), or past our wall with men picked (send them charging)
+		if (press.cat) return this.order(this.mode === 'repair' || press.cat.cat.dead ? 'repair' : 'crew', press.cat.which);
+		if (this.wallAt(press.at) && !press.unit && (this.mode === 'repair' || this.selected.size)) return this.order('repair', 'wall');
 		if (press.unit) {
 			const only = this.selected.size === 1 && this.selected.has(press.unit.id);
 
 			this.selected = only ? new Set() : new Set([press.unit.id]);
+			this.showPicked();
 
 			return;
 		}
 
 		const wall = this.cur?.walls[this.team];
-		const beyond = wall && (this.team === 0 ? press.at.x > wall.x1 : press.at.x < wall.x0);
+		const beyond = wall && (this.team === 0 ? press.at.x > wall.x1 + DEPTH * SKEW_X : press.at.x < wall.x0);
 
 		if (this.selected.size && beyond) return this.order('charge');
-		this.selected.clear();
+		this.letGo();
 	}
 
+	// How hard and which way a drag flings: straight back from where it's pulled, full strength at FULL_PULL pixels
 	pull() {
-		return holdFling((this.aim.sx - this.aim.cx) * PULL, (this.aim.sy - this.aim.cy) * PULL);
+		const k = MOST_FLING / FULL_PULL;
+
+		return holdFling((this.aim.from.x - this.aim.to.x) * k, (this.aim.from.y - this.aim.to.y) * k);
 	}
 
 	release() {
@@ -449,18 +609,63 @@ export default class BattleScreen extends Screen {
 		g.lineCap = g.lineJoin = 'round';
 
 		const cur = this.cur, prev = this.prev;
-		const bodies = ease(prev?.bodies, cur.bodies, t);
+		const bricks = easeBricks(prev?.bricks, cur.bricks ?? [], t);
+		// Everything on the field, drawn from the back to the front
+		const scene = [];
 
-		cur.cats.forEach((cat, at) => this.drawCat(g, cat, prev?.cats[at] ? lerp(prev.cats[at].arm, cat.arm, t) : cat.arm));
-		for (const body of bodies) if (this.selected.has(body.id)) this.drawPicked(g, body);
-		for (const body of bodies) this.drawBody(g, body);
-		for (const wall of cur.walls) this.drawWall(g, wall);
-		for (const prop of ease(prev?.props, cur.props, t)) this.drawProp(g, prop);
-		for (const proj of ease(prev?.projs, cur.projs, t)) this.drawProp(g, proj);
-		this.stepParts(g, dt, cur.walls);
+		cur.cats.forEach((cat, at) => {
+			const arm = prev?.cats[at] ? lerp(prev.cats[at].arm, cat.arm, t) : cat.arm;
+
+			scene.push({ z: cat.z, draw: () => atDepth(g, cat.x, cat.z, () => this.drawCat(g, cat, arm)) });
+		});
+		for (const body of ease(prev?.bodies, cur.bodies, t)) {
+			scene.push({ z: body.z, draw: () => atDepth(g, body.j[4], body.z, () => this.drawBody(g, body)) });
+		}
+		for (const thing of [...ease(prev?.props, cur.props, t), ...ease(prev?.projs, cur.projs, t)]) {
+			scene.push({ z: thing.z, draw: () => atDepth(g, thing.x, thing.z, () => this.drawProp(g, thing)) });
+		}
+		// A wall's stones drawn as its thickness, layer on layer; a stone fallen loose lies where it lies
+		for (let layer = 0; layer < WALL_LAYERS; layer++) {
+			const z = DEPTH - 8 - (layer * (DEPTH - 16)) / (WALL_LAYERS - 1);
+
+			scene.push({ z, draw: () => bricks.forEach(brick => brick[10] < 0 && atDepth(g, brick[4], z, () => this.drawBrick(g, brick, layer === WALL_LAYERS - 1))) });
+		}
+		for (const brick of bricks) if (brick[10] >= 0) scene.push({ z: brick[10], draw: () => atDepth(g, brick[4], brick[10], () => this.drawBrick(g, brick, true)) });
+		for (const wall of cur.walls) scene.push({ z: 4, draw: () => this.drawFlag(g, wall) });
+
+		scene.sort((a, b) => b.z - a.z);
+		for (const thing of scene) thing.draw();
+		this.stepParts(g, dt);
+		if (this.mode) this.drawTargets(g);
 		if (this.aim) this.drawAim(g);
 		if (this.box) this.drawBox(g);
 		if (this.flash && performance.now() < this.flash.until) drawIcon(g, this.flash.name, this.flash.x, this.flash.y, 46, this.flash.color);
+		g.restore();
+	}
+
+	drawBrick(g, brick, front) {
+		const [, , a, i, x, y, angle, hp, sx, sy, , cr0, cr1] = brick;
+		const stone = this.art.art[a]?.stones?.[i];
+
+		if (!stone) return;
+
+		const hurt = 1 - clamp(hp, 0, 1);
+
+		placeShape(g, stone.shape, { x, y, a: angle, sx, sy }, mixColor(FILLS.stone, FILLS.hurt, hurt), INK, 1.5);
+		if (!front || hurt < 0.2) return;
+		g.save();
+		g.translate(x, y);
+		g.rotate(angle);
+		g.scale(sx, sy);
+		g.beginPath();
+		for (const k of [cr0, cr1]) {
+			g.moveTo(0, 0);
+			g.lineTo(Math.cos(k) * 0.2, Math.sin(k) * 0.2);
+			g.lineTo(Math.cos(k + 0.4) * 0.42 * hurt, Math.sin(k + 0.4) * 0.42 * hurt);
+		}
+		g.lineWidth = 1.2 / ((sx + sy) / 2);
+		g.strokeStyle = INK;
+		g.stroke();
 		g.restore();
 	}
 
@@ -494,13 +699,42 @@ export default class BattleScreen extends Screen {
 		g.restore();
 	}
 
+	// Crewing or repairing chosen: what can be tapped for it, ringed
+	drawTargets(g) {
+		const ink = teamInk(this.team), pulse = 3 + Math.sin(performance.now() / 150) * 1.5;
+
+		g.save();
+		g.strokeStyle = ink;
+		g.lineWidth = pulse;
+		g.setLineDash([10, 8]);
+		for (const { cat } of this.myCats()) {
+			if (cat.dead && this.mode === 'crew') continue;
+
+			const [cx, cy] = project(cat.x, GROUND - 40, cat.z);
+
+			g.beginPath();
+			g.ellipse(cx, cy, 70, 55, 0, 0, TAU);
+			g.stroke();
+		}
+		if (this.mode === 'repair') {
+			const wall = this.cur.walls[this.team];
+			const back = GROUND - DEPTH * SKEW_Y;
+
+			g.strokeRect(wall.x0 - 10, back - 170, wall.x1 - wall.x0 + DEPTH * SKEW_X + 20, GROUND - back + 180);
+		}
+		g.restore();
+	}
+
 	drawBody(g, body) {
 		const rig = this.item(body.r, 'stickmen')?.rig;
 
 		if (!rig) return;
+		if (this.selected.has(body.id)) this.drawPicked(g, body);
 		drawBody(g, rig, body, teamInk(body.t));
-		// One of ours told to hold the wall carries a little shield over his head
-		if (body.u === 'h' && body.t === this.team) drawIcon(g, 'hold', body.j[0], Math.min(body.j[1], body.j[3]) - 26, 16, teamInk(body.t));
+		// One of ours holding the wall carries a little shield over his head, a repairer a hammer
+		const mark = { h: 'hold', r: 'hammer' }[body.u];
+
+		if (mark && body.t === this.team) drawIcon(g, mark, body.j[0], Math.min(body.j[1], body.j[3]) - 26, 16, teamInk(body.t));
 		if (body.w) {
 			const item = this.item(body.w, 'swords');
 
@@ -542,16 +776,33 @@ export default class BattleScreen extends Screen {
 	}
 
 	drawCat(g, cat, arm) {
-		if (cat.dead) return;
+		const y = GROUND - 160, ink = teamInk(cat.t);
+
+		g.font = `22px ${HAND}`;
+		g.textAlign = 'left';
+		g.textBaseline = 'middle';
+
+		// Smashed: its wreck site, and how far its rebuilding has come
+		if (cat.dead) {
+			if (!cat.rp && !cat.rb) return;
+			drawIcon(g, 'hammer', cat.x - 30, y, 22, ink);
+			g.strokeStyle = INK;
+			g.lineWidth = 1.5;
+			g.strokeRect(cat.x - 14, y - 4, 60, 8);
+			g.fillStyle = ink;
+			g.fillRect(cat.x - 14, y - 4, 60 * clamp(cat.rb ?? 0, 0, 1), 8);
+
+			return;
+		}
 
 		const geo = catGeometry(cat.x, cat.d, arm);
 
 		g.save();
 		if (cat.shk) g.translate(rand(-2, 2), rand(-1, 1));
-		geo.wheels.forEach(([x, y], at) => {
+		geo.wheels.forEach(([x, wy], at) => {
 			const wheel = this.item(cat.wh[at], 'stones');
 
-			if (wheel) placeShape(g, wheel.shape, { x, y, sx: 26, sy: 26 }, FILLS.stone, INK, 1.6);
+			if (wheel) placeShape(g, wheel.shape, { x, y: wy, sx: 26, sy: 26 }, FILLS.stone, INK, 1.6);
 		});
 		geo.segs.forEach(([p, q], at) => {
 			const beam = this.item(cat.b[at], 'beams');
@@ -583,18 +834,14 @@ export default class BattleScreen extends Screen {
 		if (cat.ld && load) placeShape(g, load.shape, { x: end[0], y: end[1] - 3, sx: load.radius * 2, sy: load.radius * 2 }, FILLS.ammo, INK, 1.8);
 		g.restore();
 
-		// Its ammo left, its crew (red with nobody at it), its health, and its reload draining
-		const y = GROUND - 160, ink = teamInk(cat.t);
-
-		g.font = `22px ${HAND}`;
-		g.textAlign = 'left';
-		g.textBaseline = 'middle';
+		// Its ammo left, its crew (red with nobody at it), anyone repairing it, its health, and its reload draining
 		drawIcon(g, cat.n ? 'rock' : 'empty', cat.x - 34, y, 22, cat.n ? ink : RED_PENCIL);
 		g.fillStyle = ink;
 		g.fillText(String(cat.n), cat.x - 21, y + 1);
 		drawIcon(g, 'person', cat.x + 8, y, 22, cat.cr ? ink : RED_PENCIL);
 		g.fillStyle = cat.cr ? ink : RED_PENCIL;
 		g.fillText(`${cat.cr}/${MOST_CREW}`, cat.x + 20, y + 1);
+		if (cat.rp) drawIcon(g, 'hammer', cat.x + 62, y, 20, ink);
 		if (cat.hp < 100) {
 			g.strokeStyle = INK;
 			g.lineWidth = 1.5;
@@ -611,40 +858,10 @@ export default class BattleScreen extends Screen {
 		}
 	}
 
-	drawWall(g, wall) {
-		wall.cols.forEach((col, c) => {
-			col.forEach((br, r) => {
-				const [a, i, hp, rot, sx, sy, dy, cr0, cr1] = br;
-				const stone = this.art.art[a]?.stones?.[i];
-
-				if (!stone) return;
-
-				const x = wall.x0 + (c + 0.5) * WALL.cw, y = GROUND - (r + 0.5) * WALL.ch - dy;
-				const w = WALL.cw * sx, h = WALL.ch * sy, hurt = 1 - clamp(hp, 0, 1);
-
-				placeShape(g, stone.shape, { x, y, a: rot, sx: w, sy: h }, mixColor(FILLS.stone, FILLS.hurt, hurt), INK, 1.5);
-				if (hurt > 0.2) {
-					g.save();
-					g.translate(x, y);
-					g.rotate(rot);
-					g.scale(w, h);
-					g.beginPath();
-					for (const k of [cr0, cr1]) {
-						g.moveTo(0, 0);
-						g.lineTo(Math.cos(k) * 0.2, Math.sin(k) * 0.2);
-						g.lineTo(Math.cos(k + 0.4) * 0.42 * hurt, Math.sin(k + 0.4) * 0.42 * hurt);
-					}
-					g.lineWidth = 1.2 / ((w + h) / 2);
-					g.strokeStyle = INK;
-					g.stroke();
-					g.restore();
-				}
-			});
-		});
-
-		// A flag on the middle column, and who plays that side above it (underlined for the one looking)
-		const mc = wall.cols[1], fx = wall.x0 + 1.5 * WALL.cw;
-		const fy = GROUND - mc.length * WALL.ch - (mc.length ? mc[mc.length - 1][6] : 0);
+	// A flag over the front of each wall, and who plays that side above it (underlined for the one looking)
+	drawFlag(g, wall) {
+		const mid = (wall.x0 + wall.x1) / 2;
+		const fy = this.groundAt(mid) - 4, fx = mid;
 		const d = wall.team === 0 ? 1 : -1, ink = teamInk(wall.team);
 
 		g.strokeStyle = INK;
@@ -659,6 +876,7 @@ export default class BattleScreen extends Screen {
 		g.lineTo(fx + d * (24 + Math.sin(performance.now() / 160) * 3), fy - 33);
 		g.lineTo(fx, fy - 26);
 		g.fill();
+		if (wall.rp) drawIcon(g, 'hammer', fx + d * 30, fy - 10, 20, ink);
 
 		const state = this.view?.state;
 		let who = null;
@@ -684,32 +902,42 @@ export default class BattleScreen extends Screen {
 		const [vx, vy] = this.pull();
 		const from = catGeometry(cat.x, cat.d, cat.arm).launch;
 		const ink = teamInk(this.team);
+		const [lx, ly] = project(from[0], from[1], cat.z);
+		const f = this.fitting();
+		const strength = Math.hypot(vx, vy) / MOST_FLING;
 
+		// The pull: a pencil line back from the catapult, as long as the drag (on the page's scale)
 		g.strokeStyle = ink;
 		g.globalAlpha = 0.6;
 		g.lineWidth = 2;
 		g.setLineDash([6, 6]);
 		g.beginPath();
-		g.moveTo(this.aim.sx, this.aim.sy);
-		g.lineTo(this.aim.cx, this.aim.cy);
+		g.moveTo(lx, ly);
+		g.lineTo(lx - (vx / MOST_FLING) * (FULL_PULL / f.scale), ly - (vy / MOST_FLING) * (FULL_PULL / f.scale));
 		g.stroke();
 		g.setLineDash([]);
 		g.fillStyle = ink;
-		flingPath(from, vx, vy, this.cur.walls).forEach(([x, y], at) => {
+		flingPath(from, vx, vy, x => this.groundAt(x)).forEach(([x, y], at) => {
 			if (at % 4) return;
+
+			const [px, py] = project(x, y, cat.z, x);
+
 			g.globalAlpha = 1 - at / 200;
 			g.beginPath();
-			g.arc(x, y, 3, 0, TAU);
+			g.arc(px, py, 3, 0, TAU);
 			g.fill();
 		});
 		g.globalAlpha = 1;
-		if (cat.n <= 0) drawIcon(g, 'empty', cat.x, GROUND - 210, 40, RED_PENCIL);
-		else if (!cat.cr) drawIcon(g, 'person', cat.x, GROUND - 210, 40, RED_PENCIL);
-		else if (cat.cd > 0) drawIcon(g, 'reload', cat.x, GROUND - 210, 40, ink);
+		g.font = `22px ${HAND}`;
+		g.textAlign = 'center';
+		g.fillText(`${Math.round(strength * 100)}%`, lx, ly - 30);
+		if (cat.n <= 0) drawIcon(g, 'empty', lx, ly - 60, 40, RED_PENCIL);
+		else if (!cat.cr) drawIcon(g, 'person', lx, ly - 60, 40, RED_PENCIL);
+		else if (cat.cd > 0) drawIcon(g, 'reload', lx, ly - 60, 40, ink);
 	}
 
 	// Blood and dust fly on this page alone; blood that reaches the ground stays there as a pool
-	stepParts(g, dt, walls) {
+	stepParts(g, dt) {
 		const P = this.parts;
 
 		for (let i = P.length - 1; i >= 0; i--) {
@@ -721,11 +949,11 @@ export default class BattleScreen extends Screen {
 			p.y += p.vy * dt;
 			p.life -= dt;
 
-			const ground = groundAt(walls, p.x);
+			const ground = this.groundAt(p.x);
 			let gone = p.life <= 0 || p.x < 0 || p.x > W;
 
 			if (p.y >= ground) {
-				if (p.blood && ground === GROUND) this.splat(p.x, ground, p.s);
+				if (p.blood && ground === GROUND) this.splat(p.x, p.z, p.s);
 				gone = true;
 			}
 			if (gone) {
@@ -734,12 +962,21 @@ export default class BattleScreen extends Screen {
 			}
 		}
 		g.fillStyle = '#a10f0f';
-		for (const p of P) if (p.blood) g.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s);
+		for (const p of P) {
+			if (!p.blood) continue;
+
+			const [px, py] = project(p.x, p.y, p.z, p.x);
+
+			g.fillRect(px - p.s / 2, py - p.s / 2, p.s, p.s);
+		}
 		for (const p of P) {
 			if (p.blood) continue;
+
+			const [px, py] = project(p.x, p.y, p.z, p.x);
+
 			g.globalAlpha = clamp(p.life * 1.5, 0, 0.7);
 			g.fillStyle = p.c;
-			g.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s);
+			g.fillRect(px - p.s / 2, py - p.s / 2, p.s, p.s);
 		}
 		g.globalAlpha = 1;
 	}

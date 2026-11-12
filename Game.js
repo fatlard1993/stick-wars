@@ -69,8 +69,8 @@ export default class Game extends BaseGame {
 			return { sent: this.world.send(team) };
 		},
 
-		// Some of our men (their ids, as the page picked them out) told what to do: stay home, hold the wall, charge, or
-		// crew one of our two catapults
+		// Some of our men (their ids, as the page picked them out) told what to do: stay home, hold the wall, charge, crew
+		// one of our two catapults, or repair one of them or our wall
 		order(player, { ids, order, which } = {}) {
 			const team = this.teamOf(player.id);
 
@@ -78,6 +78,7 @@ export default class Game extends BaseGame {
 			if (!Array.isArray(ids) || ids.length > ARMY * 4 || !ids.every(Number.isInteger)) refuse('Pick some men first');
 			if (!ORDERS.includes(order)) refuse('No such order');
 			if (order === 'crew' && ![0, 1].includes(which)) refuse('Which catapult?');
+			if (order === 'repair' && ![0, 1, 'wall'].includes(which)) refuse('Repair what?');
 
 			const count = this.world.command(team, ids, order, which);
 

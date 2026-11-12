@@ -440,10 +440,10 @@ export default class DrawScreen extends Screen {
 		this.stats.elem.replaceChildren(
 			heading,
 			bar('ruler', s.lr, 'Reach'),
-			bar('weight', (s.weight - 0.35) / 2.2, 'Weight'),
+			bar('weight', (s.weight - 0.35) / 2.85, 'Weight'),
 			bar('saw', s.serr, 'Shredding'),
 			bar('knife', s.cut, 'Cutting'),
-			bar('bolt', 1 - (s.swing - 0.36) / 0.75, 'Speed'),
+			bar('bolt', 1 - (s.swing - 0.4) / 1.1, 'Speed'),
 		);
 	}
 

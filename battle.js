@@ -20,109 +20,42 @@ import {
 	segInter,
 } from './art.js';
 
-export const W = 1900, H = 860, GROUND = 780, GRAV = 900, DT = 1 / 60;
-export const SM_H = 80;
-export const WALL = { cols: 3, rows: 7, cw: 34, ch: 22 };
-export const ARMY = 12, AMMO = 6, RELOAD = 4.5;
-/** The fastest a catapult flings, in world units a second */
-export const MOST_FLING = 1350;
-export const CAT_REST = PI - 0.3, CAT_FIRE = 1.5 * PI + 0.35, CAT_ARM = 74, CAT_PIV = -56;
-export const WALL_X = [430, W - 430 - WALL.cols * WALL.cw];
-export const CAT_X = [
-	[90, 220],
-	[W - 90, W - 220],
-];
-/** How long a side waits between sending stick men out one at a time, in seconds */
-export const SEND_EVERY = 0.4;
-/** How many can crew one catapult: one to fire it at all, each more loading it faster */
-export const MOST_CREW = 3;
-/** How close an enemy comes before a man who isn't charging turns to fight him */
-export const ENGAGE = 150;
-/** What a man can be told to do: stay home, crew a catapult, hold by the wall, or charge */
-export const ORDERS = ['idle', 'crew', 'hold', 'charge'];
-/** Each order as a page is sent it, one letter apiece */
-export const ORDER_CODE = { idle: 'i', crew: 'w', hold: 'h', charge: 'c' };
+import { Masonry } from './masonry.js';
+import {
+	ADJ,
+	AMMO,
+	ARMY,
+	CAT_FIRE,
+	CAT_REST,
+	CAT_X,
+	CAT_Z,
+	DEPTH,
+	DT,
+	ENGAGE,
+	GRAV,
+	GROUND,
+	LANE,
+	MEND_PER_BLOW,
+	MOST_CREW,
+	MOST_FLING,
+	ORDERS,
+	ORDER_CODE,
+	REBUILD_PER_BLOW,
+	RELOAD,
+	SEND_EVERY,
+	SM_H,
+	W,
+	WALL,
+	WALL_X,
+	beamScale,
+	catGeometry,
+	holdFling,
+	homeOf,
+	subtreeMask,
+} from './field.js';
 
-/** Where a side's k-th man stands at home, behind his wall among the catapults */
-export const homeX = (team, k) => {
-	const x = 250 + (k % ARMY) * 13;
-
-	return team === 0 ? x : W - x;
-};
-
-export const ADJ = BONES.map(a => BONES.map(b => a[0] === b[0] || a[0] === b[1] || a[1] === b[0] || a[1] === b[1]));
-
-export const subtreeMask = b => {
-	const m = new Array(10).fill(false), st = [b];
-
-	while (st.length) {
-		const x = st.pop();
-
-		m[x] = true;
-		for (let k = 0; k < 10; k++) if (BONES[k][0] === BONES[x][1] && !m[k]) st.push(k);
-	}
-
-	return m;
-};
-
-// ---------------------------------------------------------------- geometry the page shares
-
-/** A catapult's parts, from where it stands, which way it faces and where its arm is */
-export const catGeometry = (x, dir, arm) => {
-	const L = (lx, ly) => [x + lx * dir, GROUND + ly];
-	const p = L(0, CAT_PIV);
-	const armEnd = a => [p[0] + Math.cos(a) * CAT_ARM * dir, p[1] + Math.sin(a) * CAT_ARM];
-	const back = [p[0] - Math.cos(arm) * 14 * dir, p[1] - Math.sin(arm) * 14];
-
-	return {
-		L,
-		pivot: p,
-		launch: armEnd(CAT_FIRE - 0.35),
-		wheels: [L(-32, -13), L(32, -13)],
-		segs: [
-			[L(-48, -24), L(48, -24)],
-			[L(-28, -24), L(0, -64)],
-			[L(28, -24), L(0, -64)],
-			[back, armEnd(arm)],
-		],
-	};
-};
-
-/** How thick a beam is drawn across a span: as drawn, but never fatter than a plank */
-export const beamScale = (item, len) => Math.min(len, 9 / Math.max(item.wr, 0.01));
-
-/** The ground under x: a wall's top where there's wall, else the ground */
-export const groundAt = (walls, x) => {
-	for (const wl of walls) {
-		if (x >= wl.x0 && x < wl.x1) return GROUND - wl.cols[((x - wl.x0) / WALL.cw) | 0].length * WALL.ch;
-	}
-
-	return GROUND;
-};
-
-/** A fling's path from a catapult, as points, stopping at the ground or the far wall: for aiming */
-export const flingPath = (from, vx, vy, walls) => {
-	const out = [];
-	let [x, y] = from;
-
-	for (let i = 0; i < 200; i++) {
-		vy += GRAV / 60;
-		x += vx / 60;
-		y += vy / 60;
-		if (y > GROUND || x < 0 || x > W) break;
-		if (y > groundAt(walls, x) && (x > walls[1].x0 ? vx > 0 : vx < 0)) break;
-		out.push([x, y]);
-	}
-
-	return out;
-};
-
-/** A fling's speed, held to what a catapult can do */
-export const holdFling = (vx, vy) => {
-	const m = Math.hypot(vx, vy);
-
-	return m > MOST_FLING ? [(vx * MOST_FLING) / m, (vy * MOST_FLING) / m] : [vx, vy];
-};
+// The field's geometry, from field.js, for whoever imports the battle
+export * from './field.js';
 
 // ---------------------------------------------------------------- bodies
 
@@ -149,10 +82,14 @@ class Body {
 		this.owner = null;
 		this.squash = 1;
 		this.still = 0;
+		// Where on the field's depth it lies
+		this.z = 0;
 	}
 
 	split(mask) {
 		const g = new Body(this.w, this.ref, this.team, this.flip, this.s);
+
+		g.z = this.z;
 
 		g.j = this.j.map(p => ({ ...p }));
 		for (let b = 0; b < 10; b++) {
@@ -203,7 +140,7 @@ class Body {
 			const p = this.j[st.j];
 			const pulse = 0.5 + 0.5 * Math.sin(w.time * 13 + st.ph);
 
-			if (Math.random() < Math.min(1, st.t * 0.6) * pulse * 0.5) w.spray(p.x, p.y, 4, st.dx, st.dy, 0.12, 90 + st.t * 70);
+			if (Math.random() < Math.min(1, st.t * 0.6) * pulse * 0.5) w.spray(p.x, p.y, 4, st.dx, st.dy, 0.12, 90 + st.t * 70, this.z);
 		}
 		if (!this.kin) this.sim();
 	}
@@ -263,6 +200,8 @@ class Body {
 		const ang = Math.atan2(h.y - e.y, h.x - e.x) + this.wOff * this.flip;
 		const pr = new Prop(w, wp.ref, h.x + Math.cos(ang) * L * 0.5, h.y + Math.sin(ang) * L * 0.5, L, L, 'steel', 0.5, 1.7);
 
+		pr.z = this.z;
+
 		pr.a = ang;
 		pr.blood = wp.blood;
 		pr.kick((h.x - h.px) * 60 + rand(-60, 60), (h.y - h.py) * 60 - rand(60, 160));
@@ -286,6 +225,7 @@ class Body {
 			id: this.id,
 			r: [this.ref.a, this.ref.i],
 			t: this.team,
+			z: Math.round(this.z),
 			s: Math.round(this.s * 10) / 10,
 			f: this.flip,
 			q: Math.round(this.squash * 100) / 100,
@@ -312,8 +252,13 @@ class Stickman {
 		this.body = new Body(w, w.pickArt(team, 'stickmen'), team, this.face, SM_H * rand(0.9, 1.1));
 		this.body.owner = this;
 		this.body.weapon = { ref: w.pickArt(team, 'swords'), blood: 0 };
-		this.home = homeX(team, k);
+		const home = homeOf(team, k);
+
+		this.home = home.x;
+		this.homeZ = home.z;
 		this.x = this.home + rand(-4, 4);
+		this.z = clamp(this.homeZ + rand(-4, 4), 0, DEPTH);
+		this.body.z = this.z;
 		// What he's been told: stay home, crew a catapult (his post), hold by the wall, or charge
 		this.order = 'idle';
 		this.post = null;
@@ -353,6 +298,11 @@ class Stickman {
 		return this.armed() ? this.w.itemOf(this.body.weapon.ref).stats : FIST;
 	}
 
+	// How much his weapon slows his walk: nothing for a light one, a good deal for a great clunking one
+	burden() {
+		return this.armed() ? clamp(1.12 - 0.16 * this.stats().weight, 0.55, 1) : 1;
+	}
+
 	reach() {
 		return this.armed() ? this.stats().reach * 0.8 + 10 : 22;
 	}
@@ -364,12 +314,52 @@ class Stickman {
 		return this.team === 0 ? wl.x1 + 40 + this.slot * 90 : wl.x0 - 40 - this.slot * 90;
 	}
 
+	// And how far back he stands there: the side's line spread across the field's depth
+	holdZ() {
+		return 12 + ((this.homeZ * 7 + this.slot * DEPTH) % (DEPTH - 24));
+	}
+
 	// Where he stands crewing his catapult: behind it, beside whoever crews it already
 	crewX() {
 		const cat = this.post;
 		const mates = this.w.stickmen.filter(s => s.post === cat && s.order === 'crew' && s.alive());
 
 		return cat.x - cat.dir * (44 + Math.max(0, mates.indexOf(this)) * 13);
+	}
+
+	// Where he stands repairing: inside his own wall, or beside the catapult he's mending, apart from the others at it
+	repairSpot() {
+		const post = this.post;
+		const mates = this.w.stickmen.filter(s => s.post === post && s.order === 'repair' && s.alive());
+		const at = Math.max(0, mates.indexOf(this));
+
+		if (post.isWall) {
+			const inside = this.team === 0 ? post.x0 - 16 : post.x1 + 16;
+
+			return { x: inside - (this.team === 0 ? 1 : -1) * (at % 2) * 14, z: clamp(20 + at * 37, 0, DEPTH) };
+		}
+
+		return { x: post.x + post.dir * 34, z: clamp(post.z + (at - 1) * 14, 0, DEPTH) };
+	}
+
+	// At his place by what he's repairing, close enough to work on it
+	atRepair() {
+		const spot = this.repairSpot();
+
+		return Math.abs(this.x - spot.x) < 14 && Math.abs(this.z - spot.z) < 10;
+	}
+
+	// Crew stand beside their catapult's depth, a little apart
+	crewZ() {
+		const cat = this.post;
+		const mates = this.w.stickmen.filter(s => s.post === cat && s.order === 'crew' && s.alive());
+
+		return clamp(cat.z + (Math.max(0, mates.indexOf(this)) - 1) * 12, 0, DEPTH);
+	}
+
+	// How far away another is across the field, depth counting double: men cross the field slower than they march it
+	far(other) {
+		return Math.hypot(other.x - this.x, (other.z - this.z) * 2);
 	}
 
 	// Crewing his catapult now: told to, and standing at his place by it
@@ -383,7 +373,7 @@ class Stickman {
 		for (const s of this.w.stickmen) {
 			if (s.team === this.team || !s.alive()) continue;
 
-			const d = Math.abs(s.x - this.x);
+			const d = this.far(s);
 
 			if (d < bd) {
 				bd = d;
@@ -400,23 +390,17 @@ class Stickman {
 		return this.w.walls[1 - this.team];
 	}
 
-	// The enemy wall stops us unless the next column is at most one brick above our footing
+	// The enemy's stones stop us unless what's ahead is at most about one stone above our footing; then it's hacked at
 	wallBlock(dir) {
-		const ew = this.enemyWall(), fx = this.x + dir * 7;
+		const fx = this.x + dir * 7;
+		const ahead = GROUND - this.w.masonry.groundOf(1 - this.team, fx);
 
-		if (fx < ew.x0 || fx >= ew.x1) return null;
-
-		const c = ((fx - ew.x0) / WALL.cw) | 0;
-
-		return ew.cols[c].length * WALL.ch > this.yOff + WALL.ch * 1.1 ? { wall: ew, c } : null;
+		return ahead > this.yOff + WALL.ch * 1.1 ? { x: fx + dir * 6 } : null;
 	}
 
+	// How high he stands: on top of whatever enemy stones are under him
 	footing() {
-		const ew = this.enemyWall();
-
-		if (this.x < ew.x0 || this.x >= ew.x1) return 0;
-
-		return ew.cols[((this.x - ew.x0) / WALL.cw) | 0].length * WALL.ch;
+		return GROUND - this.w.masonry.groundOf(1 - this.team, this.x);
 	}
 
 	update(dt) {
@@ -457,32 +441,49 @@ class Stickman {
 		this.cd -= dt;
 		this.stag = Math.max(0, this.stag - dt);
 
-		let move = 0, want = null;
+		let move = 0, want = null, goalZ = this.z;
 		const R = this.reach(), tg = this.target;
 		const forward = this.team === 0 ? 1 : -1;
 
 		if (tg && tg.alive()) {
 			const dx = tg.x - this.x, adx = Math.abs(dx);
+			const lined = Math.abs(tg.z - this.z) < LANE;
 
+			goalZ = tg.z;
 			this.face = dx >= 0 ? 1 : -1;
 			if (adx > R) move = this.face;
 			else if (adx < 9) move = -this.face;
-			if (adx <= R + 4) want = { type: 'sm' };
+			if (adx <= R + 4 && lined) want = { type: 'sm' };
 		} else if (this.order !== 'charge') {
 			if (this.order === 'crew' && (!this.post || this.post.dead)) this.order = 'idle';
 
-			const spot = this.order === 'hold' ? this.holdX() : this.order === 'crew' ? this.crewX() : this.home;
+			const crew = this.order === 'crew', hold = this.order === 'hold', repair = this.order === 'repair';
+			const fix = repair && this.repairSpot();
+			let spot = this.home;
+
+			if (hold) spot = this.holdX();
+			else if (crew) spot = this.crewX();
+			else if (repair) spot = fix.x;
+
 			const dx = spot - this.x;
 
+			goalZ = hold ? this.holdZ() : crew ? this.crewZ() : repair ? fix.z : this.homeZ;
 			if (Math.abs(dx) > 6) move = Math.sign(dx);
 			this.face = move || forward;
+			// At his place, a repairer hammers away at it, facing it
+			if (repair && !move && this.atRepair()) {
+				const post = this.post;
+
+				this.face = (post.isWall ? (post.x0 + post.x1) / 2 : post.x) >= this.x ? 1 : -1;
+				if (this.w.needsRepair(post)) want = { type: 'fix', post };
+			}
 		} else {
 			let cat = null, cd = Infinity;
 
 			for (const c of w.cats) {
 				if (c.team === this.team || c.dead) continue;
 
-				const d = Math.abs(c.x - this.x);
+				const d = this.far(c);
 
 				if (d < cd) {
 					cd = d;
@@ -492,13 +493,15 @@ class Stickman {
 			if (cat) {
 				const dx = cat.x - this.x;
 
+				goalZ = cat.z;
 				this.face = Math.sign(dx) || 1;
 				if (Math.abs(dx) > R + 28) move = this.face;
-				else want = { type: 'cat', cat };
+				else if (Math.abs(cat.z - this.z) < LANE * 2) want = { type: 'cat', cat };
 			} else {
 				const gx = w.spawnX[1 - this.team] - forward * (30 + this.slot * 60);
 				const dx = gx - this.x;
 
+				goalZ = this.holdZ();
 				if (Math.abs(dx) > 8) move = Math.sign(dx);
 				this.face = move || forward;
 			}
@@ -508,21 +511,24 @@ class Stickman {
 
 			if (bl) {
 				move = 0;
-				if (!want) want = { type: 'wall', wall: bl.wall, c: bl.c };
+				if (!want) want = { type: 'wall', x: bl.x };
 			}
 		}
 
 		if (want && !this.atk && this.cd <= 0 && this.stag <= 0 && this.hasArm()) this.startAttack(want);
+
+		// A heavy weapon slows the man carrying it, as well as his swing
+		const pace = this.speed * dt * (this.hp < 35 ? 0.7 : 1) * this.burden();
+		const dz = clamp(goalZ, 0, DEPTH) - this.z;
+
 		if (this.atk) {
 			move = 0;
 			this.stepAttack(dt);
-		}
+		} else if (Math.abs(dz) > 2) this.z += clamp(dz, -pace * 0.7, pace * 0.7);
 
-		this.moving = move !== 0;
-		if (this.moving) {
-			this.x += move * this.speed * dt * (this.hp < 35 ? 0.7 : 1);
-			this.phase += dt * this.speed * 0.11;
-		}
+		this.moving = move !== 0 || (!this.atk && Math.abs(dz) > 2);
+		if (move) this.x += move * pace;
+		if (this.moving) this.phase += dt * this.speed * 0.11;
 		if (Math.abs(this.kb) > 1) {
 			if (!this.wallBlock(Math.sign(this.kb))) this.x += this.kb * dt;
 			this.kb *= Math.pow(0.004, dt);
@@ -559,19 +565,18 @@ class Stickman {
 			const dmg = this.stats().dmg;
 
 			if (a.want.type === 'wall') {
-				const col = a.want.wall.cols[a.want.c];
+				// At chest height, or lower down if there's nothing there
+				const enemy = 1 - this.team, chest = GROUND - this.yOff - SM_H * 0.5;
 
-				if (col.length) {
-					const r = clamp(((this.yOff + SM_H * 0.5) / WALL.ch) | 0, 0, col.length - 1);
-
-					w.hurtBrick(a.want.wall, a.want.c, r, dmg * 0.03);
-					w.cleanWall(a.want.wall, this.face * 120, -60);
-					w.dust(a.want.wall.x0 + (a.want.c + 0.5) * WALL.cw, GROUND - (r + 0.5) * WALL.ch, 4);
+				if (w.masonry.hack(enemy, a.want.x, chest, dmg * 0.035) || w.masonry.hack(enemy, a.want.x, GROUND - this.yOff - 10, dmg * 0.035)) {
+					w.dust(a.want.x, chest, 4, 'stone', this.z);
 					w.sound('thud');
 				}
 			} else if (a.want.type === 'cat' && !a.want.cat.dead) {
 				a.want.cat.damage(dmg * 0.35);
 				w.sound('thud');
+			} else if (a.want.type === 'fix') {
+				w.repair(a.want.post, this);
 			}
 		}
 		if (a.t >= 1) {
@@ -669,6 +674,7 @@ class Stickman {
 			p.y = ny;
 		}
 		b.flip = this.face;
+		b.z = this.z;
 	}
 
 	weaponSeg() {
@@ -716,7 +722,7 @@ class Stickman {
 			const o = body.owner;
 
 			if (o && !o.dead && o.team === this.team) continue;
-			if (Math.abs(body.anchor().x - this.x) > 150) continue;
+			if (Math.abs(body.anchor().x - this.x) > 150 || Math.abs(body.z - this.z) > LANE * 1.3) continue;
 
 			let n = a.bodies.get(body.id) || 0;
 
@@ -761,7 +767,7 @@ class Stickman {
 
 		this.hp -= dmg;
 		this.bleed = Math.min(25, this.bleed + st.bleed * 0.6);
-		w.spray(hx, hy, 6 + dmg * 0.5 + st.bleed * 3, dir, -0.35, 0.35, 160 + dmg * 3);
+		w.spray(hx, hy, 6 + dmg * 0.5 + st.bleed * 3, dir, -0.35, 0.35, 160 + dmg * 3, this.z);
 		w.sound('hit');
 		this.kb += dir * (40 + st.knock * 70);
 		this.stag = 0.25;
@@ -835,6 +841,7 @@ class Prop {
 		this.still = 0;
 		this.round = false;
 		this.blood = 0;
+		this.z = 0;
 		this.r = Math.max(Math.abs(sx), Math.abs(sy)) * 0.5;
 
 		const h = w.itemOf(ref).shape.hull, step = Math.max(1, Math.ceil(h.length / 14));
@@ -852,13 +859,6 @@ class Prop {
 		this.x += this.vx * dt;
 		this.y += this.vy * dt;
 		this.a += this.va * dt;
-
-		const wl = w.wallAt(this.x);
-
-		if (wl && this.y > w.groundAt(this.x) + 4) {
-			this.x = this.x - wl.x0 < wl.x1 - this.x ? wl.x0 - 1 : wl.x1 + 1;
-			this.vx *= -0.3;
-		}
 
 		const c = Math.cos(this.a), s = Math.sin(this.a);
 		let pen = 0, cx = this.x;
@@ -901,6 +901,7 @@ class Prop {
 		return {
 			id: this.id,
 			r: [this.ref.k, this.ref.a, this.ref.i],
+			z: Math.round(this.z),
 			x: Math.round(this.x),
 			y: Math.round(this.y),
 			a: Math.round(this.a * 100) / 100,
@@ -914,11 +915,11 @@ class Prop {
 }
 
 class Proj extends Prop {
-	constructor(w, ref, x, y, vx, vy, team) {
+	constructor(w, ref, x, y, vx, vy, team, z = 0) {
 		const item = w.itemOf(ref);
 
 		super(w, ref, x, y, item.radius * 2, item.radius * 2, 'ammo', 0, 2);
-		Object.assign(this, { team, vx, vy });
+		Object.assign(this, { team, vx, vy, z });
 		this.va = rand(-9, 9);
 		this.rad = item.radius;
 		this.spiky = item.spiky;
@@ -928,103 +929,47 @@ class Proj extends Prop {
 		this.spent = false;
 	}
 
+	// It flies as a heavy round body among the stones (masonry.js), which knocks them about and is knocked back; here
+	// it's read back each step to hit catapults and men
 	step(dt) {
-		const w = this.w, N = 3, h = dt / N;
-
-		this.life += dt;
-		for (let k = 0; k < N; k++) {
-			this.vy += GRAV * h;
-
-			const ox = this.x, oy = this.y;
-
-			this.x += this.vx * h;
-			this.y += this.vy * h;
-			this.a += this.va * h;
-
-			const sp = Math.hypot(this.vx, this.vy);
-
-			for (const wl of w.walls) if (wl.team !== this.team && this.hitWall(wl, ox, oy, sp)) break;
-			for (const c of w.cats) {
-				if (c.dead || c.team === this.team || this.hitSet.has(c) || sp < 120) continue;
-				if (Math.abs(this.x - c.x) < 52 && this.y > GROUND - 75) {
-					this.hitSet.add(c);
-					c.damage(sp * this.mass * 0.07);
-					this.vx *= -0.3;
-					this.vy *= 0.4;
-					w.sound('crash');
-					w.shake(4);
-				}
-			}
-			if (this.y + this.rad > GROUND) {
-				this.y = GROUND - this.rad;
-				if (this.vy > 80) {
-					w.dust(this.x, GROUND, 6);
-					w.sound('thud');
-					w.shake(Math.min(6, this.vy / 150));
-				}
-				this.vy = -this.vy * 0.3;
-				this.vx *= 0.72;
-				this.va = this.vx / this.rad;
-			}
-			if (sp > 130) this.hitBodies(sp);
-		}
-
-		const sp = Math.hypot(this.vx, this.vy);
-
-		if ((sp < 30 && this.y >= GROUND - this.rad - 1) || this.life > 12 || this.x < -100 || this.x > W + 100) {
-			this.spent = true;
-			this.round = true;
-			if (this.x > -50 && this.x < W + 50) w.props.push(this);
-		}
-	}
-
-	hitWall(wl, ox, oy, sp) {
 		const w = this.w;
 
-		if (this.x + this.rad * 0.6 < wl.x0 || this.x - this.rad * 0.6 >= wl.x1) return false;
+		this.body ??= w.masonry.addBoulder(this.x, this.y, this.vx, this.vy, this.rad, this.mass);
+		Object.assign(this, w.masonry.read(this.body));
+		this.life += dt;
 
-		const c = clamp(((this.x - wl.x0) / WALL.cw) | 0, 0, WALL.cols - 1);
-		const col = wl.cols[c];
+		const sp = Math.hypot(this.vx, this.vy), was = [this.vx, this.vy];
 
-		if (!col.length) return false;
-
-		const top = GROUND - col.length * WALL.ch;
-
-		if (this.y + this.rad * 0.6 < top) return false;
-
-		const r = clamp(((GROUND - this.y) / WALL.ch) | 0, 0, col.length - 1);
-		const e = sp * this.mass, before = col.length;
-
-		if (e > 60) w.wallImpact(wl, c, r, e, this.vx, this.vy);
-
-		const broke = col.length < before;
-		const fromSide = oy + this.rad * 0.6 >= top;
-
-		this.x = ox;
-		this.y = oy;
-		if (broke && e > 300) {
-			this.vx *= 0.5;
-			this.vy *= 0.5;
-		} else if (fromSide) {
-			this.vx = -this.vx * 0.25;
-			this.vy *= 0.6;
-		} else {
-			this.vy = -Math.abs(this.vy) * 0.3;
-			this.vx *= 0.6;
+		for (const c of w.cats) {
+			if (c.dead || c.team === this.team || this.hitSet.has(c) || sp < 120 || Math.abs(c.z - this.z) > LANE * 3) continue;
+			if (Math.abs(this.x - c.x) < 52 && this.y > GROUND - 75) {
+				this.hitSet.add(c);
+				c.damage(sp * this.mass * 0.07);
+				this.vx *= -0.3;
+				this.vy *= 0.4;
+				w.sound('crash');
+				w.shake(4);
+			}
 		}
-		if (e > 60) {
-			w.sound('crash');
-			w.shake(Math.min(8, e / 150));
+		if (sp > 130) this.hitBodies(sp);
+		// What it hit took some of its speed
+		if (this.vx !== was[0] || this.vy !== was[1]) w.masonry.setSpeed(this.body, this.vx, this.vy);
+		if ((sp < 30 && this.y >= w.groundAt(this.x) - this.rad - 2) || this.life > 12 || this.x < -100 || this.x > W + 100) {
+			this.spent = true;
+			this.round = true;
+			w.masonry.remove(this.body);
+			this.body = null;
+			this.va = this.vx / this.rad;
+			if (this.x > -50 && this.x < W + 50) w.props.push(this);
 		}
-
-		return true;
 	}
 
 	hitBodies(sp) {
 		const w = this.w, r = this.rad;
 
 		for (const s of w.stickmen) {
-			if (s.dead || this.hitSet.has(s) || Math.abs(s.x - this.x) > 60) continue;
+			// A boulder comes down a few lanes wide: it tumbles and splashes
+			if (s.dead || this.hitSet.has(s) || Math.abs(s.x - this.x) > 60 || Math.abs(s.z - this.z) > LANE * 2.5) continue;
 
 			const j = s.body.j;
 			let bd = Infinity;
@@ -1043,7 +988,7 @@ class Proj extends Prop {
 			}
 		}
 		for (const b of w.bodies) {
-			if (b.kin) continue;
+			if (b.kin || Math.abs(b.z - this.z) > LANE * 2.5) continue;
 			for (const p of b.j) {
 				if (Math.hypot(p.x - this.x, p.y - this.y) < r + 4) {
 					p.px = p.x - this.vx * DT * 0.6;
@@ -1053,7 +998,7 @@ class Proj extends Prop {
 			}
 			if (sp > 320 && !this.hitSet.has(b) && Math.hypot(b.anchor().x - this.x, b.anchor().y - this.y) < r + 25) {
 				this.hitSet.add(b);
-				w.spray(this.x, this.y, 10, this.vx / sp, -0.5, 0.5, 220);
+				w.spray(this.x, this.y, 10, this.vx / sp, -0.5, 0.5, 220, b.z);
 
 				const bones = b.owned.map((o, i) => (o ? i : -1)).filter(i => i > 0);
 
@@ -1061,7 +1006,8 @@ class Proj extends Prop {
 			}
 		}
 		for (const p of w.props) {
-			if (p !== this && Math.hypot(p.x - this.x, p.y - this.y) < r + p.r) p.kick(this.vx * 0.5, -Math.abs(this.vy) * 0.3 - 100);
+			if (p !== this && Math.abs(p.z - this.z) < LANE * 2.5 && Math.hypot(p.x - this.x, p.y - this.y) < r + p.r)
+				p.kick(this.vx * 0.5, -Math.abs(this.vy) * 0.3 - 100);
 		}
 	}
 
@@ -1070,7 +1016,7 @@ class Proj extends Prop {
 		const fromAbove = this.vy > 150 && this.y < s.body.j[2].y;
 
 		s.hp -= dmg;
-		w.spray(this.x, this.y, 20 + dmg * 0.4, this.vx / sp, this.vy / sp - 0.6, 0.5, 200 + sp * 0.3);
+		w.spray(this.x, this.y, 20 + dmg * 0.4, this.vx / sp, this.vy / sp - 0.6, 0.5, 200 + sp * 0.3, s.z);
 		this.blood = Math.min(1, this.blood + 0.35);
 		w.sound('squish');
 		w.shake(3);
@@ -1087,7 +1033,7 @@ class Proj extends Prop {
 		}
 		if (fromAbove && e > 350) {
 			s.body.squash = rand(0.25, 0.45);
-			w.bigSplat(s.x);
+			w.bigSplat(s.x, s.z);
 			s.hp = 0;
 		}
 		if (!s.dead && s.hp <= 0) s.die(ix, -iy);
@@ -1109,8 +1055,8 @@ class Proj extends Prop {
 // ---------------------------------------------------------------- catapults
 
 class Catapult {
-	constructor(w, team, x) {
-		Object.assign(this, { w, team, x });
+	constructor(w, team, x, z) {
+		Object.assign(this, { w, team, x, z });
 		this.dir = team === 0 ? 1 : -1;
 		this.hp = 100;
 		this.ammo = AMMO;
@@ -1118,6 +1064,8 @@ class Catapult {
 		this.fireT = -1;
 		this.pend = null;
 		this.dead = false;
+		// How far its rebuilding has come since it was smashed, 0 to 1
+		this.rebuilt = 0;
 		this.shk = 0;
 		this.arm = CAT_REST;
 		this.beams = [0, 1, 2, 3].map(() => w.pickArt(team, 'beams'));
@@ -1165,7 +1113,7 @@ class Catapult {
 			if (this.pend && this.fireT >= 0.13) {
 				const [lx, ly] = this.geometry().launch;
 
-				this.w.projs.push(new Proj(this.w, this.load, lx, ly, this.pend[0], this.pend[1], this.team));
+				this.w.projs.push(new Proj(this.w, this.load, lx, ly, this.pend[0], this.pend[1], this.team, this.z));
 				this.load = this.w.pickArt(this.team, 'ammo');
 				this.pend = null;
 				// One loads it, each more of its crew (up to its most) loads it faster
@@ -1179,7 +1127,7 @@ class Catapult {
 		if (this.dead) return;
 		this.hp -= d;
 		this.shk = 0.25;
-		this.w.dust(this.x, GROUND - 40, 5, 'wood');
+		this.w.dust(this.x, GROUND - 40, 5, 'wood', this.z);
 		if (this.hp <= 0) this.wreck();
 	}
 
@@ -1193,6 +1141,7 @@ class Catapult {
 			const pr = new Prop(w, ref, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, len, beamScale(w.itemOf(ref), len), 'wood');
 
 			pr.a = Math.atan2(b[1] - a[1], b[0] - a[0]);
+			pr.z = this.z;
 			pr.kick(rand(-160, 160), rand(-380, -160));
 			w.props.push(pr);
 		});
@@ -1200,10 +1149,11 @@ class Catapult {
 			const pr = new Prop(w, this.wheels[i], x, y, 26, 26, 'stone');
 
 			pr.round = true;
+			pr.z = this.z;
 			pr.kick(rand(-200, 200), rand(-300, -100));
 			w.props.push(pr);
 		});
-		w.dust(this.x, GROUND - 40, 20, 'wood');
+		w.dust(this.x, GROUND - 40, 20, 'wood', this.z);
 		w.shake(8);
 		w.sound('crash');
 	}
@@ -1211,6 +1161,7 @@ class Catapult {
 	snapshot() {
 		return {
 			x: this.x,
+			z: this.z,
 			d: this.dir,
 			t: this.team,
 			hp: Math.round(this.hp),
@@ -1219,6 +1170,8 @@ class Catapult {
 			rl: Math.round((RELOAD / (1 + 0.5 * (Math.min(Math.max(this.crew(), 1), MOST_CREW) - 1))) * 10) / 10,
 			cr: this.crew(),
 			cw: this.crewing().length,
+			rp: this.w.stickmen.filter(s => s.order === 'repair' && s.post === this && s.alive()).length,
+			...(this.dead && { rb: Math.round(this.rebuilt * 100) / 100 }),
 			arm: Math.round(this.arm * 100) / 100,
 			dead: this.dead,
 			shk: this.shk > 0,
@@ -1248,8 +1201,16 @@ export class World {
 		this.bodies = [];
 		this.props = [];
 		this.projs = [];
-		this.walls = [this.makeWall(0, WALL_X[0]), this.makeWall(1, WALL_X[1])];
-		this.cats = CAT_X.flatMap((xs, team) => xs.map(x => new Catapult(this, team, x)));
+		this.walls = WALL_X.map((x0, team) => ({ team, x0, x1: x0 + WALL.cols * WALL.cw, isWall: true }));
+		this.masonry = new Masonry({
+			walls: this.walls,
+			pickArt: (team, kind) => this.pickArt(team, kind),
+			itemOf: ref => this.itemOf(ref),
+			onBreak: (brick, at) => this.rubble(brick, at),
+			onKnock: (x, y, impulse) => this.knocked(x, y, impulse),
+		});
+		this.knocks = 0;
+		this.cats = CAT_X.flatMap((xs, team) => xs.map((x, at) => new Catapult(this, team, x, CAT_Z[at])));
 		this.spawnX = [this.walls[0].x1 + 30, this.walls[1].x0 - 30];
 		this.stats = { kills: [0, 0], limbs: 0, heads: 0, blood: 0 };
 		this.time = 0;
@@ -1288,67 +1249,27 @@ export class World {
 		return this.arts[ref.a][ref.k][ref.i];
 	}
 
-	makeWall(team, x0) {
-		const cols = [];
-
-		for (let c = 0; c < WALL.cols; c++) {
-			const col = [];
-
-			for (let r = 0; r < WALL.rows; r++) {
-				col.push({
-					hp: 4,
-					max: 4,
-					st: this.pickArt(team, 'stones'),
-					rot: rand(-0.15, 0.15),
-					sx: rand(1.08, 1.22),
-					sy: rand(1.15, 1.3),
-					dy: 0,
-					vy: 0,
-					cr: [rand(0, TAU), rand(0, TAU)],
-				});
-			}
-			cols.push(col);
-		}
-
-		return { team, x0, x1: x0 + WALL.cols * WALL.cw, cols };
-	}
-
-	wallAt(x) {
-		for (const wl of this.walls) if (x >= wl.x0 && x < wl.x1) return wl;
-
-		return null;
-	}
-
+	// The top of whatever's at x: the ground, or stones piled there
 	groundAt(x) {
-		return groundAt(this.walls, x);
+		return this.masonry.groundAt(x);
 	}
 
+	// A ragdoll's joint kept out of the ground and the stones: landing on top if it came down onto them, stopped if it
+	// came at them from the side
 	collideJoint(p) {
 		const g = this.groundAt(p.x);
 
 		if (p.y <= g) return;
-		if (g < GROUND && p.py > g + 2) {
-			const wl = this.wallAt(p.x), c = ((p.x - wl.x0) / WALL.cw) | 0;
-			const cl = wl.x0 + c * WALL.cw, cr = cl + WALL.cw;
+		if (p.py <= this.groundAt(p.px) + 2) {
+			const vy = p.y - p.py;
 
-			if (p.px < cl) p.x = cl - 0.1;
-			else if (p.px >= cr) p.x = cr + 0.1;
-			else {
-				p.y = g;
-				p.py = g;
-			}
-
-			const g2 = this.groundAt(p.x);
-
-			if (p.y > g2) p.y = g2;
+			p.y = g;
+			p.py = g + vy * 0.3;
 
 			return;
 		}
-
-		const vy = p.y - p.py;
-
-		p.y = g;
-		p.py = g + vy * 0.3;
+		p.x = p.px;
+		p.y = Math.min(p.y, this.groundAt(p.x));
 	}
 
 	addBody(b) {
@@ -1371,6 +1292,15 @@ export class World {
 		const wanted = new Set(ids);
 		let men = this.stickmen.filter(s => s.team === team && s.alive() && wanted.has(s.body.id));
 
+		if (order === 'repair') {
+			const post = which === 'wall' ? this.walls[team] : this.cats.filter(c => c.team === team)[which];
+
+			if (!post) return 0;
+			for (const s of men) Object.assign(s, { order, post });
+			if (men.length) this.sound('thud');
+
+			return men.length;
+		}
 		if (order === 'crew') {
 			const cat = this.cats.filter(c => c.team === team)[which];
 
@@ -1384,6 +1314,35 @@ export class World {
 		if (men.length && (order === 'charge' || order === 'hold')) this.sound('deploy');
 
 		return men.length;
+	}
+
+	/** Whether a wall or catapult has anything for a repairer to do */
+	needsRepair(post) {
+		if (post.isWall) return this.masonry.needsRepair(post.team);
+
+		return post.dead || post.hp < 100;
+	}
+
+	/**
+	 * One hammer blow at a wall or catapult: a cracked stone patched, or a new one (of the side's drawings) stacked onto
+	 * the lowest broken column; a damaged catapult mended, or a smashed one rebuilt a little more, until it stands again
+	 * @param {object} post - The wall or catapult
+	 * @param {object} man - Who's hammering
+	 */
+	repair(post, man) {
+		if (post.isWall) {
+			const at = this.masonry.repair(post.team);
+
+			if (at) this.dust(at.x, at.y, 3, 'stone', man.z);
+		} else if (post.dead) {
+			post.rebuilt += REBUILD_PER_BLOW;
+			if (post.rebuilt >= 1) Object.assign(post, { dead: false, rebuilt: 0, hp: 50, arm: CAT_REST, cd: RELOAD, fireT: -1 });
+			this.dust(post.x, GROUND - 30, 3, 'wood', post.z);
+		} else {
+			post.hp = Math.min(100, post.hp + MEND_PER_BLOW);
+			this.dust(post.x, GROUND - 30, 3, 'wood', post.z);
+		}
+		this.sound('thud');
 	}
 
 	// One man from home to the fight: the nearest the wall of those not crewing, a little apart from the last one sent
@@ -1425,7 +1384,7 @@ export class World {
 		}
 		body.stumps.push({ j: pj, t: 3.5, ph: rand(0, TAU), dx, dy });
 		g.stumps.push({ j: pj, t: 2, ph: rand(0, TAU), dx: -dx, dy: -dy });
-		this.spray(A.x, A.y, 30, dx, dy, 0.4, 260);
+		this.spray(A.x, A.y, 30, dx, dy, 0.4, 260, body.z);
 		this.addBody(g);
 		g.dropWeapon();
 		body.wake();
@@ -1436,55 +1395,33 @@ export class World {
 	}
 
 	corpseHit(body, b, st, dir, hx, hy) {
-		this.spray(hx, hy, 4 + st.bleed * 2, dir, -0.3, 0.4, 180);
+		this.spray(hx, hy, 4 + st.bleed * 2, dir, -0.3, 0.4, 180, body.z);
 		for (const k of BONES[b]) body.j[k].px -= dir * 1.5;
 		body.wake();
 		this.sound('hit');
 		if (Math.random() < st.cut * 0.5) this.cut(body, b, dir * 1.5);
 	}
 
-	hurtBrick(wl, c, r, dmg) {
-		const col = wl.cols[c];
+	// A stone cracked apart: two lumps of it fly off as rubble, with dust and a crash
+	rubble(brick, { x, y, a, vx, vy }) {
+		for (const side of [-1, 1]) {
+			const pr = new Prop(this, brick.ref, x + side * 6, y, brick.sx * 0.55, brick.sy * 0.55, 'hurt');
 
-		if (col && r >= 0 && r < col.length) col[r].hp -= dmg;
-	}
-
-	wallImpact(wl, c, r, e, vx, vy) {
-		const d = e / 220;
-
-		this.hurtBrick(wl, c, r, d);
-		for (const [dc, dr] of [
-			[1, 0],
-			[-1, 0],
-			[0, 1],
-			[0, -1],
-		])
-			this.hurtBrick(wl, c + dc, r + dr, d * 0.45);
-		this.cleanWall(wl, vx, vy);
-		this.dust(wl.x0 + (c + 0.5) * WALL.cw, GROUND - (r + 0.5) * WALL.ch, 10);
-	}
-
-	cleanWall(wl, vx, vy) {
-		for (let c = 0; c < WALL.cols; c++) {
-			const col = wl.cols[c];
-
-			for (let r = col.length - 1; r >= 0; r--) if (col[r].hp <= 0) this.knockBrick(wl, c, r, vx, vy);
+			pr.a = a + side * 0.5;
+			pr.z = brick.loose ? brick.z : rand(0, DEPTH);
+			pr.kick(vx * 0.5 + side * rand(40, 140), vy * 0.4 - rand(60, 200));
+			this.props.push(pr);
 		}
+		this.dust(x, y, 10, 'stone', brick.loose ? brick.z : DEPTH / 2);
+		this.sound('crash');
 	}
 
-	knockBrick(wl, c, r, vx, vy) {
-		const col = wl.cols[c], br = col[r];
-		const x = wl.x0 + (c + 0.5) * WALL.cw, y = GROUND - (r + 0.5) * WALL.ch - br.dy;
-
-		col.splice(r, 1);
-		for (let k = r; k < col.length; k++) col[k].dy += WALL.ch;
-
-		const pr = new Prop(this, br.st, x, y - 4, WALL.cw * br.sx, WALL.ch * br.sy, 'hurt');
-
-		pr.a = br.rot;
-		pr.kick(vx * 0.35 + rand(-80, 80), vy * 0.3 - rand(50, 200));
-		this.props.push(pr);
-		this.dust(x, y, 8);
+	// Something knocked hard against the stones: dust, a sound, a shake (a few a step at most)
+	knocked(x, y, impulse) {
+		if (this.knocks++ > 3) return;
+		this.dust(x, y, Math.min(10, impulse / 4), 'stone', DEPTH / 2);
+		this.sound(impulse > 30 ? 'crash' : 'thud');
+		this.shake(Math.min(8, impulse / 15));
 	}
 
 	// What a page plays and the server doesn't keep: blood flying, dust, sounds, a shake, a splat
@@ -1492,20 +1429,20 @@ export class World {
 		if (this.events.length < 400) this.events.push(event);
 	}
 
-	spray(x, y, n, dx, dy, spread, speed) {
+	spray(x, y, n, dx, dy, spread, speed, z = 0) {
 		n = Math.min(n | 0, 90);
 		if (n <= 0) return;
 		this.stats.blood += n;
-		this.emit({ e: 'blood', x: Math.round(x), y: Math.round(y), n, a: Math.round(Math.atan2(dy, dx) * 100) / 100, sp: spread, v: Math.round(speed) });
+		this.emit({ e: 'blood', x: Math.round(x), y: Math.round(y), z: Math.round(z), n, a: Math.round(Math.atan2(dy, dx) * 100) / 100, sp: spread, v: Math.round(speed) });
 	}
 
-	dust(x, y, n, color = 'stone') {
-		this.emit({ e: 'dust', x: Math.round(x), y: Math.round(y), n, c: color });
+	dust(x, y, n, color = 'stone', z = DEPTH / 2) {
+		this.emit({ e: 'dust', x: Math.round(x), y: Math.round(y), z: Math.round(z), n, c: color });
 	}
 
-	bigSplat(x) {
-		this.emit({ e: 'splat', x: Math.round(x) });
-		this.spray(x, GROUND - 5, 60, 0, -1, 0.45, 380);
+	bigSplat(x, z = 0) {
+		this.emit({ e: 'splat', x: Math.round(x), z: Math.round(z) });
+		this.spray(x, GROUND - 5, 60, 0, -1, 0.45, 380, z);
 	}
 
 	sound(name) {
@@ -1533,6 +1470,8 @@ export class World {
 
 	step(dt) {
 		this.time += dt;
+		this.knocks = 0;
+		this.masonry.step(dt);
 		for (const s of this.stickmen) s.update(dt);
 		this.stickmen = this.stickmen.filter(s => !s.dead);
 		this.separate(dt);
@@ -1543,19 +1482,6 @@ export class World {
 		this.projs = this.projs.filter(p => !p.spent);
 		for (const p of this.props) p.update(dt);
 		if (this.props.length > 140) this.props.splice(0, this.props.length - 140);
-		for (const wl of this.walls) {
-			for (const col of wl.cols) {
-				for (const br of col) {
-					if (br.dy <= 0) continue;
-					br.vy += 1400 * dt;
-					br.dy -= br.vy * dt;
-					if (br.dy <= 0) {
-						br.dy = 0;
-						br.vy = 0;
-					}
-				}
-			}
-		}
 		this.runAI(dt);
 		this.checkOver(dt);
 	}
@@ -1572,13 +1498,17 @@ export class World {
 
 				if (b.team !== a.team || !b.alive() || b.atk) continue;
 
-				const d = b.x - a.x;
+				const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz * 1.5);
 
-				if (Math.abs(d) < 11) {
-					const push = (d >= 0 ? 1 : -1) * 25 * dt;
+				// Too close: nudged apart, mostly across the field, so a crowd spreads out instead of stacking up
+				if (d < 14) {
+					const along = (dx >= 0 ? 1 : -1) * 12 * dt;
+					const across = (dz >= 0 ? 1 : -1) * 30 * dt;
 
-					a.x -= push;
-					b.x += push;
+					a.x -= along;
+					b.x += along;
+					a.z = clamp(a.z - across, 0, DEPTH);
+					b.z = clamp(b.z + across, 0, DEPTH);
 				}
 			}
 		}
@@ -1599,6 +1529,16 @@ export class World {
 				this.send(t);
 				ai.deploy = theirs > mine ? rand(0.6, 1.4) : rand(1.4, 3);
 			}
+
+			// A wall knocked about, or a catapult smashed while it still had ammo, gets someone from home to fix it
+			const repairing = this.stickmen.filter(s => s.team === t && s.alive() && s.order === 'repair').length;
+			const home = this.stickmen.filter(s => s.team === t && s.alive() && s.order === 'idle');
+			const broken =
+				this.masonry.missing(t) >= 4
+					? 'wall'
+					: this.cats.filter(c => c.team === t).findIndex(c => c.dead && c.ammo > 0);
+
+			if (broken !== -1 && repairing < 2 && home.length > 2) this.command(t, [home[0].body.id], 'repair', broken);
 
 			// A catapult left with nobody to fire it gets someone from home while it has ammo
 			for (const c of this.cats) {
@@ -1705,10 +1645,10 @@ export class World {
 				x0: wl.x0,
 				x1: wl.x1,
 				team: wl.team,
-				cols: wl.cols.map(col =>
-					col.map(br => [br.st.a, br.st.i, Math.round((br.hp / br.max) * 100) / 100, br.rot, br.sx, br.sy, Math.round(br.dy), ...br.cr].map(v => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : v))),
-				),
+				rp: this.stickmen.filter(s => s.order === 'repair' && s.post === wl && s.alive()).length,
 			})),
+			// Every stone: [id, team, art side, art index, x, y, angle, health, x scale, y scale, depth if loose else -1, cracks]
+			bricks: this.masonry.snapshot(),
 			fighting: [this.fighting(0), this.fighting(1)],
 			army: [this.aliveCount(0), this.aliveCount(1)],
 			kills: [...this.stats.kills],

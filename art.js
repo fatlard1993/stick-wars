@@ -359,9 +359,9 @@ export function checkBeam(strokes) {
 export function checkSword(strokes) {
   if (allPts(strokes).length < 4) return fail('Draw a weapon first.');
   const { rs, P } = axisFrame(strokes);
-  if (P.len < 140) return fail('Longer! A weapon needs some length.');
+  // Any shape will do as a weapon: what it costs is speed, not a refusal (weaponStats)
+  if (P.len < 100) return fail('Bigger! A weapon needs some size to it.');
   const wid = Math.max(P.wid, 6);
-  if (P.len / wid < 2.2) return fail('Too stubby. Weapons are longer than they are wide.');
   // Grip is the lower end; for a sideways weapon, the left end.
   const yMin = P.cy + P.ay * P.minA, yMax = P.cy + P.ay * P.maxA;
   const xMin = P.cx + P.ax * P.minA, xMax = P.cx + P.ax * P.maxA;
@@ -382,12 +382,13 @@ export function weaponStats(len, wid, ink, turns) {
   const wr = wid / len;
   const inkR = ink / len;
   const serr = clamp((turns - 6) / 18, 0, 1);
-  const weight = clamp(0.35 + wr * 2.4 + Math.max(0, inkR - 2) * 0.12 + lr * 0.45, 0.35, 2.6);
+  const weight = clamp(0.35 + wr * 2.4 + Math.max(0, inkR - 2) * 0.12 + lr * 0.45, 0.35, 3.2);
   const s = {
     reach: 22 + 50 * lr,
     dmg: 12 + 19 * weight + 9 * lr,
     cut: clamp(0.3 + 0.55 * serr + 0.35 * (1 - clamp(wr * 4, 0, 1)) - 0.08 * (weight - 1), 0.05, 1),
-    swing: 0.36 + 0.2 * weight + 0.1 * lr,
+    // Big and clunky swings slow: a dagger flicks, a great slab of a club takes its time
+    swing: 0.32 + 0.32 * weight + 0.12 * lr,
     bleed: serr * 5 + 0.5,
     knock: weight,
     weight, serr, lr, wr,
