@@ -65,6 +65,8 @@ export default class Play extends View {
 				...options,
 				toolbar: {
 					heading: '',
+					// One row, even on a narrow phone: the game below gets the room
+					wrap: false,
 					left: [doodle('home', { title: 'Home', onPress: () => (window.location.href = '#/') }), status],
 					right: [
 						soundSwitch(sound),
@@ -143,7 +145,10 @@ export default class Play extends View {
 
 				side.className = t === team ? 'side me' : 'side';
 				side.style.color = ink;
-				side.append(icon('flag', { color: ink }), icon(who, { color: ink }));
+				const whoIcon = icon(who, { color: ink });
+
+				whoIcon.classList.add('side-who');
+				side.append(icon('flag', { color: ink }), whoIcon);
 				if (battle) {
 					const kills = count('sword', battle.kills[t], ink);
 

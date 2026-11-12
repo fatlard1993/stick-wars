@@ -41,6 +41,10 @@ const BUCKET = 4;
 const VIEW_TOP = GROUND - 330;
 // The smallest a stick man is let be drawn before the camera zooms in: about this many screen pixels per world unit
 const READABLE = 0.62;
+// How much of the field's length an upright phone's main view spans: a base and its wall, and some field
+const UPRIGHT_SPAN = 280;
+// Where an upright phone's view starts along the field (mirrored for green): over the army at home, its wall beside it
+const UPRIGHT_HOME = 390;
 // How far a pinch or the wheel zooms in, past the readable view
 const MOST_ZOOM = 2.4;
 
@@ -181,7 +185,6 @@ export default class BattleScreen extends Screen {
 		this.tops = new Float32Array(Math.ceil(W / BUCKET) + 1).fill(GROUND);
 
 		this.stage = new Stage({ appendTo: this });
-		this.turnPhone();
 		// The camera: where along the field it looks (null until placed over our side), and how far zoomed in
 		this.cam = { x: null, zoom: 1 };
 		this.lookAround();
@@ -499,54 +502,32 @@ export default class BattleScreen extends Screen {
 
 		if (!width || !height) return null;
 
-		const fit = Math.min(width / W, height / H);
-		const base = Math.max(fit, Math.min(READABLE, height / (H - VIEW_TOP)));
-		const scale = base * this.cam.zoom;
+		// A phone held upright: the whole field in a strip across the top, and under it a main view filling the rest,
+		// all of the world's height (the sky the arcs need) in it
+		const upright = height > width * 1.15 && width < 900;
+		const overview = upright ? { scale: width / W, top: VIEW_TOP + 40, h: Math.round(((H - VIEW_TOP - 40) * width) / W) } : null;
+		const mainTop = overview ? overview.h : 0;
+		const mainHeight = height - mainTop;
+		const fit = Math.min(width / W, mainHeight / H);
+		// Upright, the main view crops the sky like the side-on view does, zoomed in as far as still shows a base and its
+		// wall across (UPRIGHT_SPAN of the field); what's left over above is sky for the arcs
+		const base = upright ? Math.min(mainHeight / (H - VIEW_TOP), width / UPRIGHT_SPAN) : Math.max(fit, Math.min(READABLE, height / (H - VIEW_TOP)));
+		// Zoomed out no further than the whole field fits
+		const scale = Math.max(fit, base * this.cam.zoom);
 		const seen = width / scale;
 
-		// It starts over our own side, once it's known which that is
-		if (this.cam.x === null && this.team !== undefined) this.cam.x = this.team === 1 ? W - seen / 2 : this.team === 0 ? seen / 2 : W / 2;
+		// It starts over our own side, once it's known which that is: upright, on the army at home by its wall
+		if (this.cam.x === null && this.team !== undefined) {
+			if (this.team < 0) this.cam.x = W / 2;
+			else if (upright) this.cam.x = this.team === 0 ? UPRIGHT_HOME : W - UPRIGHT_HOME;
+			else this.cam.x = this.team === 1 ? W - seen / 2 : seen / 2;
+		}
 		if (this.cam.x !== null) this.cam.x = seen >= W ? W / 2 : clamp(this.cam.x, seen / 2, W - seen / 2);
 
 		const left = width / 2 - (this.cam.x ?? W / 2) * scale;
-		const top = H * scale > height ? height - H * scale : (height - H * scale) / 2;
+		const top = mainTop + (H * scale > mainHeight ? mainHeight - H * scale : (mainHeight - H * scale) / 2);
 
-		return { scale, left, top };
-	}
-
-	// A phone held upright sees only a slice of the field: a note says it's wider turned on its side
-	turnPhone() {
-		const note = document.createElement('div');
-
-		note.className = 'turn-phone';
-		note.append(icon('rotate', { size: '2em' }), 'turn your phone for a wider view');
-		Object.assign(note.style, {
-			position: 'absolute',
-			left: '50%',
-			top: '12px',
-			transform: 'translateX(-50%) rotate(-1deg)',
-			display: 'none',
-			alignItems: 'center',
-			gap: '8px',
-			padding: '6px 12px',
-			background: 'rgba(255, 253, 246, 0.9)',
-			border: `2px solid ${PENCIL}`,
-			borderRadius: '255px 15px 225px 15px / 15px 225px 15px 255px',
-			whiteSpace: 'nowrap',
-			zIndex: 2,
-		});
-		this.elem.append(note);
-
-		const upright = window.matchMedia('(orientation: portrait) and (pointer: coarse)');
-		const show = () => (note.style.display = upright.matches && !this.dismissed ? 'flex' : 'none');
-
-		note.addEventListener('pointerdown', () => {
-			this.dismissed = true;
-			show();
-		});
-		upright.addEventListener('change', show);
-		this.addCleanup('turn-phone', () => upright.removeEventListener('change', show));
-		show();
+		return { scale, left, top, overview, mainTop };
 	}
 
 	// Looking around the field: two fingers pan along it and pinch to zoom; the wheel zooms, and the arrow keys pan
@@ -586,7 +567,7 @@ export default class BattleScreen extends Screen {
 
 			const { mid, gap } = spread();
 
-			this.cam.zoom = clamp((gesture.zoom * gap) / Math.max(20, gesture.gap), 1, MOST_ZOOM);
+			this.cam.zoom = clamp((gesture.zoom * gap) / Math.max(20, gesture.gap), 0.4, MOST_ZOOM);
 			this.cam.x = gesture.x - (mid - gesture.mid) / gesture.scale;
 		});
 
@@ -602,7 +583,7 @@ export default class BattleScreen extends Screen {
 			'wheel',
 			event => {
 				event.preventDefault();
-				this.cam.zoom = clamp(this.cam.zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12), 1, MOST_ZOOM);
+				this.cam.zoom = clamp(this.cam.zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12), 0.4, MOST_ZOOM);
 			},
 			{ passive: false },
 		);
@@ -669,6 +650,14 @@ export default class BattleScreen extends Screen {
 	}
 
 	down(point) {
+		const f = this.fitting();
+
+		if (f?.overview && point.y < f.overview.h) {
+			this.scrub = true;
+			this.cam.x = point.x / f.overview.scale;
+
+			return;
+		}
 		if (this.view?.state.phase !== 'battle' || this.view.away.length) return;
 		// The aiming pad has its own hands
 		if (point.event?.target?.closest?.('.aim-pad')) return;
@@ -681,6 +670,14 @@ export default class BattleScreen extends Screen {
 	}
 
 	move(point) {
+		if (this.scrub) {
+			const f = this.fitting();
+
+			if (f?.overview) this.cam.x = point.x / f.overview.scale;
+
+			return;
+		}
+
 		const press = this.press;
 
 		if (!press) return;
@@ -696,6 +693,8 @@ export default class BattleScreen extends Screen {
 	}
 
 	up() {
+		this.scrub = false;
+
 		const press = this.press;
 
 		this.press = null;
@@ -793,25 +792,35 @@ export default class BattleScreen extends Screen {
 		g.fillRect(0, 0, this.stage.width, this.stage.height);
 
 		const t = this.prev ? clamp((performance.now() - this.curAt) / TICK_MS, 0, 1) : 1;
-
-		// A stick man's line is never thinner on the screen than this, however far out the view is
-		this.ink = Math.max(2.6, 2 / f.scale);
+		const scene = this.scene(g, t);
 		const shaking = this.shake > 0.3 ? this.shake : 0;
 
 		this.shake *= Math.pow(0.02, dt);
-		g.translate(f.left + rand(-shaking, shaking) * f.scale, f.top + rand(-shaking, shaking) * f.scale);
-		g.scale(f.scale, f.scale);
+		this.stepParts(dt);
+
+		// The main view: the world where the camera looks, and what's being done in it
 		g.save();
 		g.beginPath();
-		g.rect(0, 0, W, H);
+		g.rect(0, f.mainTop, this.stage.width, this.stage.height - f.mainTop);
 		g.clip();
-		g.drawImage(paperBackground(), 0, 0);
-		g.drawImage(this.decal, 0, 0);
-		g.lineCap = g.lineJoin = 'round';
+		// A stick man's line is never thinner on the screen than this, however far out the view is
+		this.ink = Math.max(2.6, 2 / f.scale);
+		g.translate(f.left + rand(-shaking, shaking) * f.scale, f.top + rand(-shaking, shaking) * f.scale);
+		g.scale(f.scale, f.scale);
+		this.drawWorld(g, scene);
+		if (this.mode) this.drawTargets(g);
+		if (this.catsPicked.size) this.drawPickedCats(g);
+		if (this.aim) this.drawAim(g);
+		if (this.box) this.drawBox(g);
+		if (this.flash && performance.now() < this.flash.until) drawIcon(g, this.flash.name, this.flash.x, this.flash.y, 46, this.flash.color);
+		g.restore();
+		if (f.overview) this.drawOverview(g, f, scene);
+	}
 
+	// Everything on the field as things to draw, back to front: the same list draws in the main view and the overview
+	scene(g, t) {
 		const cur = this.cur, prev = this.prev;
 		const bricks = easeBricks(prev?.bricks, cur.bricks ?? [], t);
-		// Everything on the field, drawn from the back to the front
 		const scene = [];
 
 		cur.cats.forEach((cat, at) => {
@@ -843,15 +852,51 @@ export default class BattleScreen extends Screen {
 		}
 		for (const wall of cur.walls) scene.push({ z: 4, draw: () => this.drawFlag(g, wall) });
 
-		scene.sort((a, b) => b.z - a.z);
+		return scene.sort((a, b) => b.z - a.z);
+	}
+
+	// The paper, the blood on it, the field's things and what's flying, in whatever transform the context has
+	drawWorld(g, scene) {
+		g.save();
+		g.beginPath();
+		g.rect(0, 0, W, H);
+		g.clip();
+		g.drawImage(paperBackground(), 0, 0);
+		g.drawImage(this.decal, 0, 0);
+		g.lineCap = g.lineJoin = 'round';
 		for (const thing of scene) thing.draw();
-		this.stepParts(g, dt);
-		if (this.mode) this.drawTargets(g);
-		if (this.catsPicked.size) this.drawPickedCats(g);
-		if (this.aim) this.drawAim(g);
-		if (this.box) this.drawBox(g);
-		if (this.flash && performance.now() < this.flash.until) drawIcon(g, this.flash.name, this.flash.x, this.flash.y, 46, this.flash.color);
+		this.drawParts(g);
 		g.restore();
+	}
+
+	// On a phone held upright: the whole battlefield in a strip across the top, the main view's reach boxed on it
+	drawOverview(g, f, scene) {
+		const ov = f.overview;
+
+		g.save();
+		g.beginPath();
+		g.rect(0, 0, this.stage.width, ov.h);
+		g.clip();
+		g.fillStyle = '#f7f2e4';
+		g.fillRect(0, 0, this.stage.width, ov.h);
+		this.ink = 2.6 / ov.scale / 2;
+		g.scale(ov.scale, ov.scale);
+		g.translate(0, -ov.top);
+		this.drawWorld(g, scene);
+
+		const seen = this.stage.width / f.scale;
+
+		g.strokeStyle = teamInk(Math.max(0, this.team));
+		g.lineWidth = 3 / ov.scale;
+		g.setLineDash([10 / ov.scale, 7 / ov.scale]);
+		g.strokeRect(-f.left / f.scale, ov.top + 4, seen, H - ov.top - 8);
+		g.restore();
+		g.strokeStyle = PENCIL;
+		g.lineWidth = 2;
+		g.beginPath();
+		g.moveTo(0, ov.h);
+		g.lineTo(this.stage.width, ov.h);
+		g.stroke();
 	}
 
 	drawBrick(g, brick, front) {
@@ -1186,7 +1231,7 @@ export default class BattleScreen extends Screen {
 	}
 
 	// Blood and dust fly on this page alone; blood that reaches the ground stays there as a pool
-	stepParts(g, dt) {
+	stepParts(dt) {
 		const P = this.parts;
 
 		for (let i = P.length - 1; i >= 0; i--) {
@@ -1210,6 +1255,11 @@ export default class BattleScreen extends Screen {
 				P.pop();
 			}
 		}
+	}
+
+	drawParts(g) {
+		const P = this.parts;
+
 		g.fillStyle = '#a10f0f';
 		for (const p of P) {
 			if (!p.blood) continue;

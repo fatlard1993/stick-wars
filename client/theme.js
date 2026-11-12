@@ -48,6 +48,12 @@ appendStyles(
 		button.doodle { padding: 3px 8px; box-shadow: 1px 2px 0 ${PENCIL}; }
 		.side-kills { display: none !important; }
 	}
+
+	/* A narrow phone held upright: the bar keeps to one row */
+	@media (max-width: 480px) {
+		.side-who { display: none !important; }
+		button.doodle svg { width: 1.3em; height: 1.3em; }
+	}
 	`,
 	'stick-wars-theme',
 );

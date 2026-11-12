@@ -30,6 +30,11 @@ const Pad = styled(
 		user-select: none;
 
 		&.hidden { display: none; }
+
+		/* Upright on a phone: below the overview strip */
+		@media (orientation: portrait) and (max-width: 900px) {
+			top: 22%;
+		}
 		& .bar { display: flex; align-items: center; gap: ${space.sm}; width: 100%; font-size: 1.3em; }
 		& .bar .close { margin-left: auto; padding: 2px 8px; }
 		& canvas { touch-action: none; cursor: crosshair; }
