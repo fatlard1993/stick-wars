@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 
 import { DEFAULT_RAW, blobS, cpuArmy, judge, lineS } from './art.js';
-import { AMMO, DT, FADE, GROUND, LINGER, World } from './battle.js';
+import { AMMO, DT, FADE, GROUND, LINGER, PLANS, World } from './battle.js';
 import Game from './Game.js';
 import { BASE_ARMY, CPU_SIZE, STEPS, emptyArt } from './rules.js';
 
@@ -319,6 +319,16 @@ test('a whole battle runs to a winner, cutting people apart on the way', () => {
 	expect(world.stats.limbs).toBeGreaterThan(0);
 	// A tick's picture stays small enough to send twenty times a second
 	expect(JSON.stringify(world.snapshot()).length).toBeLessThan(70_000);
+});
+
+test('the computer plays by a plan picked for each battle, and whichever it plays, the battle ends', () => {
+	expect(new Set(Array.from({ length: 40 }, () => new World({ arts: [cpuArmy(), cpuArmy()] }).ai[1].plan)).size).toBeGreaterThan(2);
+	for (const plan of Object.keys(PLANS)) {
+		const world = new World({ arts: [cpuArmy(), cpuArmy()], auto: [true, true], plans: [plan, 'balanced'] });
+
+		for (let steps = 0; !world.over && steps < 60 * 240; steps++) world.step(DT);
+		expect([plan, world.over]).not.toEqual([plan, null]);
+	}
 });
 
 test('the art is saved and the battle is not; a game saved mid-battle comes back fighting with the same art', () => {

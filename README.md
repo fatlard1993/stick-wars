@@ -24,7 +24,7 @@ A weapon is drawn in the box on its page (the pen lifts at the box's edge), and 
 
 Drawing more pays. Every army has 10 men, and each stick man and each weapon you draw past the first of each adds one more man (6 more at most). Each stone past the first raises your wall a row (6 rows, up to 9), and five stones or more make it a stone thicker. Only what you draw counts: the defaults earn nothing.
 
-Every side fights with its own drawings. Against a friend, each draws their own; against the computer, it draws itself a different army (its own stick men, squarer stones, logs and planks, eggs and maces for its catapult, spears, maces, clubs, double axes and saw-toothed swords), a new one each time you draw yours.
+Every side fights with its own drawings. Against a friend, each draws their own; against the computer, it draws itself a different army by a shaky hand (its own stick men, lumpy stones, logs and planks, eggs and maces for its catapult, spears, maces, clubs, double axes and saw-toothed swords), a new one each time you draw yours. And it plays each battle its own way: a steady trickle of men; a rush, nearly everyone at once; dug in behind its wall with men on top until your side's thinned; a siege, battering your wall before it comes; or in waves of four.
 
 ### The battle
 

@@ -563,6 +563,53 @@ export const defaultsFor = kind => makeDefaults(kind).map(item => tidy(item, 3))
 
 // ---------- the computer's own army ----------
 
+// A drawing redrawn by a less steady hand: each line wanders a little either side of where it was meant to go, its ends
+// overshoot or stop short, and the whole drawing leans a touch. `shake` is how much, about 1.
+const scrawl = (strokes, shake = 1) => {
+  const lean = rand(-0.09, 0.09) * shake, c = Math.cos(lean), s = Math.sin(lean);
+  const turn = ({ x, y }) => ({ x: 240 + (x - 240) * c - (y - 240) * s, y: 240 + (x - 240) * s + (y - 240) * c });
+
+  return strokes.map(stroke => {
+    if (stroke.length < 2) return stroke;
+
+    const amp = [rand(2, 6), rand(1, 3)].map(a => a * shake), wave = [rand(80, 200), rand(25, 60)], phase = [rand(0, TAU), rand(0, TAU)];
+    let along = 0;
+    const out = stroke.map((p, i) => {
+      const q = stroke[Math.min(i + 1, stroke.length - 1)], o = stroke[Math.max(i - 1, 0)];
+      const tx = q.x - o.x, ty = q.y - o.y, tl = Math.hypot(tx, ty) || 1;
+
+      if (i) along += Math.hypot(p.x - stroke[i - 1].x, p.y - stroke[i - 1].y);
+
+      const off = amp[0] * Math.sin((along / wave[0]) * TAU + phase[0]) + amp[1] * Math.sin((along / wave[1]) * TAU + phase[1]);
+
+      return { x: p.x - (ty / tl) * off + jit(1.5 * shake), y: p.y + (tx / tl) * off + jit(1.5 * shake) };
+    });
+    // The pen's ends: carried on a little past where it meant to stop, or lifted a little early
+    const end = (a, b) => {
+      const dx = a.x - b.x, dy = a.y - b.y, l = Math.hypot(dx, dy) || 1, by = rand(-4, 9) * shake;
+
+      return { x: a.x + (dx / l) * by, y: a.y + (dy / l) * by };
+    };
+
+    out[0] = end(out[0], out[1]);
+    out[out.length - 1] = end(out[out.length - 1], out[out.length - 2]);
+
+    return out.map(turn);
+  });
+};
+
+// A lumpy stone as a person draws one: a rough outline, its sides uneven, some flatter, a corner or two
+const cpuStone = () => {
+  const w = rand(110, 170), h = rand(75, 120), n = 6 + ((Math.random() * 5) | 0), a0 = rand(0, TAU);
+  const pts = Array.from({ length: n }, (_, i) => {
+    const a = a0 + ((i + rand(-0.3, 0.3)) / n) * TAU, r = rand(0.78, 1.08);
+
+    return [240 + Math.cos(a) * w * r, 240 + Math.sin(a) * h * r];
+  });
+
+  return [closedPoly(pts)];
+};
+
 // A stick man of its own build: head, body, arms and legs in proportions and a pose of their own, knees bent or not
 const cpuStickman = () => {
   const cx = 240 + rand(-20, 20), hr = rand(26, 42), hy = rand(66, 100);
@@ -587,13 +634,7 @@ const cpuStickman = () => {
 
 const CPU_RAW = {
   stickmen: () => Array.from({ length: 5 }, cpuStickman),
-  // Blockier stones than a person tends to draw: cut corners, flat-ish sides
-  stones: () =>
-    Array.from({ length: 4 }, () => {
-      const w = rand(120, 170), h = rand(80, 120), cut = rand(12, 30);
-
-      return [closedPoly([[240 - w + cut, 240 - h], [240 + w - cut, 240 - h + rand(-8, 8)], [240 + w, 240 - h + cut], [240 + w + rand(-6, 6), 240 + h - cut], [240 + w - cut, 240 + h], [240 - w + cut, 240 + h + rand(-8, 8)], [240 - w, 240 + h - cut], [240 - w + rand(-6, 6), 240 - h + cut]])];
-    }),
+  stones: () => Array.from({ length: 4 }, cpuStone),
   beams: () => [
     // A rough log: two long sides and rings at its ends
     [lineS(60, 215, 420, 210), lineS(60, 255, 420, 250), ringS(60, 235, 10, 20), ringS(420, 230, 10, 20)],
@@ -624,7 +665,8 @@ export const cpuArmy = () =>
 
       for (let i = 0; i < count; i++) {
         for (let tries = 0; tries < 10; tries++) {
-          const verdict = judge(kind, CPU_RAW[kind]()[i]);
+          // A shaky hand, and a steadier one if its shaky drawings keep failing the checks
+          const verdict = judge(kind, scrawl(CPU_RAW[kind]()[i], tries < 6 ? rand(0.7, 1.3) : 0.4));
 
           if (verdict.ok) {
             items.push(verdict.item);

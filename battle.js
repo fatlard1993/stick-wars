@@ -1225,6 +1225,28 @@ class Catapult {
 	}
 }
 
+// ---------------------------------------------------------------- the computer's plans
+
+/**
+ * How the computer can play a battle, one picked for each. send: seconds between men sent out one at a time (behind:
+ * when it has fewer); wave: seconds between groups of waveOf sent together; hold: men kept up on the wall; crew: at the
+ * catapult; repairAt: stones missing before the wall's mended, by up to repairers; fire: how keen it is to shoot, a
+ * second; target: 'wall' to batter the wall before men; allInAt / allInWhen ('weak', 'breach'): when everyone goes;
+ * opening: men charging together the moment the battle starts.
+ */
+export const PLANS = {
+	// Even-handed: a steady trickle of men, one at the catapult, the wall mended when it's badly hurt
+	balanced: { send: [1.4, 3], behind: [0.6, 1.4], crew: 1, repairAt: 4, repairers: 2, fire: 0.3 },
+	// At them, fast: men pour out, and soon everyone goes
+	rush: { opening: 9, send: [0.5, 1.2], behind: [0.3, 0.7], crew: 2, repairAt: 10, repairers: 1, fire: 0.5, allInAt: 30 },
+	// Behind the wall: men up on it, the catapult fully crewed, every crack mended; out once the other side's thinned
+	turtle: { crew: 3, hold: 4, repairAt: 2, repairers: 3, fire: 0.45, allInWhen: 'weak', allInAt: 100 },
+	// The wall first: the catapult fully crewed and battering it, everyone out together once it's breached
+	siege: { crew: 3, repairAt: 4, repairers: 2, fire: 0.5, target: 'wall', allInWhen: 'breach', allInAt: 75 },
+	// Gathered at home and sent in groups
+	waves: { wave: [16, 24], waveOf: 4, crew: 2, repairAt: 4, repairers: 2, fire: 0.3 },
+};
+
 // ---------------------------------------------------------------- the world
 
 export class World {
@@ -1235,8 +1257,9 @@ export class World {
 	 * @param {Array<boolean>} [options.auto] - Which sides the computer plays
 	 * @param {Array<number>} [options.armies] - How many men each side has
 	 * @param {Array<object>} [options.walls] - How big each side's wall is, { cols, rows }
+	 * @param {Array<string>} [options.plans] - How the computer plays each side it plays (a key of PLANS), else picked
 	 */
-	constructor({ arts, artOf = [0, 1], auto = [false, true], armies = [ARMY, ARMY], walls = [WALL, WALL] }) {
+	constructor({ arts, artOf = [0, 1], auto = [false, true], armies = [ARMY, ARMY], walls = [WALL, WALL], plans }) {
 		this.arts = arts;
 		this.army = armies;
 		// How many rocks each side has drawn for its catapult so far
@@ -1270,10 +1293,12 @@ export class World {
 		this.overT = 0;
 		this.events = [];
 		this.shaking = 0;
-		this.ai = [
-			{ deploy: 2, rock: 2 },
-			{ deploy: 3, rock: 2 },
-		];
+		// How the computer plays each side it plays: a plan picked for the battle (or given), and its timers
+		this.ai = [0, 1].map(t => {
+			const plan = plans?.[t] ?? pick(Object.keys(PLANS));
+
+			return { plan, deploy: PLANS[plan].wave ? rand(8, 14) : rand(2, 3), rock: 2, allIn: false };
+		});
 		this.sentAt = [-Infinity, -Infinity];
 		// Every side's whole army out from the start, standing at home, one man crewing each catapult
 		for (let team = 0; team < 2; team++) {
@@ -1591,12 +1616,11 @@ export class World {
 		for (let t = 0; t < 2; t++) {
 			if (!this.auto[t] || this.over) continue;
 
-			const ai = this.ai[t];
-
-			ai.deploy -= dt;
-
-			const mine = this.stickmen.filter(s => s.team === t && s.alive()).length;
-			const theirs = this.stickmen.filter(s => s.team !== t && s.alive()).length;
+			const ai = this.ai[t], plan = PLANS[ai.plan];
+			const alive = this.stickmen.filter(s => s.team === t && s.alive());
+			const idle = () => this.stickmen.filter(s => s.team === t && s.alive() && s.order === 'idle');
+			const theirs = this.aliveCount(1 - t);
+			const ids = men => men.map(s => s.body.id);
 
 			// The computer draws its rocks too, one every few seconds, from its own drawings
 			ai.rock -= dt;
@@ -1607,46 +1631,65 @@ export class World {
 				ai.rock = rand(3, 6);
 			}
 
-			if (ai.deploy <= 0) {
+			if (plan.opening && !ai.opened && this.time > 1) {
+				ai.opened = true;
+				this.command(t, ids(idle().slice(0, plan.opening)), 'charge');
+			}
+
+			ai.deploy -= dt;
+			// Men out: one at a time (faster when it's behind), or a group at a time
+			if (ai.deploy <= 0 && (plan.send || ai.allIn)) {
 				this.send(t);
-				ai.deploy = theirs > mine ? rand(0.6, 1.4) : rand(1.4, 3);
+				ai.deploy = ai.allIn ? rand(0.5, 1.2) : rand(...(theirs > alive.length ? plan.behind : plan.send));
+			} else if (ai.deploy <= 0 && plan.wave) {
+				this.command(t, ids(idle().slice(0, plan.waveOf)), 'charge');
+				ai.deploy = rand(...plan.wave);
+			}
+
+			// Everyone out at last: when its time comes, the other side's thinned, or the wall it's been battering is down
+			if (
+				!ai.allIn &&
+				((plan.allInAt && this.time > plan.allInAt) ||
+					(plan.allInWhen === 'weak' && this.time > 20 && theirs <= alive.length * 0.6) ||
+					(plan.allInWhen === 'breach' && this.masonry.missing(1 - t) >= 6))
+			) {
+				ai.allIn = true;
+				this.command(t, ids(alive.filter(s => s.order === 'idle' || s.order === 'hold')), 'charge');
 			}
 
 			// Down to its last few with nobody fighting, everyone goes: a battle must end
-			const left = this.stickmen.filter(s => s.team === t && s.alive());
+			if (alive.length <= 3 && !alive.some(s => s.order === 'charge')) this.command(t, ids(alive), 'charge');
 
-			if (left.length <= 3 && !left.some(s => s.order === 'charge')) this.command(t, left.map(s => s.body.id), 'charge');
+			// Men up on the wall, as many as it keeps there
+			if (!ai.allIn && plan.hold && alive.filter(s => s.order === 'hold').length < plan.hold && idle().length > 2) this.command(t, ids(idle().slice(0, 1)), 'hold');
 
-			// A wall knocked about, or a catapult smashed while it still had ammo, gets someone from home to fix it
-			const repairing = this.stickmen.filter(s => s.team === t && s.alive() && s.order === 'repair').length;
-			const home = this.stickmen.filter(s => s.team === t && s.alive() && s.order === 'idle');
-			const broken =
-				this.masonry.missing(t) >= 4
-					? 'wall'
-					: this.cats.filter(c => c.team === t).findIndex(c => c.dead && (c.ammo > 0 || c.waiting()));
+			// A wall knocked about, or a catapult smashed while it still had rocks, gets someone from home to fix it
+			const repairing = alive.filter(s => s.order === 'repair').length;
+			const cat = this.cats.find(c => c.team === t);
+			const broken = this.masonry.missing(t) >= plan.repairAt ? 'wall' : cat?.dead && (cat.ammo > 0 || cat.waiting()) ? 0 : -1;
 
-			if (broken !== -1 && repairing < 2 && home.length > 2) this.command(t, [home[0].body.id], 'repair', broken);
+			if (broken !== -1 && repairing < plan.repairers && idle().length > 2) this.command(t, ids(idle().slice(0, 1)), 'repair', broken);
 
-			// A catapult left with nobody to fire it gets someone from home while it has ammo
-			for (const c of this.cats) {
-				if (c.team !== t || c.dead || (c.ammo <= 0 && !c.waiting()) || c.crewing().length) continue;
-
-				const spare = this.stickmen.find(s => s.team === t && s.alive() && s.order === 'idle');
-
-				if (spare) this.command(t, [spare.body.id], 'crew', this.cats.filter(k => k.team === t).indexOf(c));
+			// The catapult kept crewed, as fully as it likes, while it has rocks or more to come
+			if (cat && !cat.dead && (cat.ammo > 0 || cat.waiting()) && cat.crewing().length < plan.crew && idle().length) {
+				this.command(t, ids(idle().slice(0, 1)), 'crew', 0);
 			}
-			for (const c of this.cats) {
-				if (c.team !== t || !c.ready() || Math.random() > dt * 0.3) continue;
+			if (cat?.ready() && Math.random() < dt * plan.fire) {
+				const tgt = plan.target === 'wall' ? (this.wallTarget(t) ?? this.aiTarget(t)) : (this.aiTarget(t) ?? this.wallTarget(t));
+				const v = tgt && this.solve(cat, tgt.x, tgt.y);
 
-				const tgt = this.aiTarget(t);
-
-				if (!tgt) continue;
-
-				const v = this.solve(c, tgt.x, tgt.y);
-
-				if (v) c.fire(v[0] * rand(0.85, 1.15), v[1] * rand(0.9, 1.1));
+				if (v) cat.fire(v[0] * rand(0.85, 1.15), v[1] * rand(0.9, 1.1));
 			}
 		}
+	}
+
+	// The face of the other side's wall, where it still stands: what a siege batters
+	wallTarget(t) {
+		if (!this.masonry.standing(1 - t).length) return null;
+
+		const x = t === 0 ? this.walls[1].x0 + 15 : this.walls[0].x1 - 15;
+
+		return { x, y: this.groundAt(x) + 15 };
 	}
 
 	aiTarget(t) {
