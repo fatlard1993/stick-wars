@@ -215,7 +215,8 @@ export default class BattleScreen extends Screen {
 	arm(team) {
 		if (this.armed !== undefined) return;
 		this.armed = team;
-		if (team < 0 || this.arena) return;
+		if (team < 0) return;
+		if (this.arena) return this.armShouts();
 
 		const controls = new Controls({ appendTo: this });
 
@@ -274,6 +275,24 @@ export default class BattleScreen extends Screen {
 		});
 		this.addCleanup('input', () => this.input.destroy());
 		this.showPicked();
+	}
+
+	// A gladiator's player cheers him on: charge, back off, or shield up, each for a few seconds
+	armShouts() {
+		const controls = new Controls({ appendTo: this });
+		const shout = stance => act('shout', { stance }, { quiet: true });
+
+		this.shoutButtons = {
+			c: doodle('charge', { title: 'Charge! (Space)', size: '2.4em', onPress: () => shout('charge') }),
+			b: doodle('back', { title: 'Back off (B)', size: '2.4em', onPress: () => shout('back') }),
+			g: doodle('hold', { title: 'Shield up (H)', size: '2.4em', onPress: () => shout('guard') }),
+		};
+		controls.append(...Object.values(this.shoutButtons));
+		this.input = createInput({
+			keys: { charge: [' '], back: ['b', 'B'], guard: ['h', 'H'] },
+			onPress: name => shout(name),
+		});
+		this.addCleanup('input', () => this.input.destroy());
 	}
 
 	// Who an order is for: the men picked out, or with nobody picked, everyone not busy at a catapult or the wall
@@ -408,6 +427,12 @@ export default class BattleScreen extends Screen {
 			for (const id of this.selected) if (!alive.has(id)) this.selected.delete(id);
 			if (this.selected.size !== before) this.showPicked();
 			if (this.catsPicked.size) this.showPad();
+			// The shout our gladiator is acting on, pressed in
+			if (this.shoutButtons) {
+				const mine = battle.bodies.find(body => body.t === this.team && body.hp !== undefined);
+
+				for (const [code, button] of Object.entries(this.shoutButtons)) button.elem.setAttribute('aria-pressed', String(mine?.cs === code));
+			}
 
 			const mine = this.myCats()[0]?.cat;
 
@@ -1097,6 +1122,10 @@ export default class BattleScreen extends Screen {
 		g.strokeRect(x - 22, y - 3, 44, 6);
 		g.fillStyle = body.hp > 0.35 ? teamInk(body.t) : RED_PENCIL;
 		g.fillRect(x - 22, y - 3, 44 * body.hp, 6);
+		// What he's been shouted at, over his bar while it holds
+		const shout = { c: 'charge', b: 'back', g: 'hold' }[body.cs];
+
+		if (shout) drawIcon(g, shout, x, y - 18, 22, teamInk(body.t));
 	}
 
 	drawProp(g, prop) {

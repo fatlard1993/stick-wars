@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 
 import { DEFAULT_RAW, blobS, cpuArmy, cpuGladiator, judge, lineS, ringS } from './art.js';
-import { AMMO, DT, FADE, GLADIATOR_HP, GROUND, LINGER, PLANS, World } from './battle.js';
+import { AMMO, DT, FADE, GLADIATOR_HP, GROUND, LINGER, PLANS, STANCE_FOR, World } from './battle.js';
 import Game from './Game.js';
 import Roster, { MOST_BEHIND } from './roster.js';
 import { BASE_ARMY, CPU_SIZE, GLADIATOR_STEPS, STEPS, emptyArt } from './rules.js';
@@ -661,4 +661,32 @@ test('a saved gladiator that keeps losing is kept a few fights, then retired', (
 	expect(losses).toBe(MOST_BEHIND + 1);
 	// The ones that beat it are kept
 	expect(roster.load()).toHaveLength(losses);
+});
+
+test('a gladiator does what he is shouted at for a few seconds: charge in, back off, or guard', () => {
+	const game = newGame('cpu', 'gladiator');
+	const fox = game.addPlayer('🦊');
+
+	drawGladiator(game, fox.id, { armor: false, shield: false });
+
+	const world = game.world;
+	const [mine, theirs] = world.stickmen;
+
+	world.auto = [false, false];
+	// Backing off from the middle, he walks away from his foe
+	const gap = () => Math.abs(theirs.x - mine.x);
+
+	theirs.x = mine.x + 100;
+	expect(game.act(fox.id, 'shout', { stance: 'back' }).ok).toBe(true);
+	expect(world.snapshot().bodies.find(b => b.t === 0).cs).toBe('b');
+
+	const before = gap();
+
+	theirs.speed = 0;
+	for (let i = 0; i < 60; i++) world.step(DT);
+	expect(gap()).toBeGreaterThan(before);
+	// It wears off
+	for (let i = 0; i < 60 * STANCE_FOR; i++) world.step(DT);
+	expect(mine.stance()).toBeNull();
+	expect(game.act(fox.id, 'shout', { stance: 'dance' }).ok).toBe(false);
 });

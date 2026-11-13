@@ -245,8 +245,9 @@ class Body {
 			j: joints,
 			...(wp && { w: [wp.ref.a, wp.ref.i, Math.round(wp.blood * 100) / 100], wo: Math.round(this.wOff * 100) / 100 }),
 			...(this.armor && { ar: [this.armor.a, this.armor.i] }),
-			// A gladiator's health, for the bar over him
+			// A gladiator's health, for the bar over him, and what he's been told, while it holds
 			...(this.owner?.style && !this.owner.dead && { hp: Math.round(clamp(this.owner.hp / GLADIATOR_HP, 0, 1) * 100) / 100 }),
+			...(this.owner?.style && this.owner.alive() && this.owner.stance() && { cs: STANCE_CODE[this.owner.stance()] }),
 			// The shield, and how much of it is left
 			...(this.shield &&
 				this.owned[3] && { sh: [this.shield.ref.a, this.shield.ref.i, Math.round((this.shield.hp / this.w.itemOf(this.shield.ref).stats.hp) * 100) / 100] }),
@@ -259,6 +260,11 @@ class Body {
 }
 
 // ---------------------------------------------------------------- stick men
+
+/** What a gladiator's player can shout at him, and how long a shout holds, in seconds */
+export const STANCES = ['charge', 'back', 'guard'], STANCE_FOR = 3;
+// How each sits in a snapshot
+const STANCE_CODE = { charge: 'c', back: 'b', guard: 'g' };
 
 /** A gladiator's health: a soldier has 100 */
 export const GLADIATOR_HP = 450;
@@ -347,7 +353,15 @@ class Stickman {
 	// he's quick enough (less so while he's swinging himself). A shield takes the blow, and breaks once it's taken enough.
 	fends(attacker) {
 		if (!this.style || !this.alive()) return false;
-		if (!this.atk && Math.random() < this.style.dodge) {
+		const stance = this.stance();
+		// Charging, he's reckless; backing off or guarding, he's watching for it
+		const wary = { charge: 0.3, back: 2, guard: 1.5 }[stance] ?? 1;
+
+		// Guarding, a blow caught or slipped earns him a harder one back
+		const earned = () => stance === 'guard' && (this.riposte = this.w.time + 1.2);
+
+		if (!this.atk && Math.random() < this.style.dodge * wary) {
+			earned();
 			this.kb -= this.face * 120;
 			this.retreat = Math.max(this.retreat, 0.2);
 			this.w.sound('swing');
@@ -361,10 +375,11 @@ class Stickman {
 
 		const { block } = this.w.itemOf(sh.ref).stats;
 
-		if (Math.random() > block * (this.atk ? 0.5 : 1)) return false;
+		if (Math.random() > block * (this.atk ? 0.5 : 1) * ({ charge: 0.5, guard: 1.6 }[stance] ?? 1)) return false;
 
 		const hit = attacker.stats(), h = this.body.j[4];
 
+		earned();
 		sh.hp -= hit.dmg * 0.5;
 		this.kb += attacker.face * (25 + hit.knock * 35) * (1 - this.style.steady);
 		this.cd = Math.min(this.cd, 0.2);
@@ -373,6 +388,16 @@ class Stickman {
 		if (sh.hp <= 0) this.breakShield();
 
 		return true;
+	}
+
+	// How much harder than his weapon alone he hits: charging, or striking back off a guarded blow
+	fury() {
+		return (this.stance() === 'charge' ? 1.2 : 1) * (this.riposte > this.w.time ? 1.35 : 1);
+	}
+
+	// What his player has shouted at him, while it holds
+	stance() {
+		return this.shout && this.w.time < this.shout.until ? this.shout.name : null;
 	}
 
 	breakShield() {
@@ -549,6 +574,11 @@ class Stickman {
 		this.cd -= dt;
 		this.stag = Math.max(0, this.stag - dt);
 		this.retreat = Math.max(0, (this.retreat ?? 0) - dt);
+		// Backing off, he catches his breath: his bleeding slows, and a little of what he's lost comes back
+		if (this.stance() === 'back') {
+			this.bleed *= Math.pow(0.4, dt);
+			this.hp = Math.min(GLADIATOR_HP, this.hp + 8 * dt);
+		}
 
 		let move = 0, want = null, goalZ = this.z;
 		const R = this.reach(), tg = this.target;
@@ -568,7 +598,19 @@ class Stickman {
 			// steady while he's swung at
 			const style = this.style;
 
-			if (style && this.retreat > 0) {
+			const stance = this.stance();
+
+			// What his player shouts comes first: in at him, back off out of reach, or stand and guard
+			if (stance === 'charge') {
+				if (adx > R * 0.7) move = this.face;
+			} else if (stance === 'back') {
+				move = adx < R + 60 ? -this.face : 0;
+				want = null;
+			} else if (stance === 'guard') {
+				if (move === this.face && adx < R + 40) move = 0;
+				// Only striking back off a block
+				if (this.cd > 0.05) want = null;
+			} else if (style && this.retreat > 0) {
 				move = -this.face;
 				want = null;
 			} else if (style?.keepAway && adx < R * 0.6) move = -this.face;
@@ -701,7 +743,8 @@ class Stickman {
 		}
 		if (a.t >= 1) {
 			this.atk = null;
-			this.cd = rand(0.1, 0.45);
+			// Told to charge, he swings again sooner
+			this.cd = rand(0.1, 0.45) * (this.stance() === 'charge' ? 0.5 : 1);
 			this.prevSeg = null;
 			// A light gladiator darts out after a strike, and in again sooner
 			if (this.style?.dart && a.want.type === 'sm') {
@@ -839,7 +882,8 @@ class Stickman {
 			[p[2], p[3], s[2], s[3]],
 			[(p[0] + p[2]) / 2, (p[1] + p[3]) / 2, (s[0] + s[2]) / 2, (s[1] + s[3]) / 2],
 		];
-		const st = this.stats();
+		// A gladiator charging hits harder, and harder still striking back off a guarded blow
+		const st = this.style ? { ...this.stats(), dmg: this.stats().dmg * this.fury() } : this.stats();
 
 		for (const body of this.w.bodies) {
 			if (body === this.body) continue;
@@ -1580,6 +1624,16 @@ export class World {
 		return this.command(team, [home[0].body.id], 'charge') > 0;
 	}
 
+	/** A gladiator told what to do by his side, for a few seconds: charge, back off or guard */
+	shout(team, name) {
+		const man = this.arena && this.stickmen.find(s => s.team === team && s.alive());
+
+		if (!man || !STANCES.includes(name)) return false;
+		man.shout = { name, until: this.time + STANCE_FOR };
+
+		return true;
+	}
+
 	/** A side's catapult set to fling one way from now on (held to what it can do), or with null, to hold its fire */
 	setAim(team, aim) {
 		const cat = this.cats.find(c => c.team === team);
@@ -1753,6 +1807,20 @@ export class World {
 	}
 
 	runAI(dt) {
+		// The computer shouts at its own gladiator too: in when its foe's hurt worse, back or guard when it's the one hurting
+		if (this.arena) {
+			for (let t = 0; t < 2; t++) {
+				const me = this.stickmen.find(s => s.team === t), foe = this.stickmen.find(s => s.team !== t);
+
+				if (!this.auto[t] || this.over || !me?.alive() || me.stance() || Math.random() > dt * 0.5) continue;
+
+				const ahead = me.hp - foe.hp;
+
+				this.shout(t, ahead > 60 ? 'charge' : ahead < -60 ? pick(['back', 'guard']) : pick(STANCES));
+			}
+
+			return;
+		}
 		for (let t = 0; t < 2; t++) {
 			if (!this.auto[t] || this.over) continue;
 

@@ -66,6 +66,14 @@ Then the two fight it out in the open, by themselves, each its own way, all of i
 - **A shield**: catches some of the blows that come from in front, the bigger the more, and the gladiator strikes straight back off a block. It weighs, and it breaks after enough of a battering.
 - **Light all over**: darts in to strike and out again, and slips blows more often.
 
+You cheer yours on with three doodles under the arena, each shout holding for three seconds, shown over your gladiator while it does:
+
+- **Charge** (Space): in at them, swinging sooner and hitting harder, but recklessly: it slips and blocks fewer blows.
+- **Back off** (B): out of reach to catch its breath: no swinging, but its bleeding slows, a little health comes back, and it slips blows more often.
+- **Shield up** (H): it stands its ground and only strikes back, blocking and slipping more; a blow caught or slipped earns a harder one back.
+
+The computer cheers its own gladiator on the same way.
+
 A gladiator is tough: a duel is many blows. A head comes off only to a finishing blow, and a gladiator down on the ground (a leg gone) isn't beaten until he's finished off or bleeds out. A bar over each shows how much it has left.
 
 Every gladiator that wins is kept in the hall of gladiators, with its record, and the computer sends them back into the arena against whoever plays it next (the better its record, the likelier); one of them shows its wins by its flag. A kept gladiator that loses is given a few more fights, and retired once it has lost three more than it has won. With nobody in the hall yet, the computer draws its own.

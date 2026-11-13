@@ -157,6 +157,14 @@ export default class Game extends BaseGame {
 			this.world.setAim(team, [vx, vy]);
 		},
 
+		// Our gladiator told what to do for a few seconds: charge, back off, or guard
+		shout(player, { stance } = {}) {
+			const team = this.teamOf(player.id);
+
+			if (this.state.phase !== 'battle' || !this.world?.arena) refuse('No duel on');
+			if (!this.world.shout(team, stance)) refuse('Not now');
+		},
+
 		// The same armies again
 		again(player) {
 			this.teamOf(player.id);
@@ -257,7 +265,8 @@ export default class Game extends BaseGame {
 			}
 		}
 		if (gladiator) {
-			this.world = new World({ arts: state.art, artOf: artOf(state), auto: [false, false], arena: true });
+			// The computer cheers its own gladiator on, as a player does theirs
+			this.world = new World({ arts: state.art, artOf: artOf(state), auto: [false, state.mode === 'cpu'], arena: true });
 			this.snap = null;
 			state.phase = 'battle';
 			state.result = null;
