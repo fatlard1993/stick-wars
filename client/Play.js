@@ -3,6 +3,7 @@ import { createSound, enterGame, exitGame } from '@fatlard1993/web-game-framewor
 import { JoinCard, View } from '@fatlard1993/web-game-framework/ui';
 
 import { TEAMS } from '../rules.js';
+import { stayAwake } from './awake.js';
 import BattleScreen from './BattleScreen.js';
 import DrawScreen from './DrawScreen.js';
 import LeavePrompt from './LeavePrompt.js';
@@ -111,8 +112,12 @@ export default class Play extends View {
 		});
 
 		this.playerId = playerId;
+		// The screen stays on while the game's open: no phone dozing off mid-battle
+		const sleep = stayAwake();
+
 		this.addCleanup('game', () => {
 			leave();
+			sleep();
 			this.sound.destroy();
 		});
 		if (this.view) this.update(this.view);

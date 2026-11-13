@@ -59,7 +59,7 @@ So the field stays readable, the dead, cut-off parts, rubble, dropped weapons an
 
 ### Winning
 
-The last side with anyone standing wins. Then fight again with the same armies (the circling arrows), or draw new ones (the pencil). If a player's page closes, their drawing clock and the battle wait for them. If they leave the game (the door, which asks first: the curly arrow stays, the red door goes), their side is free for the next person to join, who draws their own army.
+The last side with anyone standing wins. Then fight again with the same armies (the circling arrows), or draw new ones (the pencil). A phone's screen stays on while a game is open, from the first tap. If a player's page closes, their drawing clock and the battle wait for them. If they leave the game (the door, which asks first: the curly arrow stays, the red door goes), their side is free for the next person to join, who draws their own army.
 
 ## Gladiators
 

@@ -12,6 +12,7 @@
 	"dependencies": {
 		"@fatlard1993/web-game-framework": "github:fatlard1993/web-game-framework#bd90b79",
 		"@vanilla-bean/components": "^7.1.0",
+		"nosleep.js": "0.12.0",
 		"planck": "^1.5.1"
 	}
 }
