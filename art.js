@@ -176,9 +176,10 @@ export function checkStickman(strokes) {
   const bb = bboxOf(pts);
   if (bb.h < 110) return fail('Bigger! Use most of the page.');
   if (bb.h < bb.w * 0.65) return fail("That's wider than it is tall. Stick men stand up.");
-  // The cheap check before the costly one: a scribble is turned down before its loops are searched
+  // The cheap check before the costly one: a scribble is turned down before its loops are searched. Against height and
+  // width both, so arms drawn beefy (outlined, muscled) on a short man still pass
   const ink = strokes.reduce((t, s) => t + strokeLen(s), 0);
-  if (ink > bb.h * 6) return fail("That's a scribble. Stick men are just a few lines.");
+  if (ink > (bb.h + bb.w) * 6) return fail("That's a scribble. Stick men are just a few lines.");
   let head = null;
   for (const s of strokes) {
     for (const l of findLoops(s)) {

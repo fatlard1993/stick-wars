@@ -1259,3 +1259,18 @@ test('a gladiator from the hall can be enlisted: its warrior and gear, a new wea
 	expect(roster.get(champion)).toMatchObject({ wins: 2 });
 	expect(roster.get(champion).art.swords[0].raw).toEqual(game.state.art[1].swords[0].raw);
 });
+
+test('a stick man with beefy arms (outlined, muscled) is a stick man, not a scribble', () => {
+	const oval = (cx, cy, rx, ry, rot = 0) =>
+		Array.from({ length: 29 }, (_, i) => {
+			const t = (i / 28) * Math.PI * 2, x = Math.cos(t) * rx, y = Math.sin(t) * ry;
+
+			return { x: cx + x * Math.cos(rot) - y * Math.sin(rot), y: cy + x * Math.sin(rot) + y * Math.cos(rot) };
+		});
+	const arms = [oval(200, 200, 48, 24, 0.5), oval(158, 245, 40, 20, 1.2), oval(280, 200, 48, 24, -0.5), oval(322, 245, 40, 20, -1.2)];
+	const short = [oval(240, 150, 28, 28), lineS(240, 178, 240, 260), lineS(240, 260, 205, 330), lineS(240, 260, 275, 330), ...arms];
+
+	expect(judge('stickmen', short).ok).toBe(true);
+	// A page of zigzags still isn't one
+	expect(judge('stickmen', [oval(240, 90, 30, 30), Array.from({ length: 120 }, (_, i) => ({ x: 140 + (i % 2) * 200, y: 60 + i * 3 }))]).ok).toBe(false);
+});
