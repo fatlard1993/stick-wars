@@ -2,7 +2,9 @@
 
 Draw your own army of stick men, stones, catapults and weapons, then watch them hack each other to bits. Or draw one gladiator, armed and armored as you like, and send it into the arena. Play the computer or a friend.
 
-![A battle: hand-drawn stick men with axes and swords swarming a stone wall, catapults behind each wall, blood on the ground](screenshot.png)
+![Play: a war, blue and green stick men clashing between their stone walls in a burst of blood, a severed weapon spinning away](screenshot.png)
+
+![Play: two gladiators in the arena, a robot swinging its hammer at a swordsman, blood flying, the stands packed with players' own stick men](screenshot-arena.png)
 
 ## Starting a game
 
