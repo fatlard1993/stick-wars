@@ -59,10 +59,12 @@ export default class Start extends View {
 				// Remembering it is only a convenience
 			}
 			for (const [name, button] of Object.entries(this.styleButtons)) button.elem.setAttribute('aria-pressed', String(name === style));
-			// The hall of gladiators, for a gladiators' fight
+			// The hall of gladiators, and a tournament, for gladiators
 			this.hallButton.elem.style.display = style === 'gladiator' ? '' : 'none';
+			this.tournamentButton.elem.style.display = style === 'gladiator' ? '' : 'none';
 		};
 
+		this.tournamentButton = doodle('bracket', { big: true, size: '3em', label: 'tournament', onPress: () => this.play('tournament') });
 		this.hallButton = doodle('trophy', { size: '2.4em', label: 'hall', onPress: () => (window.location.href = '#/hall') });
 
 		this.styleButtons = {
@@ -87,6 +89,7 @@ export default class Start extends View {
 		modes.append(
 			doodle('robot', { big: true, size: '3em', label: 'vs computer', onPress: () => this.play('cpu') }),
 			doodle('twoPlayers', { big: true, size: '3em', label: 'two players', onPress: () => this.play('duo') }),
+			this.tournamentButton,
 		);
 	}
 
@@ -104,10 +107,13 @@ export default class Start extends View {
 			}
 
 			// A friend's game with a free side, whose waiting player is here now: an empty seat at a table left long ago isn't one
+			const someoneHere = game => game.players.some(({ online }) => online);
 			const open =
 				mode === 'duo'
-					? games.find(game => sameKind(game) && game.state.seats.includes(null) && game.players.some(({ online }) => online))
-					: null;
+					? games.find(game => sameKind(game) && game.state.seats.includes(null) && someoneHere(game))
+					: mode === 'tournament'
+						? games.find(game => sameKind(game) && game.state.open && someoneHere(game))
+						: null;
 			const name = `${style === 'gladiator' ? 'gladiators, ' : ''}${MODES[mode]} ${new Date().toLocaleTimeString()}`;
 			await sitDown(open ?? (await createGame({ body: { name, mode, style } })).body);
 		} catch (error) {

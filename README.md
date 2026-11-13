@@ -8,7 +8,7 @@ Draw your own army of stick men, stones, catapults and weapons, then watch them 
 
 ## Starting a game
 
-Pick **war** or **gladiators**, then **vs computer**, or **two players** to fight a friend on their own device: the invite button in the bar shows a code, and their phone, pointed at it, is seated straight away. Beside the two styles, the **armory** and the **crowd** buttons open the weapons and stick men every player has drawn, and with gladiators picked, the **hall** opens the gladiators that have won.
+Pick **war** or **gladiators**, then **vs computer**, **two players** to fight a friend on their own device, or with gladiators a **tournament** for up to eight: the invite button in the bar shows a code, and their phone, pointed at it, is seated straight away. Beside the two styles, the **armory** and the **crowd** buttons open the weapons and stick men every player has drawn, and with gladiators picked, the **hall** opens the gladiators that have won.
 
 Every drawing page works the same way. The check mark (or Enter) keeps a drawing if it passes a quick shape check, and says what's missing if it doesn't. The curly arrow undoes a line (Z), the eraser clears the page (C), the arrow to the bar moves on (N). The dashed drawing shows what's wanted. A pen that slides off the page lifts there, and draws on again where it comes back.
 
@@ -94,6 +94,10 @@ The computer cheers its own gladiator on the same way.
 Beaten down (badly hurt, or a leg gone), a gladiator yields: on his knees, the fight stopped, the winner standing over him. Two stick medics run out of his gate: one slaps his face to bring him round, the other picks up every limb he lost from the sand, carries it back and slaps it on, so he's whole to be judged. Then they stand back, the crowd hushes, and a thumb over him tilts slowly back and forth, up, sideways, down, as it makes up its mind... then it slams down: **thumbs up**, and he's spared, or **thumbs down**, and he's drawn and quartered, his arms and legs torn off one by one while the medics run for the gate. The crowd judges mostly by the fight it just watched: how badly he hurt the winner, and how long he lasted. His record in the hall only nudges it, and now and then it spares one on a whim.
 
 Fight again (the circling arrows) with the same gladiators, unless one was quartered: the computer sends another, and a player who lost draws a new one. Walking out of a duel (the door asks first, a skull showing what it costs) loses it.
+
+### A tournament
+
+Up to eight players, each on their own phone: the first opens a tournament, the others join it from the invite code (or the tournament button, while one's gathering). Each draws a gladiator on their own pages, at their own pace, and sees who else is still drawing; once two or more are drawn and nobody's still at it, the first player starts it (the bracket doodle). The gladiators are drawn into pairs at random (an odd one out has a bye), and the duels are fought one at a time in the arena, everyone watching, the two fighters' players cheering theirs on. The crowd judges every loser as ever, but a loser's out either way, and the winners go through to the next round, until one is left: the champion. Between duels a card shows the bracket, each gladiator drawn, the winners ringed and the beaten crossed out. Then a new bracket with the same gladiators (the circling arrows), or everyone draws a new one (the pencil). A player who leaves loses the duel they're in, and the next one they'd have fought is a walkover.
 
 ### The hall
 

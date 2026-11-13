@@ -346,7 +346,7 @@ test('the art is saved and the battle is not; a game saved mid-battle comes back
 
 	const save = JSON.parse(JSON.stringify(game.toSaveState()));
 
-	expect(save.version).toBe(4);
+	expect(save.version).toBe(5);
 	expect(save.state.art[0].swords).toHaveLength(1);
 
 	const back = new Game({ saveState: save, server: server(), logger: quiet });
@@ -1062,4 +1062,71 @@ test('a gladiator earns a name after a few wins, and a weapon after a few kills,
 	expect(armory.listing('loved')[0].name).toBeUndefined();
 	armory.fought([id], { [id]: 1 });
 	expect(armory.listing('loved')[0].name).toMatch(/^the /);
+});
+
+// ---------------------------------------------------------------- tournaments
+
+// A tournament's duels fought out, each verdict forced (spared), until its champion is crowned or `duels` are done
+const fightOut = (game, duels = 99) => {
+	for (let k = 0; k < duels && game.state.bracket.champion === null; k++) {
+		const pair = [...game.state.seats];
+
+		duelTo(game, true);
+		// Its end card stands a while, then the next duel
+		for (let i = 0; i < 400 && game.state.bracket.champion === null && game.state.seats.join() === pair.join(); i++) {
+			game.world.step(DT);
+			game.tick();
+		}
+	}
+};
+
+test('a tournament: each player draws a gladiator, the first starts the bracket, duels one by one, one champion', () => {
+	const game = newGame('tournament', 'gladiator');
+	const [a, b, c] = ['🦊', '🐸', '🦉'].map(name => game.addPlayer(name));
+
+	expect(game.state.entrants.map(e => e.id)).toEqual([a.id, b.id, c.id]);
+	expect(game.state.host).toBe(a.id);
+	// Each draws on their own pages, on their own clock
+	expect(game.act(b.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[1] }).ok).toBe(true);
+	expect(game.state.entrants[1].drawing.step).toBe(1);
+	expect(game.state.entrants[0].drawing.step).toBe(0);
+	expect(game.viewFor(b.id).you.drawing.step).toBe(1);
+	// Not started while anyone's still drawing, and only by the first player
+	for (const player of [a, b]) for (let k = 0; k < 4; k++) game.act(player.id, 'next');
+	expect(game.act(a.id, 'start').error).toBe('Someone is still drawing');
+	for (let k = 0; k < 4; k++) game.act(c.id, 'next');
+	expect(game.act(b.id, 'start').error).toBe('The first player starts it');
+	expect(game.act(a.id, 'start').ok).toBe(true);
+	expect(game.state.phase).toBe('battle');
+	expect(game.world.arena).toBe(true);
+	// Three: one pair fights, one has a bye
+	expect(game.state.bracket.rounds[0].map(pair => pair.length).sort()).toEqual([1, 2]);
+	// Someone coming late only watches
+	const late = game.addPlayer('🐢');
+
+	expect(game.state.entrants).toHaveLength(3);
+	expect(game.act(late.id, 'shout', { stance: 'charge' }).ok).toBe(false);
+	fightOut(game);
+	expect(game.state.bracket.champion).not.toBeNull();
+	expect(game.state.phase).toBe('over');
+	expect(game.state.result.champion).toBe(game.state.entrants[game.state.bracket.champion].id);
+	// A new bracket with the same gladiators
+	expect(game.act(b.id, 'again').ok).toBe(true);
+	expect(game.state.phase).toBe('battle');
+});
+
+test('a tournament fighter walking out loses the duel, and the bracket goes on without them', () => {
+	const game = newGame('tournament', 'gladiator');
+	const players = ['🦊', '🐸'].map(name => game.addPlayer(name));
+
+	for (const player of players) for (let k = 0; k < 4; k++) game.act(player.id, 'next');
+	game.act(players[0].id, 'start');
+	game.removePlayer(game.state.seats[0]);
+	expect(game.state.phase).toBe('over');
+	expect(game.state.result.winner).toBe(1);
+	for (let i = 0; i < 60 * 10 && game.state.bracket.champion === null; i++) {
+		game.world.step(DT);
+		game.tick();
+	}
+	expect(game.state.entrants[game.state.bracket.champion].id).toBe(game.state.seats[1]);
 });

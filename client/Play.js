@@ -114,8 +114,8 @@ export default class Play extends View {
 		if (this.view) this.update(this.view);
 	}
 
-	setArt({ art, artOf }) {
-		this.art = { art, artOf };
+	setArt({ art, artOf, entrants }) {
+		this.art = { art, artOf, entrants };
 		this.screen?.setArt?.(this.art);
 	}
 
@@ -128,14 +128,16 @@ export default class Play extends View {
 		const team = state.seats.indexOf(this.playerId);
 		const kind = state.phase === 'draw' ? 'draw' : 'battle';
 
-		if (kind !== this.kind) {
+		// A new screen for a new phase, or when this page's side changes (a tournament's duels change who's fighting)
+		if (kind !== this.kind || (kind === 'battle' && team !== this.screenTeam)) {
 			this.kind = kind;
+			this.screenTeam = team;
 			this.screen?.destroy();
 			this.screen = kind === 'draw' ? new DrawScreen({ appendTo: this.body }) : new BattleScreen({ appendTo: this.body });
 			if (this.art) this.screen.setArt?.(this.art);
 			this.sound.music(kind === 'draw' ? 'drawing' : 'battle');
 		}
-		this.screen.update(view, { team, sound: this.sound, art: this.art });
+		this.screen.update(view, { team, sound: this.sound, art: this.art, playerId: this.playerId });
 		this.showStatus(view, team);
 	}
 

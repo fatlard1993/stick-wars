@@ -25,6 +25,7 @@ import {
 import { TEAMS, TICK_MS } from '../rules.js';
 import AimPad from './AimPad.js';
 import { shelf } from './armoryPicks.js';
+import { bracket } from './Bracket.js';
 import RockPad from './RockPad.js';
 import { drawIcon, icon } from './icons.js';
 import {
@@ -415,8 +416,9 @@ export default class BattleScreen extends Screen {
 	 * @param {object} view - The game's view
 	 * @param {object} me - { team, sound, art }
 	 */
-	update(view, { team, sound, art }) {
+	update(view, { team, sound, art, playerId }) {
 		this.team = team;
+		this.playerId = playerId;
 		this.sound = sound;
 		this.art = art;
 		this.view = view;
@@ -530,7 +532,7 @@ export default class BattleScreen extends Screen {
 	// Over the field: who a paused battle waits for, or how a finished one went and what next
 	showCard(view) {
 		const { state } = view;
-		const key = `${state.phase}|${view.away.join()}|${state.battles}`;
+		const key = `${state.phase}|${view.away.join()}|${state.battles}|${state.result?.champion ?? ''}`;
 
 		if (key === this.shown) return;
 		this.shown = key;
@@ -557,6 +559,29 @@ export default class BattleScreen extends Screen {
 		if (state.phase !== 'over' || !state.result) return;
 
 		const { winner, stats, spared } = state.result;
+
+		// A tournament: a card of its own. Between duels, the crowd's thumb on the one just beaten, the bracket, and the next
+		// duel coming (an hourglass); once it's over, the trophy, the bracket with its champion, and another go
+		if (state.mode === 'tournament') {
+			const over = state.result.champion !== undefined;
+			const entered = state.entrants.some(entrant => entrant.id === this.playerId && !entrant.gone);
+
+			this.card.elem.append(
+				over ? icon('trophy', { size: '3.4em' }) : icon(spared ? 'thumbUp' : 'thumbDown', { size: '2.6em', color: spared ? '#2f7a3a' : RED_PENCIL }),
+				bracket(state, this.art),
+			);
+			if (!over) this.card.elem.append(icon('hourglass', { size: '1.8em' }));
+			else if (entered)
+				this.card.elem.append(
+					row(
+						doodle('again', { title: 'Again, a new bracket', size: '2em', onPress: () => act('again') }),
+						doodle('redraw', { title: 'Draw new gladiators', size: '2em', onPress: () => act('redraw') }),
+					),
+				);
+			if (over) this.sound?.play(state.result.champion === this.playerId ? 'win' : 'roar');
+
+			return;
+		}
 		const mine = this.team >= 0;
 		const won = winner === this.team;
 		let big;

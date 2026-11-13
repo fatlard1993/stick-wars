@@ -273,12 +273,14 @@ export default class DrawScreen extends Screen {
 	 * @param {object} view - The game's view
 	 * @param {object} me - { team, sound }
 	 */
-	update(view, { team, sound }) {
+	update(view, { team, sound, playerId }) {
 		this.team = team;
 		this.sound = sound;
+		this.playerId = playerId;
 		this.steps = stepsOf(view.state);
 
-		const mine = view.state.drawing[team];
+		// A tournament's player draws on their own pages; anyone else on their seat's
+		const mine = view.you?.drawing ?? view.state.drawing[team];
 
 		if (!mine || mine.done) return this.showWaiting(view);
 		this.showPad();
@@ -319,7 +321,7 @@ export default class DrawScreen extends Screen {
 	}
 
 	showKept() {
-		const items = this.art?.art?.[this.team]?.[this.kind] ?? [];
+		const items = this.myArt()?.[this.kind] ?? [];
 
 		this.count.elem.textContent = items.length ? `Kept: ${items.length}` : '';
 
@@ -406,7 +408,7 @@ export default class DrawScreen extends Screen {
 		this.pad.clearCanvas();
 		g.lineCap = g.lineJoin = 'round';
 		// Armor and a shield are drawn for the warrior: shown faintly under them, in its side's ink
-		const warrior = (this.kind === 'armor' || this.kind === 'shield') && this.art?.art?.[this.team]?.stickmen?.[0];
+		const warrior = (this.kind === 'armor' || this.kind === 'shield') && this.myArt()?.stickmen?.[0];
 
 		if (warrior) {
 			g.strokeStyle = TEAMS[Math.max(0, this.team)].ink;
@@ -451,10 +453,43 @@ export default class DrawScreen extends Screen {
 	}
 
 	// Done drawing (or only watching): who the battle waits on, each side's flag and how far along it is
+	// This page's own art: its tournament entrant's, or its seat's
+	myArt() {
+		return this.art?.entrants?.[this.playerId] ?? this.art?.art?.[this.team];
+	}
+
+	// A tournament gathering: everyone in, each drawing or done; the first player starts it once nobody's still drawing
+	showGathering(view) {
+		const { entrants, host } = view.state;
+		const here = entrants.filter(entrant => !entrant.gone);
+		const people = document.createElement('div');
+
+		people.className = 'side';
+		people.style.flexWrap = 'wrap';
+		people.style.justifyContent = 'center';
+		for (const entrant of here) {
+			const one = document.createElement('span');
+
+			one.style.display = 'inline-flex';
+			one.append(icon('person', { size: '1.4em' }), icon(entrant.done ? 'keep' : 'draw', { size: '1.2em' }));
+			people.append(one);
+		}
+
+		const ready = here.length >= 2 && here.every(entrant => entrant.done);
+		const go =
+			this.playerId === host
+				? doodle('bracket', { title: 'Start the tournament', big: true, size: '2.6em', disabled: !ready, onPress: () => act('start') })
+				: null;
+
+		if (go && !ready) go.elem.style.opacity = '0.4';
+		this.waiting.elem.replaceChildren(icon(ready ? 'bracket' : 'hourglass', { size: '3em' }), people, ...(go ? [go.elem] : []));
+	}
+
 	showWaiting(view) {
 		this.main.elem.style.display = 'none';
 		this.side.elem.style.display = 'none';
 		if (!this.waiting.elem.isConnected) this.elem.append(this.waiting.elem);
+		if (view.state.mode === 'tournament') return this.showGathering(view);
 
 		const { drawing, seats, mode } = view.state;
 		const rows = (mode === 'duo' ? [0, 1] : [0]).map(t => {

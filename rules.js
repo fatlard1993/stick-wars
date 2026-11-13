@@ -32,7 +32,8 @@ export const stepsOf = state => STYLES[state?.style] ?? STEPS;
 export const MOST_KEPT = 12;
 
 /** Against the computer, or two players each on their own device */
-export const MODES = { cpu: 'vs computer', duo: 'two players' };
+/** Against the computer, two players each on their own device, or (gladiators only) a tournament of up to eight */
+export const MODES = { cpu: 'vs computer', duo: 'two players', tournament: 'tournament' };
 
 /** The two sides: blue on the left, green on the right */
 export const TEAMS = [
@@ -45,10 +46,15 @@ export const TICK_MS = 50;
 
 /** A new game's state, for a mode and a style */
 export const newState = (mode, style) => ({
-	mode: mode === 'duo' ? 'duo' : 'cpu',
+	mode: mode === 'duo' || (mode === 'tournament' && style === 'gladiator') ? mode : 'cpu',
 	style: style === 'gladiator' ? 'gladiator' : 'war',
 	// Which saved gladiator (the hall of them, roster.js) each side fights with, if it's one: a gladiators' fight only
 	fame: [null, null],
+	// A tournament's gladiators, each with its player's own art and drawing clock, the first in starting it, and its
+	// bracket once started (tournament.js); the two in the duel being fought sit in the seats meanwhile
+	entrants: [],
+	host: null,
+	bracket: null,
 	// Drawing, fighting, or a battle over
 	phase: 'draw',
 	// Who sits on each side: team 0 (blue) and team 1 (green, the computer's in a game against it)
@@ -90,7 +96,7 @@ export const wallSize = art => {
 export const newDrawing = style => ({ step: 0, left: (STYLES[style] ?? STEPS)[0].seconds, done: false });
 
 /** The sides played by people in this game: both against a friend, blue alone against the computer */
-export const humanTeams = state => (state.mode === 'duo' ? [0, 1] : [0]);
+export const humanTeams = state => (state.mode === 'cpu' ? [0] : [0, 1]);
 
 /** Whose art each side fights with: always its own; the computer's is drawn for it (art.js cpuArmy) */
 export const artOf = () => [0, 1];

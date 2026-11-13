@@ -19,6 +19,7 @@ import {
 	wallSize,
 } from './rules.js';
 import Shelf from './shelf.js';
+import { MOST_ENTRANTS, advance, currentPair, newBracket, newEntrant } from './tournament.js';
 import Roster from './roster.js';
 
 // The stores every game shares, each in its file under data/ (only in memory while testing): the hall of gladiators, the
@@ -34,14 +35,14 @@ export const CROWD = new Shelf(kept('crowd.json'), {
 });
 
 // How long a won battle plays on before its end is called, and then how long it settles before it's left still, in
-// battle seconds
-const END_AFTER = 2.2, SETTLE = 8;
+// battle seconds; in a tournament, how long the end card stands before the next duel
+const END_AFTER = 2.2, SETTLE = 8, NEXT_DUEL = 6;
 
 // One running game, on the server: who sits on each side, the art each side has drawn, and once both are done, the
 // battle (battle.js), stepped here and sent to every page many times a second. Drawings are judged here too, so what
 // a page keeps is what passed.
 export default class Game extends BaseGame {
-	static version = 4;
+	static version = 5;
 	static migrations = {
 		// A save from version 2, which had no ammo page, part way past beams moves on a step (save.version is the version
 		// it was saved as, while migrating)
@@ -54,6 +55,13 @@ export default class Game extends BaseGame {
 			if (!save.state) return;
 			save.state.style ??= 'war';
 			save.state.fame ??= [null, null];
+		},
+		// Version 5 added tournaments: a game saved before has no entrants and no bracket
+		5: save => {
+			if (!save.state) return;
+			save.state.entrants ??= [];
+			save.state.host ??= null;
+			save.state.bracket ??= null;
 		},
 	};
 
@@ -82,13 +90,13 @@ export default class Game extends BaseGame {
 	actions = {
 		// A drawing kept as the current step's art, if it passes that kind's check
 		keep(player, { strokes } = {}) {
-			const team = this.teamOf(player.id);
-			const drawing = this.state.drawing[team];
+			const side = this.sideOf(player.id);
+			const { drawing } = side;
 
 			if (this.state.phase !== 'draw' || !drawing || drawing.done) refuse('Not drawing now');
 
 			const { kind } = stepsOf(this.state)[drawing.step];
-			const kept = this.state.art[team][kind];
+			const kept = side.art[kind];
 			const gladiator = this.state.style === 'gladiator';
 
 			// Rocks are the catapult's whole pile for a battle, so no more than it may throw
@@ -97,7 +105,7 @@ export default class Game extends BaseGame {
 			if (!gladiator && kept.length >= most) refuse(`That's plenty: ${most} is the most.`);
 
 			// Armor and a shield are drawn for the warrior already drawn, and sized by it
-			const verdict = judge(kind, strokes, { warrior: this.state.art[team].stickmen?.[0] });
+			const verdict = judge(kind, strokes, { warrior: side.art.stickmen?.[0] });
 
 			if (!verdict.ok) refuse(verdict.msg);
 			// Drawn by a person, so it counts toward a bigger army or wall (the defaults never do); a new weapon goes into
@@ -112,7 +120,7 @@ export default class Game extends BaseGame {
 			kept.push(item);
 			this.artChanged();
 			// A gladiator has one of each: kept, and on to the next page
-			if (gladiator) this.finishStep(team);
+			if (gladiator) this.finishStep(side);
 
 			// Whether it's a new one, or too like one kept already to earn another man (stick men and weapons, in a war)
 			const fresh = gladiator || !['stickmen', 'swords'].includes(kind) || freshOf(kind, kept.filter(item => item.drawn)).at(-1);
@@ -144,8 +152,8 @@ export default class Game extends BaseGame {
 
 		// A weapon borrowed from the armory instead of drawn: it fights the same, but earns no extra man
 		borrow(player, { id } = {}) {
-			const team = this.teamOf(player.id);
-			const drawing = this.state.drawing[team];
+			const side = this.sideOf(player.id);
+			const { drawing } = side;
 
 			if (this.state.phase !== 'draw' || !drawing || drawing.done) refuse('Not drawing now');
 			if (stepsOf(this.state)[drawing.step].kind !== 'swords') refuse('Only weapons are borrowed');
@@ -154,23 +162,38 @@ export default class Game extends BaseGame {
 
 			if (!entry) refuse('That one is gone');
 
-			const kept = this.state.art[team].swords;
+			const kept = side.art.swords;
 			const gladiator = this.state.style === 'gladiator';
 
 			if (!gladiator && kept.length >= MOST_KEPT) refuse(`That's plenty: ${MOST_KEPT} is the most.`);
 			kept.push({ ...structuredClone(entry.item), armory: entry.id });
 			this.artChanged();
-			if (gladiator) this.finishStep(team);
+			if (gladiator) this.finishStep(side);
 
 			return { kept: kept.length };
 		},
 
 		// Done with this step before the clock runs out
 		next(player) {
-			const team = this.teamOf(player.id);
+			const side = this.sideOf(player.id);
 
-			if (this.state.phase !== 'draw' || this.state.drawing[team]?.done !== false) refuse('Not drawing now');
-			this.finishStep(team);
+			if (this.state.phase !== 'draw' || side.drawing?.done !== false) refuse('Not drawing now');
+			this.finishStep(side);
+		},
+
+		// A tournament started by its first player, once two or more gladiators are drawn and nobody's still drawing
+		start(player) {
+			const { state } = this;
+
+			if (state.mode !== 'tournament' || state.phase !== 'draw' || state.bracket) refuse('Nothing to start');
+			if (player.id !== state.host) refuse('The first player starts it');
+
+			const ready = state.entrants.filter(entrant => !entrant.gone);
+
+			if (ready.length < 2) refuse('Two gladiators at least');
+			if (ready.some(entrant => !entrant.drawing.done)) refuse('Someone is still drawing');
+			state.bracket = newBracket(state.entrants.map((entrant, at) => (entrant.gone ? -1 : at)).filter(at => at >= 0));
+			this.nextDuel();
 		},
 
 		// Some of our men (their ids, as the page picked them out) told what to do: stay home, hold the wall, charge, crew
@@ -211,6 +234,14 @@ export default class Game extends BaseGame {
 
 		// The same armies again
 		again(player) {
+			// A tournament over: the same gladiators, a new bracket (those still here)
+			if (this.state.mode === 'tournament') {
+				this.sideOf(player.id);
+				if (this.state.bracket?.champion === null || !this.state.bracket) refuse('The tournament is still on');
+				this.state.bracket = newBracket(this.state.entrants.map((entrant, at) => (entrant.gone ? -1 : at)).filter(at => at >= 0));
+
+				return void this.nextDuel();
+			}
 			this.teamOf(player.id);
 			if (this.state.phase !== 'over') refuse('The battle is still on');
 
@@ -235,6 +266,17 @@ export default class Game extends BaseGame {
 
 		// Everyone draws a new army
 		redraw(player) {
+			// A tournament over: everyone still here draws a new gladiator
+			if (this.state.mode === 'tournament') {
+				this.sideOf(player.id);
+				if (this.state.bracket?.champion === null || !this.state.bracket) refuse('The tournament is still on');
+				this.state.entrants = this.state.entrants.filter(entrant => !entrant.gone).map(entrant => newEntrant(entrant.id));
+				Object.assign(this.state, { bracket: null, phase: 'draw', seats: [null, null], art: [emptyArt('gladiator'), emptyArt('gladiator')], fame: [null, null] });
+				this.world = null;
+				this.artChanged();
+
+				return;
+			}
 			this.teamOf(player.id);
 			if (this.state.phase !== 'over') refuse('The battle is still on');
 			for (const team of humanTeams(this.state)) this.resetArt(team);
@@ -257,6 +299,58 @@ export default class Game extends BaseGame {
 		return team;
 	}
 
+	// Where a player draws: their seat's pages, or in a tournament their own (anyone else is only watching)
+	sideOf(playerId) {
+		if (this.state.mode === 'tournament') {
+			const entrant = this.state.entrants.find(e => e.id === playerId && !e.gone);
+
+			if (!entrant) refuse('You are watching this one');
+
+			return entrant;
+		}
+
+		const team = this.teamOf(playerId);
+
+		return { art: this.state.art[team], drawing: this.state.drawing[team] };
+	}
+
+	// A tournament's next duel: its two gladiators into the seats and out into the arena; a bye or a walkover (a player
+	// gone) goes straight through; once the champion's crowned, the end card stays
+	nextDuel() {
+		const { state } = this;
+		const pair = currentPair(state.bracket);
+
+		if (!pair) {
+			const champion = state.entrants[state.bracket.champion];
+
+			state.phase = 'over';
+			state.result = { ...(state.result ?? {}), champion: champion.id };
+			this.publish();
+
+			return;
+		}
+
+		const [a, b] = pair, A = state.entrants[a], B = state.entrants[b];
+
+		if (b === undefined || A.gone || B?.gone) {
+			advance(state.bracket, b === undefined || B.gone ? a : b);
+
+			return this.nextDuel();
+		}
+		Object.assign(state, { seats: [A.id, B.id], art: [A.art, B.art], fame: [A.fame, B.fame] });
+		this.startBattle();
+	}
+
+	// A tournament's duel over: the hall's verdict on each kept with its gladiator, the winner through
+	duelDone() {
+		const { state } = this, [a, b] = currentPair(state.bracket);
+
+		state.entrants[a].fame = state.fame[0];
+		state.entrants[b].fame = state.fame[1];
+		advance(state.bracket, state.result?.winner === 1 ? b : a);
+		this.nextDuel();
+	}
+
 	resetArt(team) {
 		this.state.art[team] = emptyArt(this.state.style);
 		this.state.drawing[team] = newDrawing(this.state.style);
@@ -274,14 +368,15 @@ export default class Game extends BaseGame {
 		});
 	}
 
-	finishStep(team) {
-		const drawing = this.state.drawing[team];
+	// A side's page done with (side: its { art, drawing })
+	finishStep(side) {
+		const { drawing } = side;
 		const steps = stepsOf(this.state);
 		const { kind, optional } = steps[drawing.step];
 
 		// Left empty, a page gets the defaults; armor and a shield are only had if drawn
-		if (!optional && !this.state.art[team][kind].length) {
-			this.state.art[team][kind] = this.defaults(kind);
+		if (!optional && !side.art[kind].length) {
+			side.art[kind] = this.defaults(kind);
 			this.artChanged();
 		}
 		drawing.step++;
@@ -301,7 +396,8 @@ export default class Game extends BaseGame {
 	startWhenReady() {
 		const { state } = this;
 
-		if (state.phase !== 'draw') return;
+		// A tournament waits for its first player to start it
+		if (state.phase !== 'draw' || state.mode === 'tournament') return;
 		if (humanTeams(state).every(team => state.seats[team] && state.drawing[team].done)) this.startBattle();
 	}
 
@@ -373,16 +469,21 @@ export default class Game extends BaseGame {
 		const seconds = TICK_MS / 1000;
 
 		if (state.phase === 'draw') {
-			for (const team of humanTeams(state)) {
-				const drawing = state.drawing[team];
+			// Each side drawing has its clock running, unless its player's page is closed: a seat's, or a tournament's entrant's
+			const sides =
+				state.mode === 'tournament'
+					? state.entrants.filter(entrant => !entrant.gone && this.online.has(entrant.id))
+					: humanTeams(state).filter(team => state.seats[team] && !away.includes(team)).map(team => ({ art: state.art[team], drawing: state.drawing[team] }));
 
-				if (!state.seats[team] || drawing.done || away.includes(team)) continue;
-				drawing.left -= seconds;
-				if (drawing.left <= 0) this.finishStep(team);
+			for (const side of sides) {
+				if (side.drawing.done) continue;
+				side.drawing.left -= seconds;
+				if (side.drawing.left <= 0) this.finishStep(side);
 			}
 
 			// Sent when the clocks show something new, not every tick
-			const shown = JSON.stringify([state.phase, state.drawing.map(({ step, left }) => [step, Math.ceil(left)]), away]);
+			const clocks = [...state.drawing, ...state.entrants.map(entrant => entrant.drawing)].map(({ step, left, done }) => [step, Math.ceil(left), done]);
+			const shown = JSON.stringify([state.phase, clocks, away, state.entrants.length]);
 
 			if (shown !== this.shown) {
 				this.shown = shown;
@@ -392,6 +493,10 @@ export default class Game extends BaseGame {
 			return;
 		}
 		if (!this.world) return;
+		// A tournament's duel over: its end card a while, then the next
+		if (state.mode === 'tournament' && state.phase === 'over' && state.bracket?.champion === null && this.world.overT > END_AFTER + NEXT_DUEL) {
+			return this.duelDone();
+		}
 		// A finished battle plays on a few seconds (the dead fall, the crowd cheers), then holds still: nothing more to send
 		if (state.phase === 'over' && this.world.overT > END_AFTER + SETTLE) return;
 		if (state.phase === 'battle' && away.length) {
@@ -468,11 +573,19 @@ export default class Game extends BaseGame {
 
 	// What each page is sent: the game's state (the art itself goes once, on a page's first view and when it changes,
 	// by artChanged), the battle as it is now, and what just happened in it
-	viewFor(_playerId, how) {
-		const { art, ...rest } = this.savedState();
+	viewFor(playerId, how) {
+		const { art, entrants = [], ...rest } = this.savedState();
+		const mine = entrants.find(entrant => entrant.id === playerId);
 
 		return {
-			state: { ...rest, kept: art.map(byKind => Object.fromEntries(Object.entries(byKind).map(([kind, items]) => [kind, items.length]))) },
+			state: {
+				...rest,
+				kept: art.map(byKind => Object.fromEntries(Object.entries(byKind).map(([kind, items]) => [kind, items.length]))),
+				// A tournament's gladiators, without their art (that goes with the art): who, done drawing or not, gone or not
+				entrants: entrants.map(({ id, drawing, gone }) => ({ id, done: drawing.done, step: drawing.step, gone })),
+			},
+			// In a tournament, the page's own drawing clock
+			...(mine && { you: { drawing: mine.drawing } }),
 			players: this.toClient().players,
 			away: this.away(),
 			// Each side's record in the hall of gladiators, if it's one of them
@@ -488,7 +601,12 @@ export default class Game extends BaseGame {
 	}
 
 	artView() {
-		return { art: this.state.art, artOf: artOf(this.state) };
+		return {
+			art: this.state.art,
+			artOf: artOf(this.state),
+			// A tournament's gladiators' art, by player, for their own pages and the bracket's pictures
+			...(this.state.mode === 'tournament' && { entrants: Object.fromEntries(this.state.entrants.map(entrant => [entrant.id, entrant.art])) }),
+		};
 	}
 
 	// Every page here gets the art again: a drawing kept, the defaults filled in, a new battle's armies
@@ -498,9 +616,11 @@ export default class Game extends BaseGame {
 
 	// What the lobby lists: who, which mode, how far along; never the art
 	toClient() {
-		const { mode, style, phase, seats } = this.state ?? {};
+		const { mode, style, phase, seats, entrants = [], bracket } = this.state ?? {};
+		// A tournament still taking entrants
+		const open = mode === 'tournament' && !bracket && entrants.filter(entrant => !entrant.gone).length < MOST_ENTRANTS;
 
-		return { ...super.toClient(), state: { mode, style, phase, seats } };
+		return { ...super.toClient(), state: { mode, style, phase, seats, open } };
 	}
 
 	toSaveState() {
@@ -509,10 +629,51 @@ export default class Game extends BaseGame {
 
 	// A new player takes the first free side a person plays; anyone after that watches
 	onPlayerAdded(player) {
+		// A tournament takes entrants until it starts (the first in starts it); after that, anyone new watches
+		if (this.state.mode === 'tournament') {
+			const { state } = this;
+
+			if (!state.bracket && state.entrants.filter(entrant => !entrant.gone).length < MOST_ENTRANTS && !state.entrants.some(e => e.id === player.id)) {
+				state.entrants.push(newEntrant(player.id));
+				state.host ??= player.id;
+				this.artChanged();
+			}
+
+			return this.publish();
+		}
+
 		const free = humanTeams(this.state).find(team => !this.state.seats[team]);
 
 		if (free !== undefined) this.state.seats[free] = player.id;
 		this.startWhenReady();
+		this.publish();
+	}
+
+	// A tournament's player gone: before it starts, out of it (the next in line starts it); once started, their gladiator
+	// is out: a duel they're in is lost, and one still to come is a walkover
+	leaveTournament(id) {
+		const { state } = this;
+		const entrant = state.entrants.find(e => e.id === id);
+
+		if (!entrant) return this.publish();
+		if (!state.bracket) {
+			state.entrants = state.entrants.filter(e => e !== entrant);
+			if (state.host === id) state.host = state.entrants[0]?.id ?? null;
+			this.artChanged();
+
+			return this.publish();
+		}
+		entrant.gone = true;
+
+		const team = state.seats.indexOf(id);
+
+		if (team >= 0 && state.phase === 'battle' && this.world) {
+			this.honour(1 - team, true, true);
+			state.result = { winner: 1 - team, stats: structuredClone(this.world.stats), spared: true };
+			state.phase = 'over';
+			this.world.over = { winner: 1 - team, spared: true };
+			this.world.overT = END_AFTER;
+		}
 		this.publish();
 	}
 
@@ -523,6 +684,8 @@ export default class Game extends BaseGame {
 
 	// A player gone for good: their side is free for someone new, who draws their own army. A battle they were in ends.
 	onPlayerRemoved(id) {
+		if (this.state.mode === 'tournament') return this.leaveTournament(id);
+
 		const team = this.state.seats.indexOf(id);
 
 		if (team < 0) return this.publish();
