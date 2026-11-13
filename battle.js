@@ -518,6 +518,49 @@ class Stickman {
 		return { x: post.x + post.dir * 34, z: clamp(post.z + (at - 1) * 14, 0, DEPTH) };
 	}
 
+	// Where he's off to for his smashed catapult: a piece of it still lying out (his, claimed), or home with the one he
+	// carries; null once all are home or claimed, to hammer it together. Picks a piece up, and sets it down, on arriving.
+	fetchSpot() {
+		const cat = this.post;
+
+		if (this.carry) {
+			if (Math.abs(this.x - cat.x) < 18 && Math.abs(this.z - cat.z) < 12) {
+				cat.bringBack(this.carry);
+				this.carry = null;
+
+				return null;
+			}
+
+			return { x: cat.x, z: cat.z };
+		}
+
+		const out = cat.scraps.filter(p => !p.home && !p.carrier && (!p.claim || p.claim === this || !p.claim.alive() || p.claim.post !== cat));
+
+		if (!out.length) return null;
+
+		const scrap = out.includes(this.claimed) ? this.claimed : out.sort((a, b) => Math.abs(a.x - this.x) - Math.abs(b.x - this.x))[0];
+
+		scrap.claim = this;
+		this.claimed = scrap;
+		if (Math.abs(scrap.x - this.x) < 16 && Math.abs(scrap.z - this.z) < 12) {
+			this.carry = scrap;
+			scrap.carrier = this;
+			this.w.sound('thud');
+
+			return { x: cat.x, z: cat.z };
+		}
+
+		return { x: scrap.x, z: scrap.z };
+	}
+
+	// The piece he carries, let fall where he is
+	dropCarry() {
+		if (!this.carry) return;
+		this.carry.carrier = null;
+		this.carry.kick(this.face * 20, -60);
+		this.carry = null;
+	}
+
 	// At his place by what he's repairing, close enough to work on it
 	atRepair() {
 		const spot = this.repairSpot();
@@ -619,6 +662,8 @@ class Stickman {
 			this.pickTarget();
 		}
 		this.cd -= dt;
+		// Carrying a piece of his smashed catapult home: dropped where he stands if he's sent elsewhere
+		if (this.carry && !(this.order === 'repair' && this.post?.dead)) this.dropCarry();
 		this.stag = Math.max(0, this.stag - dt);
 		this.retreat = Math.max(0, (this.retreat ?? 0) - dt);
 		// Backing off, he catches his breath: his bleeding slows, and a little of what he's lost comes back
@@ -672,7 +717,9 @@ class Stickman {
 			if (this.order === 'crew' && (!this.post || this.post.dead)) this.order = 'idle';
 
 			const crew = this.order === 'crew', hold = this.order === 'hold', repair = this.order === 'repair';
-			const fix = repair && this.repairSpot();
+			// A smashed catapult is rebuilt from its own pieces: each fetched from where it fell, then hammered together
+			const fetch = repair && !this.post.isWall && this.post.dead ? this.fetchSpot() : null;
+			const fix = fetch ?? (repair && this.repairSpot());
 			let spot = this.home;
 
 			if (hold) spot = this.holdX();
@@ -685,7 +732,7 @@ class Stickman {
 			if (Math.abs(dx) > 6) move = Math.sign(dx);
 			this.face = move || forward;
 			// At his place, a repairer hammers away at it, facing it
-			if (repair && !move && this.atRepair()) {
+			if (repair && !fetch && !move && this.atRepair()) {
 				const post = this.post;
 
 				this.face = (post.isWall ? (post.x0 + post.x1) / 2 : post.x) >= this.x ? 1 : -1;
@@ -1066,6 +1113,7 @@ class Stickman {
 
 	die(ix, iy) {
 		if (this.dead) return;
+		this.dropCarry();
 		this.dead = true;
 		this.incap = false;
 		this.atk = null;
@@ -1117,6 +1165,17 @@ class Prop {
 	}
 
 	update(dt) {
+		// Carried home: in his hands, at his side
+		if (this.carrier) {
+			const man = this.carrier;
+
+			if (man.carry !== this || !man.alive()) this.carrier = null;
+			else {
+				Object.assign(this, { x: man.x + man.face * 10, y: man.body.j[4].y - 6, z: man.z, vx: 0, vy: 0, va: 0, still: 0 });
+
+				return;
+			}
+		}
 		if (this.still > 0.6) return;
 
 		const w = this.w;
@@ -1125,6 +1184,11 @@ class Prop {
 		this.x += this.vx * dt;
 		this.y += this.vy * dt;
 		this.a += this.va * dt;
+		// A smashed catapult's piece stays on the field, where someone can walk to fetch it: off its edge, it bounces back
+		if (this.scrap && (this.x < SCRAP_EDGE || this.x > W - SCRAP_EDGE)) {
+			this.x = clamp(this.x, SCRAP_EDGE, W - SCRAP_EDGE);
+			this.vx = -this.vx * 0.3;
+		}
 
 		const c = Math.cos(this.a), s = Math.sin(this.a);
 		let pen = 0, cx = this.x;
@@ -1176,7 +1240,7 @@ class Prop {
 			...(this.ox && { ox: this.ox }),
 			c: this.fill,
 			...(this.blood && { b: Math.round(this.blood * 100) / 100 }),
-			...(this.w.time - this.born > LINGER.prop && { f: Math.round(faded(this.w.time - this.born, LINGER.prop) * 100) / 100 }),
+			...(!this.scrap && this.w.time - this.born > LINGER.prop && { f: Math.round(faded(this.w.time - this.born, LINGER.prop) * 100) / 100 }),
 		};
 	}
 }
@@ -1339,6 +1403,9 @@ class Proj extends Prop {
 	}
 }
 
+/** How near the field's edge a smashed catapult's piece may lie: where a man can still reach it */
+const SCRAP_EDGE = 40;
+
 /** How likely each soldier is to carry a shield, when his side drew any */
 const SOLDIER_SHIELDS = 0.5;
 
@@ -1462,6 +1529,9 @@ class Catapult {
 
 	wreck() {
 		this.dead = true;
+		// Its pieces, flung about: to be fetched home before it's rebuilt
+		this.scraps = [];
+		this.returned = 0;
 
 		const w = this.w, g = this.geometry();
 
@@ -1472,7 +1542,9 @@ class Catapult {
 			pr.a = Math.atan2(b[1] - a[1], b[0] - a[0]);
 			pr.z = this.z;
 			pr.kick(rand(-160, 160), rand(-380, -160));
+			pr.scrap = this;
 			w.props.push(pr);
+			this.scraps.push(pr);
 		});
 		g.wheels.forEach(([x, y], i) => {
 			const pr = new Prop(w, this.wheels[i], x, y, 26, 26, this.rolls ? 'wood' : 'stone');
@@ -1480,11 +1552,34 @@ class Catapult {
 			pr.round = true;
 			pr.z = this.z;
 			pr.kick(rand(-200, 200), rand(-300, -100));
+			pr.scrap = this;
 			w.props.push(pr);
+			this.scraps.push(pr);
 		});
 		w.dust(this.x, GROUND - 40, 20, 'wood', this.z);
 		w.shake(8);
 		w.sound('crash');
+	}
+
+	// How far its rebuilding has come, 0 to 1: pieces home, then the hammering
+	progress() {
+		const total = this.scraps?.length || 1;
+
+		return this.home() ? 0.7 + 0.3 * this.rebuilt : (0.7 * (this.returned ?? 0)) / total;
+	}
+
+	// Whether every piece of it is home, so hammering can put it together
+	home() {
+		return (this.returned ?? 0) >= (this.scraps?.length ?? 0);
+	}
+
+	// A piece of it carried home, set down
+	bringBack(piece) {
+		piece.home = true;
+		piece.carrier = null;
+		this.returned++;
+		this.w.dust(this.x, GROUND - 8, 4, 'wood', this.z);
+		this.w.sound('thud');
 	}
 
 	snapshot() {
@@ -1504,7 +1599,8 @@ class Catapult {
 			cw: this.crewing().length,
 			...(this.aim && { aim: this.aim.map(v => Math.round(v)) }),
 			rp: this.w.stickmen.filter(s => s.order === 'repair' && s.post === this && s.alive()).length,
-			...(this.dead && { rb: Math.round(this.rebuilt * 100) / 100 }),
+			// Rebuilding: its pieces fetched home (most of the way), then hammered together
+			...(this.dead && { rb: Math.round(this.progress() * 100) / 100 }),
 			arm: Math.round(this.arm * 100) / 100,
 			dead: this.dead,
 			shk: this.shk > 0,
@@ -1706,7 +1802,8 @@ export class World {
 	needsRepair(post) {
 		if (post.isWall) return this.masonry.needsRepair(post.team);
 
-		return post.dead || post.hp < 100;
+		// A smashed catapult wants hammering once its pieces are home
+		return post.dead ? post.home() : post.hp < 100;
 	}
 
 	/**
@@ -1721,8 +1818,9 @@ export class World {
 
 			if (at) this.dust(at.x, at.y, 3, 'stone', man.z);
 		} else if (post.dead) {
-			post.rebuilt += REBUILD_PER_BLOW;
-			if (post.rebuilt >= 1) Object.assign(post, { dead: false, rebuilt: 0, hp: 50, arm: CAT_REST, cd: RELOAD, fireT: -1 });
+			if (!post.home()) return;
+			post.rebuilt += REBUILD_PER_BLOW * 2;
+			if (post.rebuilt >= 1) Object.assign(post, { dead: false, rebuilt: 0, hp: 50, arm: CAT_REST, cd: RELOAD, fireT: -1, scraps: [], returned: 0 });
 			this.dust(post.x, GROUND - 30, 3, 'wood', post.z);
 		} else {
 			post.hp = Math.min(100, post.hp + MEND_PER_BLOW);
@@ -2164,7 +2262,8 @@ export class World {
 		for (const p of this.projs) p.step(dt);
 		this.projs = this.projs.filter(p => !p.spent);
 		for (const p of this.props) p.update(dt);
-		this.props = this.props.filter(p => this.time - p.born < LINGER.prop + FADE);
+		// A smashed catapult's pieces lie until they're fetched home (or it's rebuilt); everything else fades and goes
+		this.props = this.props.filter(p => (p.scrap ? p.scrap.dead && !p.home : this.time - p.born < LINGER.prop + FADE));
 		if (this.props.length > 140) this.props.splice(0, this.props.length - 140);
 		this.runAI(dt);
 		this.checkOver(dt);

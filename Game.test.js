@@ -499,7 +499,7 @@ test('a smashed catapult is rebuilt by its repairers, and fires again once its c
 	const ids = world.stickmen.filter(s => s.team === 0 && s.order === 'idle').slice(0, 3).map(s => s.body.id);
 
 	game.act(fox.id, 'order', { ids, order: 'repair', which: 0 });
-	for (let i = 0; i < 60 * 40 && cat.dead; i++) world.step(DT);
+	for (let i = 0; i < 60 * 90 && cat.dead; i++) world.step(DT);
 	expect(cat.dead).toBe(false);
 	// Back at half, or a little more if another repairer's blow mended it in the same moment
 	expect(cat.hp).toBeGreaterThanOrEqual(50);
@@ -514,7 +514,7 @@ test('a smashed catapult is rebuilt by its repairers, and fires again once its c
 	expect(cat.ammo).toBeLessThan(2);
 });
 
-test('the dead and the wreckage lie a while, fade, and are gone', () => {
+test('the dead lie a while, fade, and are gone; a smashed catapult\'s pieces lie until they\'re fetched', () => {
 	const { world } = soloBattle();
 	const man = world.stickmen.find(s => s.team === 1);
 
@@ -531,7 +531,8 @@ test('the dead and the wreckage lie a while, fade, and are gone', () => {
 
 	expect(fading.fa).toBeGreaterThan(0);
 	expect(fading.fa).toBeLessThan(1);
-	expect(world.props).toHaveLength(0);
+	expect(world.props.filter(p => !p.scrap)).toHaveLength(0);
+	expect(world.props.filter(p => p.scrap)).toHaveLength(world.cats[0].scraps.length);
 	for (let i = 0; i < 60 * FADE; i++) world.step(DT);
 	expect(world.bodies.includes(body)).toBe(false);
 });
@@ -1479,4 +1480,34 @@ test('a war\'s soldiers carry the shields their side drew, about half of them, a
 
 	for (let i = 0; i < 200 && guard.body.shield; i++) if (guard.fends(foe)) caught++;
 	expect(caught).toBeGreaterThan(0);
+});
+
+test('a smashed catapult is rebuilt from its own pieces: fetched home one by one by its repairers, then hammered together', () => {
+	const game = newGame('cpu', 'war');
+	const fox = game.addPlayer('🦊');
+
+	drawEverything(game, fox.id);
+
+	const world = game.world, cat = world.cats.find(c => c.team === 0);
+
+	world.auto = [false, false];
+	cat.damage(500);
+	expect(cat.dead).toBe(true);
+	expect(cat.scraps.length).toBe(6);
+	// Hammering alone gets nowhere while the pieces lie out
+	world.repair(cat, world.stickmen[0]);
+	expect(cat.rebuilt).toBe(0);
+
+	const crew = world.stickmen.filter(s => s.team === 0 && s.alive()).slice(0, 3);
+
+	world.command(0, crew.map(s => s.body.id), 'repair', 0);
+	let carried = false;
+
+	for (let i = 0; i < 60 * 90 && cat.dead; i++) {
+		world.step(DT);
+		carried ||= crew.some(s => s.carry);
+	}
+	expect(carried).toBe(true);
+	expect(cat.dead).toBe(false);
+	expect(world.props.filter(p => p.scrap)).toHaveLength(0);
 });
