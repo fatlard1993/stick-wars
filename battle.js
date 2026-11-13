@@ -309,10 +309,14 @@ class Stickman {
 		// What he's been told: stay home, crew a catapult (his post), hold by the wall, or charge
 		this.order = 'idle';
 		this.post = null;
-		this.hp = 100;
+		// Drawn beefy (outlined, muscled): arms hit harder and swing a touch slower, legs stand firmer and walk slower, and
+		// either lasts a little longer; a gladiator's the same (gladiate)
+		this.beef = beefOf(this.body.tpl);
+		this.maxHp = Math.round(100 * (1 + 0.08 * (this.beef.arms + this.beef.legs)));
+		this.hp = this.maxHp;
 		this.bleed = 0;
 		this.phase = rand(0, TAU);
-		this.speed = rand(52, 68);
+		this.speed = rand(52, 68) * (1 - 0.08 * this.beef.legs);
 		this.atk = null;
 		this.cd = rand(0.2, 0.8);
 		this.kb = 0;
@@ -331,6 +335,11 @@ class Stickman {
 	}
 
 	// A gladiator: his gear on him, and how he moves and fights made of how he was drawn and what he carries
+	// How much harder his arms hit for being drawn beefy
+	might() {
+		return 1 + 0.5 * (this.beef?.arms ?? 0);
+	}
+
 	gladiate() {
 		const w = this.w, a = w.artOf[this.team], art = w.arts[a], L = this.body.tpl.lens;
 
@@ -347,8 +356,6 @@ class Stickman {
 		// one more, and holds on to them
 		const spindly = clamp(legs / 0.42 - 1 + (arms / 0.28 - 1), -0.4, 0.6);
 
-		// Drawn beefy (outlined, muscled): arms hit harder and swing slower, legs stand firmer and walk slower, both last longer
-		this.beef = beefOf(this.body.tpl);
 		// A gladiator is made to last: a duel is many blows, not one
 		this.maxHp = Math.round(GLADIATOR_HP * clamp(1 - 0.65 * spindly, 0.68, 1.15) * (1 + 0.08 * (this.beef.arms + this.beef.legs)));
 		this.hp = this.maxHp;
@@ -764,7 +771,7 @@ class Stickman {
 		if (!a.done && a.t >= 0.58 && a.want.type !== 'sm') {
 			a.done = true;
 
-			const dmg = this.stats().dmg;
+			const dmg = this.stats().dmg * this.might();
 
 			if (a.want.type === 'wall') {
 				// At chest height, or lower down if there's nothing there
@@ -923,9 +930,9 @@ class Stickman {
 			[(p[0] + p[2]) / 2, (p[1] + p[3]) / 2, (s[0] + s[2]) / 2, (s[1] + s[3]) / 2],
 		];
 		// A gladiator charging hits harder, and harder still striking back off a guarded blow
-		// Beefy arms hit harder and knock further
-		const might = 1 + 0.5 * (this.beef?.arms ?? 0);
-		const st = this.style ? { ...this.stats(), dmg: this.stats().dmg * this.fury() * might, knock: this.stats().knock * might } : this.stats();
+		// Beefy arms hit harder and knock further; a gladiator charging harder still
+		const base = this.stats(), might = this.might();
+		const st = { ...base, dmg: base.dmg * might * (this.style ? this.fury() : 1), knock: base.knock * might };
 
 		for (const body of this.w.bodies) {
 			if (body === this.body) continue;
@@ -988,7 +995,7 @@ class Stickman {
 
 		const w = this.w, kind = BONE_KIND[b];
 		// Armor over where he's hit takes some of it, the more of that part it covers
-		const prot = (this.cover?.[kind] ?? 0) * 0.6, steady = this.style?.steady ?? 0;
+		const prot = (this.cover?.[kind] ?? 0) * 0.6, steady = this.style?.steady ?? 0.35 * (this.beef?.legs ?? 0);
 		const dmg = st.dmg * { head: 1.9, torso: 1, arm: 0.5, leg: 0.6 }[kind] * rand(0.8, 1.25) * (1 - prot);
 
 		this.hp -= dmg;
