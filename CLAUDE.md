@@ -5,39 +5,64 @@ A web game on `@fatlard1993/web-game-framework` and `@vanilla-bean/components`: 
 ## Running it
 
 - `bun run dev`: the server at http://localhost:3000 (or `PORT`), rebuilding the page and reloading open browsers as files change. Under paude it's already running as the project's `dev` task and its page is shared: don't start a second one.
-- `bun run build` then `bun start`: production.
-- `bun test`
+- `bun run build` then `bun start`: production (the house runs it as `bun-server@stick-wars`, its port from the mother hub).
+- `bun test`: the rules, actions, battles and stores, without a browser. `test-setup.js` (preloaded by `bunfig.toml`) marks every run a test, so the shared stores stay in memory and never touch `data/`.
+
+## Rules of the house
+
+- **Who plays it**: anyone, including people who don't read. Every control is a picture with few or no words, big enough for a thumb, and the game explains itself by being played. The pictures are the game's own pencil doodles (`client/icons.js`), never emoji: the whole page is the game's notebook, paper and pencil, in the hand-drawn font. A new thing to do is a new doodle to tap; a new thing to see is drawn, not described. The shape checks' refusals are the one place words carry the game: keep them short.
+- **The server holds the truth.** A page never changes what it shows on its own: it calls `act(name, data)` and draws the view that comes back, so every player sees the same thing. Never trust a player id a page sends; the action already knows its player. What's only for show (blood flying, dust, the crowd) runs on each page from the events.
+- **A new thing a player can do** is a new entry in `actions`, new state in `state`, and the screens showing it. A rule both sides need goes in `rules.js`, `art.js` or `field.js`. The page imports `field.js`, never `battle.js` (it would bundle the physics engine).
+- **Views** are the library's components, styled with `styled()`, one file per view. The colors and font are the theme (`client/theme.js`); the battlefield and drawings are drawn on canvas in the same paper-and-ink colors (`client/paint.js`). A `Component` subclass must not name a method after the library's lifecycle (`render`, `build`, `content`, `empty`, `destroy`, ...): the constructor calls them.
+- **Saves outlive changes**: when `state` changes shape, raise `Game.version` and add a migration. The stores in `data/` (below) keep art in today's shape with no version yet: a change to the shape of art or rigs needs a migration for them too.
+- **The README** says what the game is and how to play it, its rules as they are now: when a rule changes, so does the README, in the same commit. Its first paragraph is the game's card in the house: keep `client/manifest.json`'s and `client/index.html`'s descriptions the same words.
+- **Feel**: the game takes the whole screen (the `Stage` grows below the bar; the tools sit beside the play area); a press just outside the play area still counts (`input.pointer(stage.elem)`); the keyboard plays it on a computer, touch controls show only on touch devices (`createInput`); everything acting on the game is seen acting (a reload drains, rocks count down, a paused battle shows who it waits for); a player whose page closed is gone from the table (`onPresence`); sounds play through `createSound`, muted by the bar's `soundSwitch`.
+- **A change that can be seen is checked by looking**: the page reloads itself on every save. The suite tests the server; nothing tests the page, so look at both a war and a duel after touching `client/BattleScreen.js`.
+
+## Words in the code
+
+- **Art kinds**: `stickmen`, `stones`, `beams`, `ammo` (rocks), `swords` (weapons, any shape), `armor`, `shield`. These names are in saved data: rename only with a migration.
+- **Art ref**: `{ k: kind, a: whose art, i: which }`, how the battle and snapshots point at a drawing.
+- **Style**: a game is a `war` or a `gladiator` fight (`state.style`). On a Stickman, `style` is a gladiator's fighting profile, and its presence is how the battle tells a gladiator.
+- **Orders**: `idle` (home, the tent doodle), `crew`, `repair`, `hold`, `charge`. **Stances** (a gladiator's shouts): `charge`, `back` (back off), `guard` (shield up).
+- **Shelf**: a voted store of drawings (`shelf.js`): the armory (weapons) and the crowd (stick men). **Hall**: winning gladiators (`roster.js`); `fame`, `rival` and a champion are a hall entry's id.
+
+## Data and routes
+
+- `data/games.json`: the framework's saved games (versioned, migrated by `Game.migrations`).
+- `data/gladiators.json`: the hall. `data/weapons.json`: the armory. `data/crowd.json`: the crowd. Each a `Store` (`store.js`), written a second after a change and on shutdown; stocked once, the first time, from drawings made before it (`stockOnce` in `server.js`).
+- Routes beside the framework's (`server.js`): `GET /hall`; `GET /armory` and `GET /crowd` (`?sort=loved|hated|controversial|deadliest&voter=&take=`); `POST /armory/:id/vote` and `POST /crowd/:id/vote` with `{ voter, thumb }` (a small body only). The voter id is the browser's own: there are no accounts, so votes are a show of hands, not a ballot.
 
 ## Where things are
 
-- `rules.js`: what the game is: the drawing steps and their clocks (rocks kept on the ammo page start on the catapult's pile; more are drawn in battle), the sides, the modes (🤖 against the computer, 👫 two players), the styles (`STYLES`: a war's pages, `STEPS`, or a gladiator's, `GLADIATOR_STEPS`, armor and shield `optional`; `stepsOf`), a new game's `state`, the bonus for drawing more (`armySize`, `wallSize`, counting only kept drawings marked `drawn`, and of stick men and weapons only different ones, `freshOf` in `art.js`: stick men by pose, others by look) and the computer's own sizes (`CPU_SIZE`). Shared by server and page.
-- `art.js`: geometry, the shape checks a drawing has to pass (`judge(kind, strokes)`, which also cleans what a page sent), the skeleton fitted to a stick man (`buildRig`, each point bound to a bone as `{ b, u, v }`), weapon stats from shape (`weaponStats`), and the defaults, a gladiator's gear (`checkArmor`: drawn over the warrior, bound to its bones through `rig.raw`, its `cover` of each part and `weight`; `checkShield`: its size against the warrior's), the computer's gladiator (`cpuGladiator`), and the computer's own army (`cpuArmy`: generated drawings of every kind, redrawn by a shaky hand (`scrawl`), each passing the same checks). Shared.
-- `field.js`: the field's geometry, shared by server and page: its size, where things stand (`homeOf`, `CAT_X`, `CAT_Z`, `WALL_X`), its depth and how it's drawn (`DEPTH`, `project`, `depthScale`), catapults' shape, a fling's path and what a throw is held to (`holdFling`, `flingFor`: forward, between `FLING_ANGLES`, never past `reachOf`, the enemy's wall; a heavy rock's shorter flight and slower load, `rockThrow`), the orders men take. The page imports this, never `battle.js`, which would bundle the physics engine.
-- `battle.js`: the battle (`World`), on the server: stick men skinned onto 11-joint skeletons, kinematic while alive and verlet ragdolls once dead or cut apart, each standing somewhere along the field (`x`) and across its depth (`z`); each side's whole army (its size given) standing at home from the start, behind a wall of its given size, each man with an order (`idle`, `crew` a catapult, `repair` a catapult or the wall, `hold` the wall, `charge`) given by `command`; a catapult of drawn beams per side that throws only rocks its side drew (`rocks`, its pile: those drawn before the battle, then each drawn in it, `addRock`, `AMMO` a battle in all; the computer draws its own), only with crew at it, at the aim a player set (`aim`, fired by itself whenever it's ready) or the computer's own each shot, mended and rebuilt by repairers; flung ammo; the computer's side, playing by the same orders, by a plan picked each battle (`PLANS`: balanced, rush, turtle, siege, waves). Blades reach only within a `LANE` of depth. The dead (`deadAt`), props (`born`) and loose stones (`looseAt`) lie for `LINGER`, fade over `FADE` (snapshots carry how much is left), and are removed. With `arena`, a gladiators' fight: one man a side (`gladiate`: his gear, speed from his legs, reach from his arms, both paid for in frailty (`maxHp`, `tough`) and a slower swing, a `style` from what he carries), no walls or catapults, blows slipped or caught on a shield (`fends`), armor taking its share (`takeHit`), a shout from his side for `STANCE_FOR` seconds (`shout`: `STANCES` charge, back, guard; `fury` for charging and ripostes; the computer shouts at its own), the crowd's reactions as events (`crowd`: roar, ooh, boo, kill); no blow kills a gladiator: beaten (`YIELD_AT`, or a leg gone), he yields (`yieldBy`), two medics run out of his gate on planned routes (`medicPlans`: one fetching each lost limb, carried and slapped on, `attach`; the other slapping his face; `medicsWork` doing it, `medics` in snapshots for the page) and `mend` puts back anything left once they're done, and the crowd's verdict comes `MERCY_WAIT` after (`judgeYielded`: its mercy mostly from this fight, how hurt the winner is and how long it lasted, nudged by his `records` in the hall and `MERCY_LUCK`): spared, or drawn and quartered; over on the verdict. It never draws: `snapshot()` is what pages draw, and blood, dust, sounds and shakes go out as events (`takeEvents()`), each with its depth. Art is referenced as `{ k: kind, a: whose art, i: which }`.
-- `roster.js`: the hall of gladiators, in `data/gladiators.json` (memory only under test): every gladiator that wins or is spared by the crowd, with its record, picked by the computer to fight (or picked by a player: a game's `rival` option); one given the thumbs down is struck out. `standings()` is what the hall's page shows, served at `/hall` by `server.js`.
-- `armory.js`: the armory, in `data/weapons.json` (memory only under test, `test-setup.js`): every weapon a player draws (`offer`, not a copy of one there), borrowed by players (Game's `borrow`) and the computer (`lend`), its uses and kills after each battle (`fought`, from the world's `weaponKills`), and players' thumbs (`vote`); `listing` is its page's, sorted by `SORTS`, served at `/armory` by `server.js`, which also stocks it once from weapons drawn before it (`stockOnce`).
-- `Game.js`'s `CROWD`: a shelf like the armory (`armory.js`, with `samePose` for alike) of every stick man players draw, in `data/crowd.json`, at `/crowd` with its votes; the arena's stands draw them (`seatCrowd`).
-- `masonry.js`: the walls as real stones in a planck rigid-body world: each block a stone drawing whose outline (pushed most of the way to its box, so walls stack) is its shape, settled before the battle and left asleep until disturbed; boulders as heavy bodies among them; harm from contact impulses, a stone's toughness from its drawn size; stones cracked into rubble; a height map of everything piled up (men stand on and are stopped by the enemy's stones, walk through their own); hacking and repair.
-- `Game.js`: one running game. `state` holds the mode, style (`war`, `gladiator`), which saved gladiator each side is (`fame`), phase (`draw`, `battle`, `over`), seats, each side's art and drawing clock, stance and the last result; the `World` itself is never saved (a restart mid-battle fights again with the same art). `actions`: keep, borrow (an armory weapon instead of drawing one), next, rock (a rock drawn in battle onto the catapult's pile, marked `inBattle` so a rematch drops it), send (one man out), order (the picked men: an order, and for crewing 0, for repairing 0 or 'wall'), aim (the catapult's aim, or { hold } to stop it firing), shout (a gladiator's stance), again, redraw. The loop steps the battle and publishes every `TICK_MS`; the art goes to pages on their first view and by `broadcast('art')` when it changes, never every tick. A seated player whose page closed pauses their clock and the battle.
-- `Game.test.js`: the rules, actions and a whole battle, without a browser.
-- `server.js`: the `Server`, a few lines.
-- `client/index.js`: routes: `Start`, `Play`, watch, and the framework's lobby at `#/hub`.
-- `client/Start.js`: war or gladiators (remembered), the hall for gladiators, then a mode: back into a game you're in, into a two-player game with a free side, or a new one.
-- `client/Armory.js`: the armory at `#/armory`: every weapon with its thumbs and kills, sorted four ways, voted on (`client/armoryPicks.js` fetches it and votes, one voter id a browser).
-- `client/Crowd.js`: the crowd's page at `#/crowd`, the armory's page for its stick men.
-- `client/BorrowPicker.js`: the armory opened on a weapon page, to borrow one.
-- `client/Hall.js`: the hall of gladiators at `#/hall`: each drawn on a card with its record, best first; tapped, a new fight against it.
-- `client/Play.js`: `enterGame`, the bar, sound and music, and which screen shows for the phase.
-- `client/DrawScreen.js`: the drawing page: a `Pad` (`client/Pad.js`, which measures the pen against itself and lifts it where it leaves the page, or a weapon's box, `WEAPON_AREA`) in pad units (`PAD`), the dashed example, the clock, keeping, the gallery. No stats are shown: a weapon's shape speaks in battle.
-- `client/BattleScreen.js`: the battle on a `Stage`, drawn back to front through the field's depth (`atDepth`): snapshots eased between ticks, the walls' stones as their wall's thickness (a loose one where it lies), local blood and dust with pools on a decal layer; picking men out (tap, or drag a box: everything is picked as drawn, through `project`) and ordering them (charge, hold, home: Space, H, B; crew and repair, C and R, wait for the tap on their target), tapping the catapult for the aiming pad (`client/AimPad.js`: pulled back from its centre and let go, it sets the catapult's aim), or dragging straight from it; its aim drawn as an arc in both views (`drawArcs`); its pile of rocks in front of it (`drawPile`); a gladiators' arena (`arenaBackground` in `client/paint.js`: sand, a stone wall with the two gates, `ARENA_GATE`, and stands) with its crowd drawn live (`drawCrowd`), the verdict over a yielded gladiator (`drawMercy`), shouts under it (`armShouts`), and a camera that keeps both fighters in sight; the end card; the camera (`fitting`, `cam`): a small screen zoomed in so men stay `READABLE`, panned with two fingers or the arrow keys and zoomed by pinch or wheel; an upright phone gets an overview strip of the whole field over a main view that fills the rest (`UPRIGHT_SPAN`), the scene built once (`scene`) and drawn in both. Weapons are drawn from their own strokes (`drawBlade`), never a hull fill.
-- `client/Pad.js`: the drawing pad both drawing screens use (`Pad`, `offPad`, `inkStrokes`).
-- `client/RockPad.js`: the rock button in the field's corner (away from its side) and the small pad a rock is drawn on mid-battle.
-- `client/AimPad.js`: the aiming pad, in the middle of the screen while the catapult is picked: a slingshot pull, its edge the catapult's reach and its shaded wedge the angles it throws at, released to set its aim; a pause to hold its fire.
-- `client/paint.js`: how art goes on a canvas: shapes, thumbnails, a stick man skinned onto its joints, the paper.
-- `client/theme.js`: the game's look over the library's: paper for its ground, pencil for its text, a hand-drawn font, set before any view draws, so the library's own bar, dialogs and toasts wear it too.
-- `client/icons.js`: every control and mark as a pencil doodle (an SVG path), for buttons (`icon`) and the battlefield's canvas (`drawIcon`).
-- `client/ui.js`: the game's pieces: `doodle` buttons (paper inked round a wobbly edge), the lined page, the sound switch, counts.
-- `client/sounds/`: effects and two music loops (drawing, battle), made by paude's sound service.
+Shared by the server and the page:
+
+- `rules.js`: the drawing pages and their clocks per style (`STEPS`, `GLADIATOR_STEPS`, `stepsOf`), the sides and modes, a new game's `state`, the bonus for drawing more (`armySize`, `wallSize`) and the computer's sizes (`CPU_SIZE`).
+- `art.js`: geometry; the shape checks (`judge(kind, strokes, context)`, which cleans and caps what a page sent: `MOST_POINTS`, `MOST_INK`); a stick man's skeleton (`buildRig`, each point bound to a bone as `{ b, u, v }`, its page position in `rig.raw`); weapon stats from shape (`weaponStats`); gladiator gear (`checkArmor`, `checkShield`); telling drawings apart (`freshOf`, `samePose`, `unlike`); the defaults; the computer's art (`cpuArmy`, `cpuGladiator`, drawn by a shaky hand, `scrawl`).
+- `field.js`: the field's geometry: size, where things stand (`homeOf`, `CAT_X`, `WALL_X`, `ARENA_GATE`), depth and its drawing (`DEPTH`, `project`), the catapult's shape, a throw's path and limits (`flingPath`, `holdFling`, `flingFor`, `reachOf`, `rockThrow`).
+
+On the server:
+
+- `server.js`: the framework's `Server`, the routes above, and the stores' first stocking.
+- `Game.js`: one running game. `state` holds the mode, style, `fame`, phase (`draw`, `battle`, `over`), seats, each side's art and drawing clock, and the last result; the `World` is never saved (a restart mid-battle fights again with the same art; a game over stays over, `showEnded`). `actions`: keep, borrow, next, rock, order, aim, shout, again, redraw. The loop steps the battle and publishes every `TICK_MS`, and leaves a finished one still after it settles; art goes to pages on their first view and by `broadcast('art')` when it changes. `honour` settles a duel in the hall; `armoryAfter` counts a battle's weapons.
+- `battle.js`: the battle (`World`). It never draws: pages draw `snapshot()`, and blood, dust, sounds, shakes and the crowd go out as `takeEvents()`.
+  - Bodies: stick men on 11-joint skeletons, kinematic alive, verlet ragdolls dead or cut; each at `x` along the field and `z` across it; blades reach within a `LANE` of depth.
+  - War: each side's army at home behind its wall, taking orders (`command`); a catapult of drawn beams throwing its side's drawn rocks (`rocks`, `addRock`) at a player's `aim` while crewed, mended by repairers; the computer playing a plan (`PLANS`).
+  - Fading: the dead, props and loose stones lie `LINGER`, fade over `FADE`, then go.
+  - Arena (`arena`): one gladiator a side (`gladiate`: gear, speed from legs, reach from arms, paid in `maxHp`, `limbFrailty` and a slower swing); blows slipped or blocked (`fends`), armor's share (`takeHit`); shouts (`shout`, `STANCES`, `fury`); the crowd (`crowd`). No blow kills: beaten past `YIELD_AT` he yields (`yieldBy`), the medics fetch his limbs and slap them on (`medicPlans`, `medicsWork`, `attach`, `mend`), and after `MERCY_WAIT` the crowd judges (`judgeYielded`): spared, or drawn and quartered.
+- `masonry.js`: the walls as stones in a planck rigid-body world, each outline pushed most of the way to its box so walls stack, settled then asleep; boulders among them; harm from contact impulses, toughness from a stone's shape; rubble; a height map (men stand on the enemy's stones and walk through their own); hacking and repair.
+- `store.js`: a list kept in a JSON file. `roster.js` (the hall: records, `pick`, `record`, `standings`) and `shelf.js` (`offer`, `lend`, `vote`, `fought`, `listing`, sorted by `SORTS`) are stores.
+- `Game.test.js`: the suite.
+
+The page (`client/`):
+
+- `index.js`: routes: `Start`, `Play`, watch, `Hall`, `Armory`, `Crowd`, `JoinNow` (an invite's code: seated at once), and the framework's lobby at `#/hub`.
+- `Start.js`: war or gladiators (remembered), the hall, the armory and the crowd, then a mode: back into a game you're in, a two-player game with a free side, or a new one (`sitDown`).
+- `Play.js`: `enterGame`, the bar, sound and music, and which screen shows for the phase.
+- `DrawScreen.js`: a drawing page on a `Pad` (`Pad.js`: measures the pen against itself, lifts it off the page or a weapon's box, `WEAPON_AREA`), the dashed example (or the warrior under armor and shield), the clock, keeping, the gallery (copies faded), and `BorrowPicker.js` on a weapon page.
+- `BattleScreen.js`: the battle on a `Stage`, drawn back to front through the depth (`atDepth`, `scene`), snapshots eased between ticks. War: picking and ordering men, the catapult (`AimPad.js` to aim it, its arc `drawArcs`, its pile `drawPile`), `RockPad.js` for rocks mid-battle. Arena: `arenaBackground` (in `paint.js`) with its crowd drawn live (`seatCrowd`, `drawCrowd`), medics (`drawMedic`), the verdict (`drawMercy`), the shouts (`armShouts`). The camera (`fitting`, `cam`): zoomed so men stay `READABLE`, panned and pinched, an overview strip on an upright phone, following the fighters in the arena. The end card.
+- `Hall.js`, `Armory.js` (and `Crowd.js`, the same page for the crowd): the hall's and the shelves' pages; `armoryPicks.js` fetches the shelves and votes.
+- `paint.js` (art on canvas: shapes, thumbnails, a skinned stick man, the paper and the arena), `theme.js` (the look over the library's, set before any view draws), `icons.js` (every doodle, for buttons and canvas), `ui.js` (doodle buttons, the lined page, the sound switch, counts), `sounds/` (effects and two music loops, made by paude's sound service).
 
 ## The libraries, by their docs
 
@@ -45,29 +70,3 @@ Read these before building anything the framework or the component library might
 
 - `node_modules/@fatlard1993/web-game-framework/README.md`, then `docs/GETTING_STARTED.md`; `ui/README.md` for the lobby views and how to customize them.
 - `node_modules/@vanilla-bean/components/README.md` and `docs/GETTING_STARTED.md`; every component's folder holds a `<Name>.lld.md` stating what it does and why (`components/Button/Button.lld.md`, `components/Dialog/Dialog.lld.md`, ...); the server helpers are in `app/README.md`.
-- A `Component` subclass must not name a method after the library's own lifecycle (`render`, `build`, `content`, `empty`, `destroy`, ...): the constructor calls them.
-
-## Who plays it
-
-Anyone, including people who don't read: every control is a picture with few or no words, big enough for a thumb, and the game explains itself by being played, not by text. The pictures are the game's own pencil doodles (`client/icons.js`), never emoji: the whole page is the game's notebook, paper and pencil, in the hand-drawn font. Keep it that way as the game grows: a new thing to do is a new doodle to tap, a new thing to see is drawn, not described. The shape checks' refusals are the one place words carry the game: keep them short.
-
-## How this project is written
-
-- Views and controls are the library's components, styled with `styled()`. The game's colors and font are its theme (`client/theme.js`), set over the library's tokens; the battlefield and the drawings are drawn on canvas in the same paper-and-ink colors (`client/paint.js`).
-- The truth of a game lives in its `Game` on the server. A page never changes what it shows on its own: it calls `act(name, data)` and draws the view that comes back, so every player sees the same thing. Never trust a player id a page sends; the action already knows its player. What's only for show (blood flying, dust) runs on each page from the events.
-- A new thing a player can do is a new entry in `actions`, new state in `state`, and the screens showing it. A rule both sides need goes in `rules.js`, `art.js` or `battle.js`.
-- One file per view, each small.
-- A change that can be seen is checked by looking: the page reloads itself on every save.
-
-## What makes it feel good
-
-What players asked for over and over in the first games built this way, so start there rather than waiting to be told:
-
-- The game takes the whole screen. The play area grows to fill everything below the top bar (the `Stage` does); the score, level and buttons that aren't part of playing live in the top bar, and the tools a player plays with sit right beside the play area.
-- A press or drag that starts just outside the play area still counts, held to its edge: fingers miss. `input.pointer(stage.elem)` does it.
-- On a computer, the keyboard plays it and the mouse aims; on-screen touch controls show only on touch devices. `createInput` does all of this.
-- Everything that acts on the game is seen acting: a reload drains, ammo counts down, a paused battle says who it waits for.
-- A player whose page closed is gone from the table (`online` is false on them, and `onPresence` hears it).
-- Saved games (`data/games.json`) outlive changes to the game: when `state` changes shape, raise `version` and add a migration so a game saved the old way still loads.
-- The README says what the game is and how to play it, its rules as they are now: when a rule changes, so does the README.
-- Sounds and music play through `createSound`; the game's sound switch in the bar (`soundSwitch`) mutes it.
