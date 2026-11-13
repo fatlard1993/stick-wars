@@ -5,7 +5,7 @@ import { bboxOf } from '../art.js';
 import { TEAMS } from '../rules.js';
 import { icon } from './icons.js';
 import { sitDown } from './Start.js';
-import { PENCIL } from './theme.js';
+import { PENCIL, RED_PENCIL } from './theme.js';
 import { Doodle, count } from './ui.js';
 
 // A gladiator in the hall: its drawing, armor and shield on (its weapon is whatever it's handed next), its place and its
@@ -67,19 +67,22 @@ export const drawGladiator = (canvas, gladiator, w = 130, h = 160) => {
 	);
 };
 
-/** The hall's tab: every gladiator kept in it, best record first; tap one to fight it */
+/** The hall's tab: every gladiator kept in it, best record first; tap one to fight it. The fallen's tab is the same,
+ * for those the crowd gave the thumbs down: greyed, and not to be fought. */
 export default class HallList {
-	constructor(host) {
+	constructor(host, { fallen = false } = {}) {
+		this.fallen = fallen;
 		this.cards = new Component({ appendTo: host, addClass: 'cards' });
 		this.load();
 	}
 
 	async load() {
-		const { body: gladiators = [] } = await GET('/hall', { apiId: 'hall', invalidateAfter: 0 });
+		const { body } = await GET(this.fallen ? '/fallen' : '/hall', { apiId: this.fallen ? 'fallen' : 'hall', invalidateAfter: 0 });
+		const gladiators = Array.isArray(body) ? body : [];
 
 		if (!gladiators.length) {
-			// Nobody yet: an empty hall, waiting for a winner
-			const empty = icon('trophy', { size: '5em' });
+			// Nobody yet: an empty hall, waiting for a winner (or no one fallen)
+			const empty = icon(this.fallen ? 'skull' : 'trophy', { size: '5em' });
 
 			empty.classList.add('empty');
 			this.cards.elem.replaceChildren(empty);
@@ -88,7 +91,7 @@ export default class HallList {
 		}
 		this.cards.elem.replaceChildren(
 			...gladiators.map((gladiator, at) => {
-				const card = new Card({ title: 'Fight this one', onPointerPress: () => this.fight(gladiator) });
+				const card = new Card(this.fallen ? { title: 'Fallen', disabled: false } : { title: 'Fight this one', onPointerPress: () => this.fight(gladiator) });
 				const canvas = document.createElement('canvas');
 				const record = document.createElement('div');
 
@@ -97,8 +100,15 @@ export default class HallList {
 				// Its name, once it's won enough to earn one
 				const name = gladiator.name && Object.assign(document.createElement('div'), { className: 'name', textContent: gladiator.name });
 				card.elem.style.position = 'relative';
-				card.elem.append(Object.assign(document.createElement('span'), { className: 'place', textContent: `${at + 1}` }), canvas, ...(name ? [name] : []), record);
+				card.elem.append(...(this.fallen ? [] : [Object.assign(document.createElement('span'), { className: 'place', textContent: `${at + 1}` })]), canvas, ...(name ? [name] : []), record);
 				drawGladiator(canvas, gladiator);
+				// The fallen: faded, a thumb down over them
+				if (this.fallen) {
+					canvas.style.opacity = '0.55';
+					canvas.style.filter = 'grayscale(1)';
+					card.elem.style.cursor = 'default';
+					card.elem.append(Object.assign(icon('thumbDown', { size: '2em', color: RED_PENCIL }), { style: 'position: absolute; top: 6px; right: 8px' }));
+				}
 
 				return card.elem;
 			}),

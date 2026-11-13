@@ -9,6 +9,7 @@ import { doodle, lined } from './ui.js';
 // The tabs, in the bar: the hall of gladiators, the armory of weapons, the crowd of stick men
 const TABS = [
 	['hall', 'trophy', 'Hall of gladiators', host => new HallList(host)],
+	['fallen', 'skull', 'The fallen: champions given the thumbs down', host => new HallList(host, { fallen: true })],
 	['armory', 'rack', 'Armory', host => new ShelfList(host, ShelfList.armory)],
 	['crowd', 'crowd', 'Crowd', host => new ShelfList(host, ShelfList.crowd)],
 ];
@@ -79,4 +80,4 @@ const tabbed = tab =>
 		}
 	};
 
-export const HallTab = tabbed('hall'), ArmoryTab = tabbed('armory'), CrowdTab = tabbed('crowd');
+export const HallTab = tabbed('hall'), FallenTab = tabbed('fallen'), ArmoryTab = tabbed('armory'), CrowdTab = tabbed('crowd');

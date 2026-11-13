@@ -1355,3 +1355,20 @@ test('a war saved before wheels loads with none', () => {
 	for (const v of [6]) Game.migrations[v](save);
 	expect(save.state.art[0].wheels).toEqual([]);
 });
+
+test('a champion given the thumbs down leaves the hall for the fallen: remembered, never fought or enlisted again', () => {
+	const roster = new Roster();
+	const champion = roster.record({ art: cpuGladiator() }, { art: null, spared: false }).winner;
+
+	roster.record({ art: cpuGladiator() }, { id: champion, art: null, spared: false });
+	expect(roster.standings().some(entry => entry.id === champion)).toBe(false);
+	expect(roster.fallen().map(entry => entry.id)).toEqual([champion]);
+	expect(roster.fallen()[0]).toMatchObject({ wins: 1, losses: 0 });
+	expect(roster.get(champion)).toBeUndefined();
+	for (let i = 0; i < 20; i++) expect(roster.pick()?.id).not.toBe(champion);
+
+	const game = newGame('duo', 'gladiator', roster);
+	const fox = game.addPlayer('🦊');
+
+	expect(game.act(fox.id, 'enlist', { id: champion }).ok).toBe(false);
+});

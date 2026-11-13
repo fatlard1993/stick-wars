@@ -41,6 +41,7 @@ const extras = request => {
 	const url = new URL(request.url);
 
 	if (request.method === 'GET' && url.pathname === '/hall') return Response.json(HALL.standings());
+	if (request.method === 'GET' && url.pathname === '/fallen') return Response.json(HALL.fallen());
 
 	const list = request.method === 'GET' && url.pathname.match(/^\/(armory|crowd)$/);
 

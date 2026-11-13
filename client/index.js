@@ -7,7 +7,7 @@ import { Create, Hub } from '@fatlard1993/web-game-framework/ui';
 import '@fatlard1993/web-game-framework/client/socket';
 import '@vanilla-bean/components/app/reloadOnBuild';
 
-import { ArmoryTab, CrowdTab, HallTab } from './Shelves.js';
+import { ArmoryTab, CrowdTab, FallenTab, HallTab } from './Shelves.js';
 import { TvLobby, TvWatch } from './Tv.js';
 import JoinNow from './JoinNow.js';
 import Play from './Play.js';
@@ -26,6 +26,7 @@ const views = {
 	'/': Start,
 	// The hall, the armory and the crowd: tabs on one page
 	'/hall': HallTab,
+	'/fallen': FallenTab,
 	// A TV for game night: it finds what's on and watches it
 	'/tv': TvLobby,
 	'/tv/:gameId': TvWatch,

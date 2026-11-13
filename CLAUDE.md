@@ -31,7 +31,7 @@ A web game on `@fatlard1993/web-game-framework` and `@vanilla-bean/components`: 
 
 - `data/games.json`: the framework's saved games (versioned, migrated by `Game.migrations`).
 - `data/gladiators.json`: the hall. `data/weapons.json`: the armory. `data/crowd.json`: the crowd. Each a `Store` (`store.js`), written a second after a change and on shutdown, and read again when another server (the house's, a preview) has written it; stocked once, the first time, from drawings made before it (`stockOnce` in `server.js`).
-- Routes beside the framework's (`server.js`): `GET /hall`; `GET /armory` and `GET /crowd` (`?sort=loved|hated|controversial|deadliest&voter=&take=`); `POST /armory/:id/vote` and `POST /crowd/:id/vote` with `{ voter, thumb }` (a small body only). The voter id is the browser's own: there are no accounts, so votes are a show of hands, not a ballot.
+- Routes beside the framework's (`server.js`): `GET /hall`; `GET /fallen` (champions given the thumbs down, `fallenAt` on their hall entry); `GET /armory` and `GET /crowd` (`?sort=loved|hated|controversial|deadliest&voter=&take=`); `POST /armory/:id/vote` and `POST /crowd/:id/vote` with `{ voter, thumb }` (a small body only). The voter id is the browser's own: there are no accounts, so votes are a show of hands, not a ballot.
 
 ## Where things are
 
