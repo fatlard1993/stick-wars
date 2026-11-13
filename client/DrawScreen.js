@@ -207,6 +207,32 @@ const Waiting = styled(
 // The drawing page: a pad to draw the step's art on, a dashed example to show what's wanted, the clock draining, and
 // beside it the tools and everything kept so far. A drawing is judged by the server when kept. Weapons are drawn in a
 // box on the pad (the pen lifts at its edge), and what a weapon's shape makes it do is left for the battle to show.
+// How far a side drawing is along, as the pages show it: a dot a page (done, this one, to come) and its clock running
+// down, or a pause sign while its player's page is closed (its clock stopped)
+const progressOf = (view, t, ink) => {
+	const steps = stepsOf(view.state), { step, left } = view.state.drawing[t];
+	const dots = document.createElement('span');
+	const clock = document.createElement('span');
+	const fill = document.createElement('span');
+	const away = view.away?.includes(t);
+
+	dots.style.cssText = 'display: inline-flex; gap: 4px';
+	dots.append(
+		...steps.map((_, at) => {
+			const dot = document.createElement('i');
+
+			dot.style.cssText = `width: 12px; height: 12px; border: 2px solid ${ink}; border-radius: 50%; background: ${at < step ? ink : at === step ? '#ffe36e' : 'transparent'}`;
+
+			return dot;
+		}),
+	);
+	clock.style.cssText = `display: inline-block; width: 90px; height: 12px; border: 2px solid ${ink}; border-radius: 6px; overflow: hidden`;
+	fill.style.cssText = `display: block; height: 100%; width: ${clamp((left / (steps[step]?.seconds || 1)) * 100, 0, 100)}%; background: ${away ? 'rgba(43,43,43,0.25)' : ink}; transition: width 1s linear`;
+	clock.append(fill);
+
+	return [dots, clock, ...(away ? [icon('pause', { size: '1.4em', color: ink })] : [])];
+};
+
 export default class DrawScreen extends Screen {
 	build() {
 		super.build();
@@ -535,6 +561,8 @@ export default class DrawScreen extends Screen {
 		this.waiting.elem.replaceChildren(icon(ready ? 'bracket' : 'hourglass', { size: '3em' }), people, ...(go ? [go.elem] : []), ...this.joinCode(view));
 	}
 
+	/** Done drawing (or only watching), waiting on the others: who, how far along each is (its pages, its clock running
+	 * down, or paused while its page is closed) */
 	showWaiting(view) {
 		this.main.elem.style.display = 'none';
 		this.side.elem.style.display = 'none';
@@ -551,7 +579,7 @@ export default class DrawScreen extends Screen {
 			row.append(icon('flag', { size: '1.4em', color: ink }));
 			if (!seats[t]) row.append(icon('invite', { size: '1.4em', color: ink }), 'waiting for someone to join');
 			else if (drawing[t].done) row.append(icon('person', { size: '1.4em', color: ink }), icon('keep', { size: '1.4em', color: ink }));
-			else row.append(icon('person', { size: '1.4em', color: ink }), icon('draw', { size: '1.4em', color: ink }), `${drawing[t].step + 1} of ${stepsOf(view.state).length}`);
+			else row.append(icon('person', { size: '1.4em', color: ink }), icon('redraw', { size: '1.4em', color: ink }), ...progressOf(view, t, ink));
 
 			return row;
 		});

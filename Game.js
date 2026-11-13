@@ -423,7 +423,7 @@ export default class Game extends BaseGame {
 			this.artChanged();
 		}
 		// Time left on a page finished early is saved, for the page drawn in the time saved (the catapult's wheels)
-		if (!steps[drawing.step].banked) drawing.bank = (drawing.bank ?? 0) + Math.max(0, drawing.left);
+		if (!steps[drawing.step].banked && steps.some(step => step.banked)) drawing.bank = (drawing.bank ?? 0) + Math.max(0, drawing.left);
 		drawing.step++;
 		// An enlisted gladiator comes with its gear: only its weapon's page is left
 		while (drawing.enlisted && drawing.step < steps.length && steps[drawing.step].kind !== 'swords') drawing.step++;
