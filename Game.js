@@ -203,6 +203,8 @@ export default class Game extends BaseGame {
 			const side = this.sideOf(player.id);
 
 			if (this.state.phase !== 'draw' || side.drawing?.done !== false) refuse('Not drawing now');
+			// A gladiator is drawn (or enlisted from the hall), never skipped
+			if (this.state.style === 'gladiator' && stepsOf(this.state)[side.drawing.step].kind === 'stickmen') refuse('Draw your gladiator first');
 			this.finishStep(side);
 		},
 

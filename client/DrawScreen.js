@@ -228,7 +228,7 @@ export default class DrawScreen extends Screen {
 			doodle('keep', { title: 'Keep it (Enter)', big: true, size: '2em', onPress: () => this.keep() }),
 			doodle('undo', { title: 'Undo (Z)', onPress: () => this.undo() }),
 			doodle('clear', { title: 'Clear (C)', onPress: () => this.clear() }),
-			doodle('next', { title: 'Done, next (N)', onPress: () => act('next') }),
+			(this.nextButton = doodle('next', { title: 'Done, next (N)', onPress: () => act('next') })),
 		);
 		// On the weapon page: borrow one from the armory instead of drawing it
 		this.picker = new BorrowPicker({ appendTo: document.body });
@@ -244,7 +244,7 @@ export default class DrawScreen extends Screen {
 
 		this.input = createInput({
 			keys: { keep: ['Enter'], undo: ['z', 'Z'], clear: ['c', 'C'], next: ['n', 'N'] },
-			onPress: name => (name === 'next' ? act('next') : this[name]?.()),
+			onPress: name => (name === 'next' ? this.nextButton.elem.style.display !== 'none' && act('next') : this[name]?.()),
 		});
 		this.addCleanup('input', () => this.input.destroy());
 
@@ -318,6 +318,8 @@ export default class DrawScreen extends Screen {
 		this.heading.elem.replaceChildren(Object.assign(document.createElement('span'), { textContent: title }), dots);
 		this.borrowButton.elem.style.display = kind === 'swords' ? '' : 'none';
 		this.enlistButton.elem.style.display = kind === 'stickmen' && this.steps === STYLES.gladiator ? '' : 'none';
+		// No skipping a gladiator: it's drawn, or enlisted from the hall
+		this.nextButton.elem.style.display = kind === 'stickmen' && this.steps === STYLES.gladiator ? 'none' : '';
 		this.picker.close();
 		this.hallPicker.close();
 		this.redraw();

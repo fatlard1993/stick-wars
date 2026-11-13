@@ -1067,6 +1067,12 @@ test('a gladiator earns a name after a few wins, and a weapon after a few kills,
 // ---------------------------------------------------------------- tournaments
 
 // A tournament's duels fought out, each verdict forced (spared), until its champion is crowned or `duels` are done
+// A gladiator's pages got through quickly: its warrior drawn (never skipped), the rest left to the defaults
+const drawnQuickly = (game, id) => {
+	game.act(id, 'keep', { strokes: DEFAULT_RAW.stickmen()[0] });
+	for (let k = 0; k < 3; k++) game.act(id, 'next');
+};
+
 const fightOut = (game, duels = 99) => {
 	for (let k = 0; k < duels && game.state.bracket.champion === null; k++) {
 		const pair = [...game.state.seats];
@@ -1092,9 +1098,9 @@ test('a tournament: each player draws a gladiator, the first starts the bracket,
 	expect(game.state.entrants[0].drawing.step).toBe(0);
 	expect(game.viewFor(b.id).you.drawing.step).toBe(1);
 	// Not started while anyone's still drawing, and only by the first player
-	for (const player of [a, b]) for (let k = 0; k < 4; k++) game.act(player.id, 'next');
+	for (const player of [a, b]) drawnQuickly(game, player.id);
 	expect(game.act(a.id, 'start').error).toBe('Someone is still drawing');
-	for (let k = 0; k < 4; k++) game.act(c.id, 'next');
+	drawnQuickly(game, c.id);
 	expect(game.act(b.id, 'start').error).toBe('The first player starts it');
 	expect(game.act(a.id, 'start').ok).toBe(true);
 	expect(game.state.phase).toBe('battle');
@@ -1119,7 +1125,7 @@ test('a tournament fighter walking out loses the duel, and the bracket goes on w
 	const game = newGame('tournament', 'gladiator');
 	const players = ['🦊', '🐸'].map(name => game.addPlayer(name));
 
-	for (const player of players) for (let k = 0; k < 4; k++) game.act(player.id, 'next');
+	for (const player of players) drawnQuickly(game, player.id);
 	game.act(players[0].id, 'start');
 	game.removePlayer(game.state.seats[0]);
 	expect(game.state.phase).toBe('over');
