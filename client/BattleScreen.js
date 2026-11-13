@@ -958,6 +958,8 @@ export default class BattleScreen extends Screen {
 			if (brick[10] >= 0) scene.push({ z: brick[10], draw: fading(brick[13], () => atDepth(g, brick[4], brick[10], () => this.drawBrick(g, brick, true))) });
 		}
 		if (!cur.arena) for (const wall of cur.walls) scene.push({ z: 4, draw: () => this.drawFlag(g, wall) });
+		// The arena's medics, come to slap a yielded gladiator back together
+		for (const medic of cur.mercy?.medics ?? []) scene.push({ z: medic[1], draw: () => atDepth(g, medic[0], medic[1], () => this.drawMedic(g, medic)) });
 
 		return scene.sort((a, b) => b.z - a.z);
 	}
@@ -1031,7 +1033,7 @@ export default class BattleScreen extends Screen {
 		const erupting = this.cheer?.kind === 'erupt';
 		const heat = clamp((1 - since / (erupting ? 3.5 : 2.5)) * (erupting ? 1.8 : 1), 0, 1.8), booing = this.cheer?.kind === 'boo' && heat > 0;
 		// Over at the end: everyone on their feet; while the crowd decides a yielded gladiator's fate, hushed and still
-		const hushed = this.cur?.mercy && this.cur.mercy.up === undefined;
+		const hushed = this.cur?.mercy?.ready && this.cur.mercy.up === undefined;
 		const roused = this.cur?.over || this.view?.state.phase === 'over' ? 1 : booing || hushed ? 0 : heat;
 
 		// Each row's people in order of their ink, so a row is drawn in a few strokes, not hundreds
@@ -1275,6 +1277,57 @@ export default class BattleScreen extends Screen {
 		g.globalAlpha /= 0.82;
 	}
 
+	// A stick medic, a red cross on his chest and his cap: running, down on one knee slapping, or standing by
+	drawMedic(g, [x, , what, face]) {
+		const t = performance.now() / 1000 + x * 0.01;
+		const kneel = what === 's', run = what === 'r';
+		const feet = GROUND, hip = feet - (kneel ? 20 : 32), neck = hip - 26, head = neck - 8;
+		const stride = run ? Math.sin(t * 14) * 12 : 0;
+
+		g.save();
+		g.lineCap = g.lineJoin = 'round';
+		g.strokeStyle = PENCIL;
+		g.lineWidth = 2.2;
+		g.beginPath();
+		g.arc(x, head, 7, 0, TAU);
+		g.moveTo(x, neck);
+		g.lineTo(x + (run ? face * 4 : 0), hip);
+		if (kneel) {
+			// One knee down, the other foot planted
+			g.lineTo(x - face * 12, feet - 2);
+			g.lineTo(x - face * 22, feet);
+			g.moveTo(x, hip);
+			g.lineTo(x + face * 12, hip + 4);
+			g.lineTo(x + face * 12, feet);
+		} else {
+			g.lineTo(x + stride, feet);
+			g.moveTo(x + (run ? face * 4 : 0), hip);
+			g.lineTo(x - stride, feet);
+		}
+		// Arms: one swinging slaps down at him, or pumping as he runs, or folded while he waits
+		const swing = kneel ? Math.sin(t * 9) : 0;
+
+		g.moveTo(x, neck + 4);
+		g.lineTo(x + face * (14 + swing * 6), neck + 4 + (kneel ? 6 - swing * 14 : run ? -stride * 0.6 : 12));
+		g.moveTo(x, neck + 4);
+		g.lineTo(x - face * 10, neck + 4 + (run ? stride * 0.6 : 14));
+		g.stroke();
+		// The red cross, on his chest and his cap
+		g.strokeStyle = RED_PENCIL;
+		g.lineWidth = 2.6;
+		g.beginPath();
+		g.moveTo(x - 4, neck + 10);
+		g.lineTo(x + 4, neck + 10);
+		g.moveTo(x, neck + 6);
+		g.lineTo(x, neck + 14);
+		g.moveTo(x - 2.5, head - 9);
+		g.lineTo(x + 2.5, head - 9);
+		g.moveTo(x, head - 11.5);
+		g.lineTo(x, head - 6.5);
+		g.stroke();
+		g.restore();
+	}
+
 	// A yielded gladiator waiting on the crowd: a thumb over him, tilting slowly from up through sideways to down and back
 	// like an emperor making up his mind, growing as the wait goes on; then it slams down on the verdict, huge, and holds
 	drawMercy(g) {
@@ -1288,6 +1341,8 @@ export default class BattleScreen extends Screen {
 
 		const now = performance.now() / 1000;
 
+		// The thumb waits for the medics to finish
+		if (!mercy.ready) return;
 		this.mercySeen ??= now;
 		if (mercy.up !== undefined) this.verdictSeen ??= now;
 

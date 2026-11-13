@@ -690,6 +690,10 @@ test('a beaten gladiator yields and waits on the crowd: thumbs up, he lives', ()
 	expect(m.loser.yielded).toBe(true);
 	expect(m.loser.dead).toBe(false);
 	m.chance = 1;
+	// Medics run out and slap him back together first, every limb back on, then the crowd's hush and its thumb
+	for (let i = 0; i < 60 * (m.reach + 1.4) && !world.over; i++) world.step(DT);
+	expect(m.loser.body.owned.every(Boolean)).toBe(true);
+	expect(world.over).toBeNull();
 	for (let i = 0; i < 60 * (MERCY_WAIT + 1) && !world.over; i++) world.step(DT);
 	expect(world.over).toEqual({ winner: m.winner.team, spared: true });
 	expect(m.loser.dead).toBe(false);

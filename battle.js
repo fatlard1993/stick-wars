@@ -267,6 +267,9 @@ class Body {
 export const YIELD_AT = 0.22;
 /** How long the crowd keeps him waiting, then how long between each limb torn off if it's thumbs down, in seconds */
 export const MERCY_WAIT = 3.6, QUARTER_EVERY = 0.35;
+/** How fast the medics run, how long they take slapping him back together, and when, after they reach him, each slap lands */
+export const MEDIC_RUN = 300, MEDIC_WORK = 1.3, MEDIC_SLAPS = [0.25, 0.7];
+
 /** The small chance the crowd spares him whatever else */
 export const MERCY_LUCK = 0.05;
 
@@ -1739,8 +1742,9 @@ export class World {
 		body.stumps.push({ j: pj, t: 3.5, ph: rand(0, TAU), dx, dy });
 		g.stumps.push({ j: pj, t: 2, ph: rand(0, TAU), dx: -dx, dy: -dy });
 		this.spray(A.x, A.y, 30, dx, dy, 0.4, 260, body.z);
-		// A part cut off is dead from the moment it's cut
+		// A part cut off is dead from the moment it's cut, and remembers whose it was (for the arena's medics)
 		g.deadAt = this.time;
+		g.from = body;
 		this.addBody(g);
 		g.dropWeapon();
 		body.wake();
@@ -1815,7 +1819,23 @@ export class World {
 		if (!man.incap) man.goIncap();
 		man.bleed = 0;
 		man.atk = null;
-		this.mercy = { loser: man, winner, at: this.time, chance: clamp(0.05 + fought * 0.8 + lasted * 0.12 + earned, 0.03, 0.95), decided: false, torn: 0 };
+		// The medics run out of his gate to slap him back together before he's judged: when they reach him, and when the
+		// crowd decides, once they're done and it's had its hush
+		const gate = W / 2 - (man.team === 0 ? 1 : -1) * ARENA_GATE;
+		const reach = Math.hypot(man.x - gate, (man.z - DEPTH) * 1.5) / MEDIC_RUN;
+
+		this.mercy = {
+			loser: man,
+			winner,
+			at: this.time,
+			chance: clamp(0.05 + fought * 0.8 + lasted * 0.12 + earned, 0.03, 0.95),
+			decided: false,
+			torn: 0,
+			gate,
+			reach,
+			slapped: 0,
+			judgeAt: this.time + reach + MEDIC_WORK + MERCY_WAIT,
+		};
 		this.crowd('ooh');
 		this.slowmo(0.6);
 	}
@@ -1825,7 +1845,18 @@ export class World {
 		const m = this.mercy;
 
 		if (!m || m.loser.dead) return;
-		if (!m.decided && this.time - m.at > MERCY_WAIT) {
+
+		// The medics' slaps: a jolt each, and on the last, every limb he lost slapped back on
+		const working = this.time - m.at - m.reach;
+
+		if (!m.decided && m.slapped < MEDIC_SLAPS.length && working >= MEDIC_SLAPS[m.slapped]) {
+			m.slapped++;
+			this.sound('slap');
+			for (const p of m.loser.body.j) p.px += rand(-3, 3);
+			m.loser.body.wake();
+			if (m.slapped === MEDIC_SLAPS.length) this.mend(m.loser.body);
+		}
+		if (!m.decided && this.time >= m.judgeAt) {
 			m.decided = true;
 			m.up = Math.random() < m.chance || Math.random() < MERCY_LUCK;
 			// A beat held on the verdict before anything else happens
@@ -1860,6 +1891,68 @@ export class World {
 			this.shake(5);
 		}
 		this.crowd('erupt');
+	}
+
+	/** A body put back together: every bone it lost back on it, taken off whatever piece was lying about, laid back
+	 * where it belongs from its parent, its stumps closed */
+	mend(body) {
+		const R = body.tpl.joints, s = body.s;
+
+		for (let b = 0; b < 10; b++) {
+			if (body.owned[b]) continue;
+			for (const piece of this.bodies) if (piece !== body && piece.from === body && piece.owned[b]) piece.owned[b] = false;
+			body.owned[b] = true;
+
+			const [pa, pb] = BONES[b];
+			const x = body.j[pa].x + (R[pb].x - R[pa].x) * s * body.flip, y = body.j[pa].y + (R[pb].y - R[pa].y) * s;
+
+			Object.assign(body.j[pb], { x, y, px: x, py: y });
+		}
+		this.bodies = this.bodies.filter(piece => piece === body || piece.owned.some(Boolean));
+		body.stumps = [];
+		this.dust(body.j[2].x, body.j[2].y, 10, 'sand', body.z);
+	}
+
+	/**
+	 * Where the two medics are: running out of his gate to him, kneeling either side of him slapping, standing back while
+	 * the crowd decides, and running back in once it has (fleeing, on a thumbs down). Each [x, z, what, facing]: what is
+	 * 'r' running, 's' slapping, 'w' waiting.
+	 */
+	medics() {
+		const m = this.mercy, t = this.time - m.at, loser = m.loser;
+		const out = { x: m.gate, z: DEPTH - 10 };
+
+		return [-1, 1].map(side => {
+			const by = { x: loser.x + side * 20, z: clamp(loser.z + side * 6, 0, DEPTH) };
+			const back = { x: loser.x + side * 42, z: by.z };
+			let at = out, what = 'r', toward = by;
+
+			if (m.decided) {
+				// Back in through the gate, faster than they came on a thumbs down
+				const away = Math.max(1, Math.hypot(back.x - out.x, (back.z - out.z) * 1.5));
+				const k = clamp(((this.time - m.judgeAt) * (m.up ? 1 : 1.8) * MEDIC_RUN) / away, 0, 1);
+
+				at = { x: lerp(back.x, out.x, k), z: lerp(back.z, out.z, k) };
+				toward = out;
+				what = k < 1 ? 'r' : 'w';
+			} else if (t < m.reach) {
+				const k = t / m.reach;
+
+				at = { x: lerp(out.x, by.x, k), z: lerp(out.z, by.z, k) };
+			} else if (t < m.reach + MEDIC_WORK - 0.35) {
+				at = by;
+				what = 's';
+				toward = loser;
+			} else {
+				const k = clamp((t - m.reach - MEDIC_WORK + 0.35) / 0.35, 0, 1);
+
+				at = { x: lerp(by.x, back.x, k), z: by.z };
+				what = 'w';
+				toward = loser;
+			}
+
+			return [Math.round(at.x), Math.round(at.z), what, toward.x >= at.x ? 1 : -1];
+		});
 	}
 
 	/**
@@ -2130,7 +2223,16 @@ export class World {
 			time: Math.round(this.time * 100) / 100,
 			...(this.arena && { arena: true }),
 			// A yielded gladiator: where he kneels, and once it's given, the crowd's thumbs up or down
-			...(this.mercy && { mercy: { x: Math.round(this.mercy.loser.x), z: Math.round(this.mercy.loser.z), ...(this.mercy.decided && { up: this.mercy.up }) } }),
+			...(this.mercy && {
+				mercy: {
+					x: Math.round(this.mercy.loser.x),
+					z: Math.round(this.mercy.loser.z),
+					// Done slapping him together, and the crowd's hush begun
+					...(this.time >= this.mercy.judgeAt - MERCY_WAIT && { ready: true }),
+					...(this.mercy.decided && { up: this.mercy.up }),
+					medics: this.medics(),
+				},
+			}),
 			bodies: this.bodies.map(b => b.snapshot()),
 			props: this.props.map(p => p.snapshot()),
 			projs: this.projs.map(p => p.snapshot()),

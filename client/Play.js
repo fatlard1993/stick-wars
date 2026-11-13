@@ -22,6 +22,7 @@ import nope from './sounds/nope.mp3';
 import ooh from './sounds/ooh.mp3';
 import roar from './sounds/roar.mp3';
 import sever from './sounds/sever.mp3';
+import slap from './sounds/slap.mp3';
 import squish from './sounds/squish.mp3';
 import swing from './sounds/swing.mp3';
 import thud from './sounds/thud.mp3';
@@ -61,7 +62,7 @@ export default class Play extends View {
 	constructor(options, ...children) {
 		const status = new Status();
 		const sound = createSound({
-			effects: { hit, sever, squish, swing, launch, crash, thud, deploy, keep, nope, win, lose, roar, ooh, boo, kill, erupt },
+			effects: { hit, sever, squish, swing, launch, crash, thud, deploy, keep, nope, win, lose, roar, ooh, boo, kill, erupt, slap },
 			music: { drawing, battle },
 		});
 
