@@ -6,6 +6,7 @@ A web game on `@fatlard1993/web-game-framework` and `@vanilla-bean/components`: 
 
 - `bun run dev`: the server at http://localhost:3000 (or `PORT`), rebuilding the page and reloading open browsers as files change. Under paude it's already running as the project's `dev` task and its page is shared: don't start a second one.
 - `bun run build` then `bun start`: production (the house runs it as `bun-server@stick-wars`, its port from the mother hub).
+- **Every restart of the house's copy drops every player's connection** ("Connection lost" on every phone). It serves the page's build from disk on each request, so a change to the page needs only `bun run build`, never a restart; restart it only for a change to the server, once, at the end of the work. Check things in a browser against a throwaway copy (its own folder, `data/` and port), never the house's.
 - `bun test`: the rules, actions, battles and stores, without a browser. `test-setup.js` (preloaded by `bunfig.toml`) marks every run a test, so the shared stores stay in memory and never touch `data/`.
 
 ## Rules of the house
