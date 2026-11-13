@@ -23,9 +23,9 @@ Six pages, each against the clock. Draw as many as you like on each. A page left
 | Stick men | 45s | a head on top (any shape, or none: the top is its head), a body hanging from it, arms and legs sticking out both sides, not a scribble |
 | Stones | 25s | one closed, lumpy outline |
 | Catapult | 40s | four beams (long and thin, at least three times as long as wide), then two wheels (round) |
-| Shields | 25s | optional: a closed outline, sized against your first stick man; about half your men carry one |
 | Rocks | 25s | a closed, round-ish lump: bigger hits harder and spikier tears more, but a heavy one flies shorter and takes longer to load. Each one kept is a rock on your catapult's pile (10 at most) |
 | Weapons | 40s | anything with some size to it, inside the box on the page, handle at the bottom |
+| Shields | 25s | optional: a closed outline, sized against your first stick man; about half your men carry one |
 
 A weapon is drawn in the box on its page (the pen lifts at the box's edge), and its shape is how it fights: length is reach, width and ink are weight, jagged edges shred and bleed, a thin blade cuts cleaner. Any shape will do: a big clunky one hits hard but swings slowly and slows the man carrying it. Each gets a name: Shredder, Bone Crusher, Skewer, Shiv or Blade. Skewers stab. The rack button on the page borrows one from the armory instead.
 
