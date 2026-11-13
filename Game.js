@@ -1,6 +1,6 @@
 import { Game as BaseGame, refuse } from '@fatlard1993/web-game-framework';
 
-import { cpuArmy, cpuGladiator, defaultsFor, judge } from './art.js';
+import { cpuArmy, cpuGladiator, defaultsFor, freshOf, judge } from './art.js';
 import { AMMO, ARMY, DT, ORDERS, World } from './battle.js';
 import {
 	CPU_SIZE,
@@ -87,7 +87,10 @@ export default class Game extends BaseGame {
 			// A gladiator has one of each: kept, and on to the next page
 			if (gladiator) this.finishStep(team);
 
-			return { kind, kept: kept.length, stats: verdict.item.stats ?? null };
+			// Whether it's a new one, or too like one kept already to earn another man (stick men and weapons, in a war)
+			const fresh = gladiator || !['stickmen', 'swords'].includes(kind) || freshOf(kind, kept.filter(item => item.drawn)).at(-1);
+
+			return { kind, kept: kept.length, stats: verdict.item.stats ?? null, fresh };
 		},
 
 		// A rock drawn mid-battle, onto our catapult's pile, if it passes the ammo check and we may still draw one

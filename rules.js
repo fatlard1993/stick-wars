@@ -1,3 +1,5 @@
+import { freshOf } from './art.js';
+
 // What the game is, shared by the server, which runs it, and the page, which draws it, so the two can't disagree.
 // Stick Men Wars: each side draws its army (stick men, wall stones, catapult beams, ammo, weapons) against the clock,
 // then the drawings fight: walls, catapults and stick men, last man standing wins. Or, as gladiators, each draws one
@@ -70,9 +72,12 @@ export const BASE_ARMY = 10, MOST_BONUS = 6;
 // Only what was drawn counts toward a bonus, never the defaults (kept drawings carry `drawn`)
 const drawnOf = items => (items ?? []).filter(item => item.drawn).length;
 
-/** A side's army: ten men, and one more for each stick man and each weapon drawn past the first of each */
+// And of stick men and weapons, only the different ones: copies of one don't count
+const newOf = (kind, items) => freshOf(kind, (items ?? []).filter(item => item.drawn)).filter(Boolean).length;
+
+/** A side's army: ten men, and one more for each different stick man and weapon drawn past the first of each */
 export const armySize = art =>
-	BASE_ARMY + Math.min(MOST_BONUS, Math.max(0, drawnOf(art?.stickmen) - 1) + Math.max(0, drawnOf(art?.swords) - 1));
+	BASE_ARMY + Math.min(MOST_BONUS, Math.max(0, newOf('stickmen', art?.stickmen) - 1) + Math.max(0, newOf('swords', art?.swords) - 1));
 
 /** The computer's side: a middling army and wall, what a person drawing a fair few of each would get */
 export const CPU_SIZE = { army: BASE_ARMY + MOST_BONUS / 2, wall: { cols: 3, rows: 7 } };

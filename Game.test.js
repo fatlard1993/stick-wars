@@ -126,10 +126,14 @@ test('drawing more stick men and weapons earns more men, and more stones a bigge
 	const game = newGame('cpu');
 	const fox = game.addPlayer('🦊');
 
-	for (const { kind } of STEPS) {
-		const many = { stickmen: 3, swords: 3, stones: 5 }[kind] ?? 1;
+	// Three different stick men (arms down, up and out) and three different weapons (a sword, an axe, a spiked ball)
+	const men = [DEFAULT_RAW.stickmen()[0], DEFAULT_RAW.stickmen()[1], [ringS(240, 95, 36, 38), lineS(240, 133, 240, 285), lineS(240, 175, 140, 175), lineS(240, 175, 340, 175), lineS(240, 285, 150, 400), lineS(240, 285, 330, 400)]];
+	const weapons = [DEFAULT_RAW.swords()[0], DEFAULT_RAW.swords()[1], [lineS(240, 450, 240, 200), starS(240, 140, 70, 45, 8)]];
 
-		for (let k = 0; k < many; k++) expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW[kind]()[k % DEFAULT_RAW[kind]().length] }).ok).toBe(true);
+	for (const { kind } of STEPS) {
+		const drawings = { stickmen: men, swords: weapons, stones: Array.from({ length: 5 }, () => DEFAULT_RAW.stones()[0]) }[kind] ?? [DEFAULT_RAW[kind]()[0]];
+
+		for (const strokes of drawings) expect(game.act(fox.id, 'keep', { strokes }).ok).toBe(true);
 		game.act(fox.id, 'next');
 	}
 
@@ -765,4 +769,19 @@ test('size has a price: a heavy rock flies shorter and loads slower; a spindly g
 	expect(spindly.speed).toBeGreaterThan(stubby.speed);
 	expect(spindly.maxHp).toBeLessThan(stubby.maxHp);
 	expect(spindly.tough).toBeGreaterThan(stubby.tough);
+});
+
+test('only different stick men and weapons earn more men: a copy fights, but earns nothing', () => {
+	const game = newGame('cpu');
+	const fox = game.addPlayer('🦊');
+	const man = DEFAULT_RAW.stickmen()[0];
+
+	expect(game.act(fox.id, 'keep', { strokes: man }).result.fresh).toBe(true);
+	// The same stick man again, redrawn a little differently: a copy
+	expect(game.act(fox.id, 'keep', { strokes: man.map(st => st.map(p => ({ x: p.x + 6, y: p.y + 3 }))) }).result.fresh).toBe(false);
+	expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[1] }).result.fresh).toBe(true);
+	for (const _ of STEPS) game.act(fox.id, 'next');
+	// Three kept, two different: one extra man
+	expect(game.state.art[0].stickmen).toHaveLength(3);
+	expect(game.world.stickmen.filter(s => s.team === 0)).toHaveLength(BASE_ARMY + 1);
 });

@@ -478,6 +478,45 @@ export const DEFAULT_RAW = {
   ],
 };
 
+// ---------- telling drawings apart ----------
+
+// A drawing as points along its ink (ninety at most), fitted by its longer side into a unit box and centred: how it
+// looks, whatever size or place it was drawn at
+const looksOf = raw => {
+  const pts = raw.flatMap(st => resample(st, 4));
+  const step = Math.max(1, Math.ceil(pts.length / 90));
+  const bb = bboxOf(pts), size = Math.max(bb.w, bb.h) || 1;
+  return pts.filter((_, i) => i % step === 0).map(p => ({ x: (p.x - bb.cx) / size, y: (p.y - bb.cy) / size }));
+};
+
+/** How unalike two drawings look: the average distance from each one's ink to the other's nearest, both ways (0, alike) */
+export const unlike = (a, b) => {
+  const near = (from, to) => from.reduce((sum, p) => sum + Math.min(...to.map(q => Math.hypot(p.x - q.x, p.y - q.y))), 0) / from.length;
+  const [la, lb] = [looksOf(a), looksOf(b)];
+  return (near(la, lb) + near(lb, la)) / 2;
+};
+
+// How unalike two stick men stand: their skeletons' joints apart, on average, and their heads' sizes. Stick figures are
+// all thin lines, so it's the pose (arms up or down, legs wide, a big head) that tells one from another.
+const unlikePose = (a, b) =>
+  a.rig.joints.reduce((sum, p, i) => sum + Math.hypot(p.x - b.rig.joints[i].x, p.y - b.rig.joints[i].y), 0) / a.rig.joints.length +
+  Math.abs(a.rig.headR - b.rig.headR);
+
+/** How unalike two stick men must stand, and two other drawings look, to count as different (copies come well under) */
+export const NEW_POSE = 0.07, NEW_LOOK = 0.035;
+
+/** Which of a kind's drawings are new: each one not like any new one kept before it */
+export const freshOf = (kind, items) => {
+  const seen = [];
+  const apart = (a, b) => (kind === 'stickmen' && a.rig && b.rig ? unlikePose(a, b) > NEW_POSE : unlike(a.raw, b.raw) > NEW_LOOK);
+
+  return items.map(item => {
+    const fresh = seen.every(other => apart(item, other));
+    if (fresh) seen.push(item);
+    return fresh;
+  });
+};
+
 // ---------- a gladiator's gear ----------
 
 // Where a warrior's skeleton sits on its page (judged again for a drawing kept before rigs carried it)

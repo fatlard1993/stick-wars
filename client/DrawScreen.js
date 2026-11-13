@@ -1,8 +1,8 @@
 import { Component, Notify, styled } from '@vanilla-bean/components';
 import { act, createInput } from '@fatlard1993/web-game-framework/client';
 
-import { DEFAULT_RAW, PAD, WEAPON_AREA, clamp, pick } from '../art.js';
-import { TEAMS, stepsOf } from '../rules.js';
+import { DEFAULT_RAW, PAD, WEAPON_AREA, clamp, freshOf, pick } from '../art.js';
+import { STYLES, TEAMS, stepsOf } from '../rules.js';
 import { icon } from './icons.js';
 import { PEN, Pad, SHEET, inkStrokes, offPad } from './Pad.js';
 import { drawRawFit } from './paint.js';
@@ -172,6 +172,8 @@ const Gallery = styled(
 			transform: rotate(-2deg);
 		}
 		& canvas:nth-child(even) { transform: rotate(2deg); }
+		/* Too like one kept before it: it fights, but earns no extra man */
+		& canvas.copy { opacity: 0.35; border-style: dashed; }
 	`,
 );
 
@@ -312,10 +314,16 @@ export default class DrawScreen extends Screen {
 		const items = this.art?.art?.[this.team]?.[this.kind] ?? [];
 
 		this.count.elem.textContent = items.length ? `Kept: ${items.length}` : '';
+
+		// In a war, a stick man or weapon too like one kept before earns no extra man: shown faded
+		const counts = this.steps === STYLES.war && (this.kind === 'stickmen' || this.kind === 'swords');
+		const fresh = counts ? freshOf(this.kind, items) : items.map(() => true);
+
 		this.gallery.elem.replaceChildren(
-			...items.map(item => {
+			...items.map((item, at) => {
 				const canvas = document.createElement('canvas');
 
+				if (!fresh[at]) canvas.className = 'copy';
 				canvas.width = canvas.height = 120;
 				drawRawFit(canvas, item.raw);
 
@@ -370,8 +378,10 @@ export default class DrawScreen extends Screen {
 			return;
 		}
 		this.sound?.play('keep');
-		// Under the bar, clear of the pad, so it never sits under a pen
-		new Notify({ x: window.innerWidth / 2, y: 70, intent: 'success', content: pick(PRAISE[kind]), timeout: 1500 });
+		// Under the bar, clear of the pad, so it never sits under a pen; a copy of one kept is told it earns nothing more
+		const copy = said.result?.fresh === false;
+
+		new Notify({ x: window.innerWidth / 2, y: 70, intent: copy ? 'warning' : 'success', content: copy ? 'Too like one you have.' : pick(PRAISE[kind]), timeout: 1800 });
 		if (this.strokes === strokes) this.clear();
 	}
 
