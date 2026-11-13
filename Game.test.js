@@ -1407,3 +1407,22 @@ test('a gladiator drawn beefy hits harder and swings slower; beefy legs stand fi
 	expect(big.speed / thin.speed).toBeLessThan(1.3 * 0.95);
 	expect(big.beef.arms).toBeGreaterThan(0.5);
 });
+
+test('a page being drawn is passed on for the others to watch, and blank again once kept', () => {
+	const game = newGame('duo', 'war');
+	const sent = [];
+
+	game.broadcast = (key, data) => key === 'sketch' && sent.push(data);
+	const [fox, owl] = [game.addPlayer('🦊'), game.addPlayer('🦉')];
+
+	expect(game.act(owl.id, 'sketch', { strokes: [lineS(240, 100, 240, 300)] }).ok).toBe(true);
+	expect(sent.at(-1)).toMatchObject({ who: 1, step: 0 });
+	expect(sent.at(-1).strokes[0].length).toBeGreaterThan(1);
+	// Not too often
+	expect(game.act(owl.id, 'sketch', { strokes: [] }).ok).toBe(false);
+	// Kept: blank
+	game.act(owl.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[0] });
+	expect(sent.at(-1)).toMatchObject({ who: 1, strokes: [] });
+	expect(game.state.art[1].sketch).toBeUndefined();
+	expect(fox).toBeDefined();
+});

@@ -107,7 +107,7 @@ export default class Play extends View {
 		const { playerId, leave } = await enterGame(gameId, {
 			watch,
 			onState: view => this.update(view),
-			onUpdate: message => message.update === 'art' && this.setArt(message),
+			onUpdate: message => (message.update === 'art' ? this.setArt(message) : message.update === 'sketch' && this.screen?.setSketch?.(message)),
 			// A game gone (or never there): home, or for a TV, on to whatever else is on
 			notMember: () => (window.location.href = this.options.tv ? '#/tv' : '#/'),
 			gone: () => (window.location.href = this.options.tv ? '#/tv' : '#/'),

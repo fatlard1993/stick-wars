@@ -209,6 +209,9 @@ const Waiting = styled(
 // box on the pad (the pen lifts at its edge), and what a weapon's shape makes it do is left for the battle to show.
 // How far a side drawing is along, as the pages show it: a dot a page (done, this one, to come) and its clock running
 // down, or a pause sign while its player's page is closed (its clock stopped)
+// How often a page sends its drawing as it's drawn, in ms, and how big another's is shown while waiting, in CSS pixels
+const SKETCH_EVERY = 300, SKETCH_SIZE = 150;
+
 const progressOf = (view, t, ink) => {
 	const steps = stepsOf(view.state), { step, left } = view.state.drawing[t];
 	const dots = document.createElement('span');
@@ -275,6 +278,12 @@ export default class DrawScreen extends Screen {
 		this.side.elem.append(this.borrowButton.elem, this.enlistButton.elem);
 		this.count = new Component({ appendTo: this.side });
 		this.gallery = new Gallery({ appendTo: this.side });
+
+		// The page as it's drawn, sent now and then (when it's changed) for the others to watch; theirs, as they come
+		this.sketches = {};
+		this.sentSketch = '';
+		this.sketchTimer = setInterval(() => this.sendSketch(), SKETCH_EVERY);
+		this.addCleanup('sketch', () => clearInterval(this.sketchTimer));
 
 		this.input = createInput({
 			keys: { keep: ['Enter'], undo: ['z', 'Z'], clear: ['c', 'C'], next: ['n', 'N'] },
@@ -520,6 +529,48 @@ export default class DrawScreen extends Screen {
 	}
 
 	// Done drawing (or only watching): who the battle waits on, each side's flag and how far along it is
+	// This page's drawing as it stands, the line under the pen too, out to the others if it's changed
+	sendSketch() {
+		if (!this.size || this.waiting.elem.isConnected || this.tv) return;
+
+		const k = PAD / this.size;
+		const live = Object.values(this.pad.pointers ?? {}).map(pointer => (pointer.line ?? []).map(({ x, y }) => ({ x: x * k, y: y * k })));
+		const strokes = [...this.strokes, ...live.filter(line => line.length)].map(stroke => stroke.filter((_, i) => i % 2 === 0 || i === stroke.length - 1));
+		const said = JSON.stringify(strokes.map(stroke => stroke.length) ) + (strokes.at(-1)?.at(-1)?.x ?? '');
+
+		if (said === this.sentSketch) return;
+		this.sentSketch = said;
+		act('sketch', { strokes }, { quiet: true });
+	}
+
+	/** Another's page as they draw it: kept by whose, and drawn on the waiting screen if it's up */
+	setSketch({ who, step, strokes }) {
+		this.sketches[who] = { step, strokes };
+		this.inkSketch(who);
+	}
+
+	// One side's sketch on its little page on the waiting screen (made once, drawn again as it changes)
+	inkSketch(who) {
+		const canvas = (this.sketchPages ??= {})[who];
+		const sketch = this.sketches[who];
+
+		if (!canvas) return;
+
+		const ratio = window.devicePixelRatio || 1, size = SKETCH_SIZE, g = canvas.getContext('2d');
+
+		if (!canvas.dataset.sized) {
+			canvas.dataset.sized = 'yes';
+			canvas.width = canvas.height = size * ratio;
+			canvas.style.cssText = `width: ${size}px; height: ${size}px; background: ${SHEET}; border: 2.5px solid ${canvas.dataset.ink}; border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px; box-shadow: 2px 3px 0 ${PENCIL}`;
+		}
+		g.setTransform(ratio, 0, 0, ratio, 0, 0);
+		g.clearRect(0, 0, size, size);
+		g.strokeStyle = canvas.dataset.ink;
+		g.lineWidth = Math.max(1.5, (PEN * size) / PAD);
+		g.lineCap = g.lineJoin = 'round';
+		if (sketch?.strokes?.length) inkStrokes(g, sketch.strokes, size / PAD);
+	}
+
 	// On a TV, while there's room to join: the code a phone scans to sit down (made once, kept)
 	joinCode(view) {
 		const { mode, seats, bracket, entrants = [] } = view.state;
@@ -581,10 +632,19 @@ export default class DrawScreen extends Screen {
 			row.append(icon('flag', { size: '1.4em', color: ink }));
 			if (!seats[t]) row.append(icon('invite', { size: '1.4em', color: ink }), 'waiting for someone to join');
 			else if (drawing[t].done) row.append(icon('person', { size: '1.4em', color: ink }), icon('keep', { size: '1.4em', color: ink }));
-			else row.append(icon('person', { size: '1.4em', color: ink }), icon('redraw', { size: '1.4em', color: ink }), ...progressOf(view, t, ink));
+			else {
+				row.append(icon('person', { size: '1.4em', color: ink }), icon('redraw', { size: '1.4em', color: ink }), ...progressOf(view, t, ink));
+				// Their page as they draw it, live
+				const page = ((this.sketchPages ??= {})[t] ??= document.createElement('canvas'));
 
-			return row;
-		});
+				page.dataset.ink = ink;
+				this.inkSketch(t);
+
+				return [row, page];
+			}
+
+			return [row];
+		}).flat();
 
 		this.waiting.elem.replaceChildren(icon('hourglass', { size: '3em' }), ...rows, ...this.joinCode(view));
 	}

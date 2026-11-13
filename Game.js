@@ -1,6 +1,6 @@
 import { Game as BaseGame, refuse } from '@fatlard1993/web-game-framework';
 
-import { cpuArmy, cpuGladiator, defaultsFor, freshOf, judge, samePose, sameWeapon } from './art.js';
+import { cleanStrokes, cpuArmy, cpuGladiator, defaultsFor, freshOf, judge, samePose, sameWeapon } from './art.js';
 import { NAMED_AT_KILLS, NAMED_AT_WINS, gladiatorName, weaponName } from './names.js';
 import { AMMO, DT, ORDERS, World } from './battle.js';
 import {
@@ -38,6 +38,8 @@ export const CROWD = new Shelf(kept('crowd.json'), {
 // How long a won battle plays on before its end is called, and then how long it settles before it's left still, in
 // battle seconds; in a tournament, how long the end card stands before the next duel
 const END_AFTER = 2.2, SETTLE = 8, NEXT_DUEL = 6;
+// The quickest a page may send its drawing as it's drawn, in ms
+const SKETCH_EVERY = 150;
 
 // One running game, on the server: who sits on each side, the art each side has drawn, and once both are done, the
 // battle (battle.js), stepped here and sent to every page many times a second. Drawings are judged here too, so what
@@ -125,6 +127,7 @@ export default class Game extends BaseGame {
 			if (shelved) item.armory = shelved;
 			kept.push(item);
 			this.artChanged();
+			this.showSketch(player.id, side, []);
 			// A gladiator has one of each: kept, and on to the next page
 			if (gladiator) this.finishStep(side);
 
@@ -177,6 +180,19 @@ export default class Game extends BaseGame {
 			if (gladiator) this.finishStep(side);
 
 			return { kept: kept.length };
+		},
+
+		// The page as it's being drawn, sent now and then: passed on for the others to watch it drawn (never kept, never
+		// saved; a page kept or moved on from is blank again)
+		sketch(player, { strokes } = {}) {
+			const side = this.sideOf(player.id);
+
+			if (this.state.phase !== 'draw' || !side.drawing || side.drawing.done) return;
+			// The last each player sent, held in the game (not saved)
+			this.sketchedAt ??= new Map();
+			if (Date.now() - (this.sketchedAt.get(player.id) ?? 0) < SKETCH_EVERY) refuse('Too fast');
+			this.sketchedAt.set(player.id, Date.now());
+			this.showSketch(player.id, side, cleanStrokes(strokes) ?? []);
 		},
 
 		// A gladiator from the hall instead of one drawn: its warrior, armor and shield, its record carried on (a win is its
@@ -414,6 +430,9 @@ export default class Game extends BaseGame {
 	// A side's page done with (side: its { art, drawing })
 	finishStep(side) {
 		const { drawing } = side;
+
+		// Its page left: blank to those watching it drawn
+		this.broadcast('sketch', { who: side.id ?? this.state.art.indexOf(side.art), step: drawing.step + 1, strokes: [] });
 		const steps = stepsOf(this.state);
 		const { kind, optional } = steps[drawing.step];
 
@@ -432,6 +451,13 @@ export default class Game extends BaseGame {
 		if (drawing.step >= steps.length) drawing.done = true;
 		else drawing.left = steps[drawing.step].banked ? Math.min(drawing.bank, steps[drawing.step].seconds) : steps[drawing.step].seconds;
 		this.startWhenReady();
+	}
+
+	// A side's page as it's being drawn, out to everyone watching: by its seat, or a tournament entrant's id
+	showSketch(playerId, side, strokes) {
+		const who = this.state.mode === 'tournament' ? playerId : this.state.seats.indexOf(playerId);
+
+		this.broadcast('sketch', { who, step: side.drawing?.step ?? 0, strokes });
 	}
 
 	// The hall's gladiators in this game already: seated, entered, or the computer's
