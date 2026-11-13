@@ -19,8 +19,8 @@ export const voter = () => {
 };
 
 /** A shelf's drawings (the armory's weapons, or the crowd's stick men), sorted one of its ways */
-export const shelf = async (name, sort) =>
-	(await GET(`/${name}`, { apiId: [name, sort], invalidateAfter: 0, searchParameters: { sort, voter: voter() } })).body ?? [];
+export const shelf = async (name, sort, take) =>
+	(await GET(`/${name}`, { apiId: [name, sort], invalidateAfter: 0, searchParameters: { sort, voter: voter(), ...(take && { take }) } })).body ?? [];
 
 /** The armory's weapons, sorted one of its ways (loved, hated, controversial, deadliest) */
 export const weapons = sort => shelf('armory', sort);

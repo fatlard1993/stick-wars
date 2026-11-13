@@ -23,7 +23,7 @@ export const SEND_EVERY = 0.4;
 export const MOST_CREW = 3;
 /** How close an enemy comes before a man who isn't charging turns to fight him */
 export const ENGAGE = 150;
-/** What a man can be told to do: stay home, crew a catapult, hold by the wall, or charge */
+/** What a man can be told to do: stay home, crew the catapult, repair it or the wall, hold by the wall, or charge */
 export const ORDERS = ['idle', 'crew', 'repair', 'hold', 'charge'];
 /** Each order as a page is sent it, one letter apiece */
 export const ORDER_CODE = { idle: 'i', crew: 'w', repair: 'r', hold: 'h', charge: 'c' };
@@ -46,7 +46,7 @@ export const DEPTH = 190;
 export const SKEW_X = 0.28, SKEW_Y = 0.55, BACK_SCALE = 0.82;
 /** How close in depth two men must be to cross blades */
 export const LANE = 16;
-/** Where the side's two catapults stand in depth: one forward, one back */
+/** Where each side's catapult stands in depth */
 export const CAT_Z = [95];
 
 /** How small a thing at depth z is drawn */
@@ -144,7 +144,7 @@ export const rockThrow = rock => {
 export const FLING_ANGLES = [0.35, 1.2];
 
 /** How far a side's catapult can throw: into the enemy's wall, never past it, so men at home behind it are out of reach */
-export const reachOf = team => (team === 0 ? W - 430 - 60 : 430 + 60);
+export const reachOf = team => (team === 0 ? WALL_X[1] + WALL.cols * WALL.cw - 60 : WALL_X[0] + 60);
 
 // How far a throw from a side's catapult lands on open ground, at a speed and angle
 const thrownTo = (team, speed, angle) => {

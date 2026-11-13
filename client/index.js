@@ -2,7 +2,7 @@
 import './theme.js';
 
 import { Page, Router } from '@vanilla-bean/components';
-import { Create, Hub, Join } from '@fatlard1993/web-game-framework/ui';
+import { Create, Hub } from '@fatlard1993/web-game-framework/ui';
 
 import '@fatlard1993/web-game-framework/client/socket';
 import '@vanilla-bean/components/app/reloadOnBuild';
@@ -10,6 +10,7 @@ import '@vanilla-bean/components/app/reloadOnBuild';
 import Armory from './Armory.js';
 import Crowd from './Crowd.js';
 import Hall from './Hall.js';
+import JoinNow from './JoinNow.js';
 import Play from './Play.js';
 import Start from './Start.js';
 
@@ -31,7 +32,8 @@ const views = {
 	'/watch/:gameId': Watch,
 	'/hub': Hub,
 	'/create': Create,
-	'/join/:gameId': Join,
+	// An invite's code: seated at once, no form
+	'/join/:gameId': JoinNow,
 };
 
 new Page({ appendTo: document.body, append: new Router({ views, defaultPath: '/' }) });

@@ -113,10 +113,7 @@ export function segDist(px, py, ax, ay, bx, by) {
 }
 
 
-// Draws a normalized shape ({strokes, hull}) in whatever transform ctx currently has.
-
-// Shape checks, rigging and stat extraction for player drawings.
-// Drawings arrive as strokes in pad space (PAD x PAD, y down).
+// ---------- the drawing pad: drawings arrive as strokes in pad space (PAD x PAD, y down) ----------
 
 export const PAD = 480;
 
@@ -179,6 +176,9 @@ export function checkStickman(strokes) {
   const bb = bboxOf(pts);
   if (bb.h < 110) return fail('Bigger! Use most of the page.');
   if (bb.h < bb.w * 0.65) return fail("That's wider than it is tall. Stick men stand up.");
+  // The cheap check before the costly one: a scribble is turned down before its loops are searched
+  const ink = strokes.reduce((t, s) => t + strokeLen(s), 0);
+  if (ink > bb.h * 6) return fail("That's a scribble. Stick men are just a few lines.");
   let head = null;
   for (const s of strokes) {
     for (const l of findLoops(s)) {
@@ -189,8 +189,6 @@ export function checkStickman(strokes) {
     }
   }
   if (!head) return fail('Needs a head: a roundish closed loop near the top.');
-  const ink = strokes.reduce((t, s) => t + strokeLen(s), 0);
-  if (ink > bb.h * 6) return fail("That's a scribble. Stick men are just a few lines.");
   const below = pts.filter(p => p.y > head.cy + head.r * 1.05);
   if (below.length < 6) return fail('A head alone? Give it a body and legs.');
   const bl = bboxOf(below);
@@ -595,6 +593,13 @@ export function makeDefaults(key) {
 /** Most points a drawing may have, all strokes together: plenty for any picture, and a cap on what a page can send */
 export const MOST_POINTS = 4000;
 
+/** Most ink a drawing may have, all strokes together, in pad units: well past anything a check accepts, and a cap on the
+ * cost of judging it (finding loops grows with the square of a stroke's length) */
+export const MOST_INK = 7000;
+
+// Points closer together than this are one point: a pen reports far more than a drawing needs
+const NEAREST = 3;
+
 const round = (value, places) => {
 	const k = 10 ** places;
 
@@ -630,9 +635,13 @@ export const cleanStrokes = strokes => {
 		const points = [];
 
 		for (const point of stroke.slice(0, left)) {
-			const x = Number(point?.x), y = Number(point?.y);
+			const x = Number(point?.x), y = Number(point?.y), last = points.at(-1);
 
-			if (Number.isFinite(x) && Number.isFinite(y)) points.push({ x: clamp(x, 0, PAD), y: clamp(y, 0, PAD) });
+			if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+
+			const p = { x: clamp(x, 0, PAD), y: clamp(y, 0, PAD) };
+
+			if (!last || dist(last, p) >= NEAREST) points.push(p);
 		}
 		left -= points.length;
 		if (points.length === 1) points.push({ x: points[0].x + 1, y: points[0].y + 1 });
@@ -644,7 +653,7 @@ export const cleanStrokes = strokes => {
 
 /**
  * A drawing judged as one kind of art: { ok: true, item } ready to keep, or { ok: false, msg } saying what's missing
- * @param {string} kind - stickmen, stones, beams, ammo or swords
+ * @param {string} kind - stickmen, stones, beams, ammo, swords, armor or shield
  * @param {*} strokes - The drawing, as sent
  * @returns {{ ok: boolean, item?: object, msg?: string }} The verdict
  */
@@ -653,6 +662,7 @@ export const judge = (kind, strokes, context) => {
 
 	if (!CHECKS[kind]) return fail('Not a kind of art');
 	if (!clean) return fail('Draw something first.');
+	if (clean.reduce((ink, stroke) => ink + strokeLen(stroke), 0) > MOST_INK) return fail("That's a scribble.");
 
 	const verdict = CHECKS[kind](clean, context);
 
@@ -823,6 +833,3 @@ export const cpuGladiator = () => {
   const shield = Math.random() < 0.55 ? firstPassing('shield', Math.random() < 0.5 ? round : kite, { warrior }) : null;
   return { stickmen: [warrior], swords: [weapon], armor: armor ? [armor] : [], shield: shield ? [shield] : [] };
 };
-
-/** How many of the computer's drawings pass, kind by kind, out of how many it means to have: for tests */
-export const cpuCounts = () => Object.fromEntries(Object.keys(CPU_RAW).map(kind => [kind, CPU_RAW[kind]().length]));

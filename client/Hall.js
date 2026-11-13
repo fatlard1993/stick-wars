@@ -2,6 +2,7 @@ import { Component, GET, Notify, styled } from '@vanilla-bean/components';
 import { createGame } from '@fatlard1993/web-game-framework/client';
 import { View } from '@fatlard1993/web-game-framework/ui';
 
+import { bboxOf } from '../art.js';
 import { TEAMS } from '../rules.js';
 import { icon } from './icons.js';
 import { sitDown } from './Start.js';
@@ -43,21 +44,11 @@ const Card = styled(
 	`,
 );
 
-// The strokes' box
-const boxOf = strokes => {
-	const pts = strokes.flat();
-
-	return pts.reduce(
-		(b, p) => ({ x0: Math.min(b.x0, p.x), y0: Math.min(b.y0, p.y), x1: Math.max(b.x1, p.x), y1: Math.max(b.y1, p.y) }),
-		{ x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity },
-	);
-};
-
 // Pieces of drawing (each { strokes, ink, fill }) drawn together, fitted into a part of a canvas, the box they share
 const fitInto = (g, pieces, { x, y, w, h }) => {
-	const box = boxOf(pieces.flatMap(piece => piece.strokes));
-	const k = Math.min(w / Math.max(1, box.x1 - box.x0), h / Math.max(1, box.y1 - box.y0)) * 0.92;
-	const ox = x + w / 2 - ((box.x0 + box.x1) / 2) * k, oy = y + h / 2 - ((box.y0 + box.y1) / 2) * k;
+	const box = bboxOf(pieces.flatMap(piece => piece.strokes).flat());
+	const k = Math.min(w / Math.max(1, box.w), h / Math.max(1, box.h)) * 0.92;
+	const ox = x + w / 2 - box.cx * k, oy = y + h / 2 - box.cy * k;
 
 	g.lineCap = g.lineJoin = 'round';
 	for (const { strokes, ink, fill, width = 2.4 } of pieces) {

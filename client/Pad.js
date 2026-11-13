@@ -8,10 +8,9 @@ export const PEN = 7;
 export const SHEET = '#fffdf6';
 
 /**
- * A drawing pad. A pen's place is measured against the pad itself: the Whiteboard's own measure (offsetX) is against
- * whatever the pointer is over, and a stroke that strayed over a toast or a panel beside the pad jumped to wherever that
- * thing's corner put it, drawing long lines nobody drew. Off the pad it's held to the edge, and the edge is where the pen
- * lifts (see offPad). And one pen at a time: a palm resting on the screen doesn't draw a second line.
+ * A drawing pad. A pen's place is measured against the pad itself, never the Whiteboard's offsetX (that's against
+ * whatever element the pointer is over); off the pad it's held to the edge, where the pen lifts (see offPad). One pen at a
+ * time: a palm resting on the screen doesn't draw a second line.
  */
 export class Pad extends Whiteboard {
 	getPosition({ clientX, clientY }) {

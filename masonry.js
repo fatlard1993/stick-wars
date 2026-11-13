@@ -6,7 +6,7 @@ import { DEPTH, FADE, GRAV, GROUND, LINGER, W, WALL, faded } from './field.js';
 // The walls as real stones, on the server: every block is one of the side's stone drawings, its outline its shape in a
 // rigid-body world (planck), stacked into the wall and left resting until something disturbs it. A boulder knocks
 // stones loose and whatever loses its support falls the way its shape makes it fall: flat stones stack sturdy, round
-// ones roll. A stone takes as much battering as its drawn size gives it, then cracks apart into rubble. The world
+// ones roll. A stone takes as much battering as its shape gives it (every stone is fitted to the same slot, so a fuller one has more to it), then cracks apart into rubble. The world
 // also tells the battle where the top of everything is (a height map), so men climb rubble and stop at walls, and
 // ragdolls and debris land on it.
 
@@ -20,7 +20,7 @@ const BUCKETS = Math.ceil(W / BUCKET) + 1;
 /** Contact impulses (kg·m/s) below this do a stone no harm; past it, each unit does DAMAGE_PER_IMPULSE */
 const HARMLESS = 12;
 const DAMAGE_PER_IMPULSE = 0.35;
-/** A stone's toughness from its drawn size: a cell's worth of stone takes about six of hp */
+/** A stone's toughness from the area of its outline, fitted to its slot in the wall: a whole slot's worth takes about six of hp */
 const HP_PER_AREA = 1 / 120;
 
 // A convex outline cut down to at most `most` corners, each time dropping the corner whose loss changes it least

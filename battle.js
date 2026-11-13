@@ -1,7 +1,8 @@
 // The battle, run on the server: stick men skinned onto skeletons (kinematic while alive, verlet ragdolls once dead,
-// crippled or cut apart), walls of drawn stones, catapults of drawn beams, flung ammo. What can't be seen from a
-// snapshot (blood, dust, sounds, a shake) goes out as events for each page to play. The page draws it (client/Field.js)
-// with the same geometry, imported from here.
+// crippled or cut apart), walls of drawn stones, a catapult of drawn beams, flung rocks; or two gladiators in the arena.
+// What can't be seen from a snapshot (blood, dust, sounds, a shake, the crowd) goes out as events for each page to play.
+// The page draws the snapshots with the same geometry from field.js, and never imports this file: it would bundle the
+// physics engine.
 
 import {
 	BONES,
@@ -25,7 +26,6 @@ import {
 	FADE,
 	LINGER,
 	faded,
-	ADJ,
 	AMMO,
 	rockThrow,
 	ARENA_GATE,
@@ -59,7 +59,7 @@ import {
 	subtreeMask,
 } from './field.js';
 
-// The field's geometry, from field.js, for whoever imports the battle
+// The field's geometry, for the server and tests that import the battle (never the page: it imports field.js itself)
 export * from './field.js';
 
 // ---------------------------------------------------------------- bodies
@@ -347,7 +347,7 @@ class Stickman {
 		// A gladiator is made to last: a duel is many blows, not one
 		this.maxHp = Math.round(GLADIATOR_HP * clamp(1 - 0.65 * spindly, 0.68, 1.15));
 		this.hp = this.maxHp;
-		this.tough = 0.45 * clamp(1 + 1.6 * spindly, 0.6, 1.9);
+		this.limbFrailty = 0.45 * clamp(1 + 1.6 * spindly, 0.6, 1.9);
 		// Long legs carry him faster; armor and a shield weigh him down
 		this.speed = 60 * clamp(legs / 0.42, 0.75, 1.3) * clamp(1.1 - 0.15 * load, 0.5, 1);
 		// Long arms reach further
@@ -566,7 +566,8 @@ class Stickman {
 
 		// A gladiator beaten down yields, to wait on the crowd: he doesn't bleed while he does
 		if (this.style && !this.yielded && !w.mercy && !w.over && (this.incap || this.hp < this.maxHp * YIELD_AT)) w.yieldBy(this);
-		if (!this.yielded) this.hp -= (this.bleed + this.body.stumps.length * 5) * dt;
+		// While a yielded gladiator waits on the crowd, neither bleeds: the winner can't die of his wounds meanwhile
+		if (!this.yielded && !(w.arena && w.mercy)) this.hp -= (this.bleed + this.body.stumps.length * 5) * dt;
 		if (this.hp <= 0) {
 			this.die(0, 0);
 
@@ -1003,7 +1004,7 @@ class Stickman {
 
 		if (kind === 'torso') cutP = dmg > 40 && Math.random() < st.cut * 0.3 ? 1 : 0;
 		if (kind === 'head') cutP *= 0.7;
-		cutP *= Math.max(0, 1 - prot * 1.3) * (this.tough ?? 1);
+		cutP *= Math.max(0, 1 - prot * 1.3) * (this.limbFrailty ?? 1);
 		// A gladiator never loses his head in the fight (that's for the crowd to say), and a limb to no more than a lucky blow
 		if (this.style) cutP = kind === 'head' || kind === 'torso' ? 0 : Math.min(cutP, 0.3);
 		if (Math.random() < cutP) this.sever(b, dir * (1 + st.knock));
@@ -1033,8 +1034,8 @@ class Stickman {
 	goIncap() {
 		this.incap = true;
 		this.atk = null;
-		// Down in the arena, he bleeds out fast, if he isn't finished first
-		this.bleed = Math.max(this.bleed, this.style ? 30 : 8);
+		// Down, he bleeds; a gladiator yields on his next step, and the bleeding stops while the crowd decides
+		this.bleed = Math.max(this.bleed, 8);
 		this.body.kin = false;
 		this.body.dropWeapon();
 		for (const p of this.body.j) p.px += this.face * 1.2;
@@ -1316,7 +1317,7 @@ class Catapult {
 		Object.assign(this, { w, team, x, z });
 		this.dir = team === 0 ? 1 : -1;
 		this.hp = 100;
-		// Its rocks, each drawn by its side during the battle, thrown in the order they were drawn
+		// Its pile of rocks, each one its side drew (before the battle, then during it), thrown in the order they were drawn
 		this.rocks = [];
 		this.cd = rand(0.5, 1.5);
 		this.fireT = -1;
@@ -1613,8 +1614,8 @@ export class World {
 	}
 
 	/**
-	 * Some of a side's men told what to do: their body ids, the order, and for crewing, which of the side's two
-	 * catapults. Only that side's own living men take it; a catapult takes no more crew than its most.
+	 * Some of a side's men told what to do: their body ids, the order, and for crewing or repairing, which catapult (0,
+	 * its only one) or 'wall'. Only that side's own living men take it; a catapult takes no more crew than its most.
 	 * @returns {number} How many took the order
 	 */
 	command(team, ids, order, which) {

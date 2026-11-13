@@ -139,10 +139,13 @@ export default class RockPad extends Corner {
 	}
 
 	async keep() {
-		if (!this.open || !this.strokes.length) return;
+		if (!this.open || !this.strokes.length || this.keeping) return;
 
 		const strokes = this.strokes;
-		const said = await act('rock', { strokes });
+
+		this.keeping = true;
+
+		const said = await act('rock', { strokes }).finally(() => (this.keeping = false));
 
 		if (!said.ok) return this.sound?.play('nope');
 		this.sound?.play('keep');

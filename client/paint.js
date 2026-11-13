@@ -9,7 +9,6 @@ export const INK = '#2b2b2b';
 export const GORE = '#8e0d0d';
 export const FILLS = { stone: '#c4bcad', hurt: '#8d8375', wood: '#b98a55', steel: '#cfd6dc', ammo: '#8f8a80' };
 export const WOOD_INK = '#4a2f17';
-export const PAPER = '#fffdf6';
 
 const rgb = hex => {
 	const n = parseInt(hex.slice(1), 16);

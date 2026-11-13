@@ -7,7 +7,7 @@ import BorrowPicker from './BorrowPicker.js';
 import { icon } from './icons.js';
 import { PEN, Pad, SHEET, inkStrokes, offPad } from './Pad.js';
 import { drawRawFit } from './paint.js';
-import { PENCIL, RED_PENCIL } from './theme.js';
+import { PENCIL } from './theme.js';
 import { doodle } from './ui.js';
 
 const PRAISE = {
@@ -374,11 +374,15 @@ export default class DrawScreen extends Screen {
 	}
 
 	async keep() {
-		if (!this.strokes.length) return;
+		// One keep at a time: a double tap (or a tap and Enter) sends one drawing, not two
+		if (!this.strokes.length || this.keeping) return;
 
 		const { kind } = this;
 		const strokes = this.strokes;
-		const said = await act('keep', { strokes });
+
+		this.keeping = true;
+
+		const said = await act('keep', { strokes }).finally(() => (this.keeping = false));
 
 		if (!said.ok) {
 			this.sound?.play('nope');

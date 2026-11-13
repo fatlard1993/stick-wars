@@ -6,7 +6,7 @@
 	"scripts": {
 		"dev": "NODE_ENV=development bun --watch server.js",
 		"start": "NODE_ENV=production bun server.js",
-		"build": "vbc-build",
+		"build": "rm -rf client/build && vbc-build",
 		"test": "bun test"
 	},
 	"dependencies": {

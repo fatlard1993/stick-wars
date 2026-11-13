@@ -46,21 +46,18 @@ export const TICK_MS = 50;
 /** A new game's state, for a mode and a style */
 export const newState = (mode, style) => ({
 	mode: mode === 'duo' ? 'duo' : 'cpu',
-	// A war of armies, or a gladiators' fight
 	style: style === 'gladiator' ? 'gladiator' : 'war',
 	// Which saved gladiator (the hall of them, roster.js) each side fights with, if it's one: a gladiators' fight only
 	fame: [null, null],
-	// Waiting for players, drawing, at war, or a battle won
+	// Drawing, fighting, or a battle over
 	phase: 'draw',
 	// Who sits on each side: team 0 (blue) and team 1 (green, the computer's in a game against it)
 	seats: [null, null],
-	// Each side's art, by kind
 	art: [emptyArt(style), emptyArt(style)],
 	// How far each side is through drawing: which step, and seconds left in it
 	drawing: [newDrawing(style), newDrawing(style)],
 	// The last battle's end: { winner (0, 1, or -1 for nobody), stats }
 	result: null,
-	// How many battles this game has had
 	battles: 0,
 });
 

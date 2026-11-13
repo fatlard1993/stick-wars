@@ -1,9 +1,11 @@
 import { Game as BaseGame, refuse } from '@fatlard1993/web-game-framework';
 
 import { cpuArmy, cpuGladiator, defaultsFor, freshOf, judge, samePose } from './art.js';
-import { AMMO, ARMY, DT, ORDERS, World } from './battle.js';
+import { AMMO, DT, ORDERS, World } from './battle.js';
 import {
+	BASE_ARMY,
 	CPU_SIZE,
+	MOST_BONUS,
 	MOST_KEPT,
 	TICK_MS,
 	armySize,
@@ -15,23 +17,23 @@ import {
 	stepsOf,
 	wallSize,
 } from './rules.js';
-import Armory from './armory.js';
+import Shelf from './shelf.js';
 import Roster from './roster.js';
 
-// The hall of gladiators every game shares: winners kept and fought again (only in memory while testing)
-export const HALL = new Roster(process.env.NODE_ENV === 'test' ? null : 'data/gladiators.json');
+// The stores every game shares, each in its file under data/ (only in memory while testing): the hall of gladiators, the
+// armory of weapons players drew, and the crowd of stick men players drew, who fill the arena's stands
+const kept = file => (process.env.NODE_ENV === 'test' ? null : `data/${file}`);
 
-// The armory every game shares: weapons players drew, borrowed, voted on and counted (only in memory while testing)
-export const ARMORY = new Armory(process.env.NODE_ENV === 'test' ? null : 'data/weapons.json');
-
-// The crowd every game shares: the stick men players drew, who fill the arena's stands (only in memory while testing)
-export const CROWD = new Armory(process.env.NODE_ENV === 'test' ? null : 'data/crowd.json', {
+export const HALL = new Roster(kept('gladiators.json'));
+export const ARMORY = new Shelf(kept('weapons.json'));
+export const CROWD = new Shelf(kept('crowd.json'), {
 	alike: samePose,
 	show: item => ({ raw: item.raw, rig: item.rig }),
 });
 
-// How long a won battle plays on before its end is called, in battle seconds
-const END_AFTER = 2.2;
+// How long a won battle plays on before its end is called, and then how long it settles before it's left still, in
+// battle seconds
+const END_AFTER = 2.2, SETTLE = 8;
 
 // One running game, on the server: who sits on each side, the art each side has drawn, and once both are done, the
 // battle (battle.js), stepped here and sent to every page many times a second. Drawings are judged here too, so what
@@ -39,8 +41,8 @@ const END_AFTER = 2.2;
 export default class Game extends BaseGame {
 	static version = 4;
 	static migrations = {
-		// Version 2 drew without an ammo page (weapons were step 3); version 3 has it back, as version 1 did. A save made
-		// with version 2 (save.version is what it was saved as, while migrating) and part way past beams moves on a step.
+		// A save from version 2, which had no ammo page, part way past beams moves on a step (save.version is the version
+		// it was saved as, while migrating)
 		3: save => {
 			if (save.version !== 2) return;
 			for (const drawing of save.state?.drawing ?? []) if (!drawing.done && drawing.step >= 3) drawing.step++;
@@ -58,14 +60,17 @@ export default class Game extends BaseGame {
 
 		// Back from the save file after a restart, or new
 		this.state = options.saveState?.state ?? newState(this.options.mode, this.options.style);
-		this.roster = options.roster ?? HALL;
-		this.armory = options.armory ?? ARMORY;
-		this.crowd = options.crowd ?? CROWD;
+		// The shared stores, or (in tests) ones handed in: never whatever a page sent among a new game's options
+		this.roster = options.roster instanceof Roster ? options.roster : HALL;
+		this.armory = options.armory instanceof Shelf ? options.armory : ARMORY;
+		this.crowd = options.crowd instanceof Shelf ? options.crowd : CROWD;
 		this.outEvents = [];
 		this.world = null;
 		this.shown = '';
-		// A battle isn't saved: after a restart it starts again, with the same art
-		if (this.state.phase === 'battle' || this.state.phase === 'over') this.startBattle();
+		// A battle isn't saved: after a restart it starts again, with the same art. A battle already over isn't fought
+		// again: its end card stands over the field, still, and its result counts once.
+		if (this.state.phase === 'battle') this.startBattle();
+		else if (this.state.phase === 'over') this.showEnded();
 
 		this.every(TICK_MS, () => this.tick());
 	}
@@ -166,22 +171,13 @@ export default class Game extends BaseGame {
 			this.finishStep(team);
 		},
 
-		// One man from home out to the fight
-		send(player) {
-			const team = this.teamOf(player.id);
-
-			if (this.state.phase !== 'battle' || !this.world) refuse('No battle on');
-
-			return { sent: this.world.send(team) };
-		},
-
 		// Some of our men (their ids, as the page picked them out) told what to do: stay home, hold the wall, charge, crew
 		// our catapult, or repair it or our wall
 		order(player, { ids, order, which } = {}) {
 			const team = this.teamOf(player.id);
 
 			if (this.state.phase !== 'battle' || !this.world) refuse('No battle on');
-			if (!Array.isArray(ids) || ids.length > ARMY * 4 || !ids.every(Number.isInteger)) refuse('Pick some men first');
+			if (!Array.isArray(ids) || ids.length > BASE_ARMY + MOST_BONUS || !ids.every(Number.isInteger)) refuse('Pick some men first');
 			if (!ORDERS.includes(order)) refuse('No such order');
 			if (order === 'crew' && which !== 0) refuse('Which catapult?');
 			if (order === 'repair' && ![0, 'wall'].includes(which)) refuse('Repair what?');
@@ -215,6 +211,23 @@ export default class Game extends BaseGame {
 		again(player) {
 			this.teamOf(player.id);
 			if (this.state.phase !== 'over') refuse('The battle is still on');
+
+			const { result } = this.state;
+
+			// A gladiator drawn and quartered doesn't fight again: the computer sends another, a player draws a new one
+			if (this.state.style === 'gladiator' && result && result.winner >= 0 && !result.spared) {
+				const fallen = 1 - result.winner;
+
+				if (humanTeams(this.state).includes(fallen)) {
+					this.resetArt(fallen);
+					this.world = null;
+					this.state.phase = 'draw';
+
+					return;
+				}
+				this.state.art[fallen] = emptyArt(this.state.style);
+				this.state.fame[fallen] = null;
+			}
 			this.startBattle();
 		},
 
@@ -377,6 +390,8 @@ export default class Game extends BaseGame {
 			return;
 		}
 		if (!this.world) return;
+		// A finished battle plays on a few seconds (the dead fall, the crowd cheers), then holds still: nothing more to send
+		if (state.phase === 'over' && this.world.overT > END_AFTER + SETTLE) return;
 		if (state.phase === 'battle' && away.length) {
 			if (this.shown !== 'paused') {
 				this.shown = 'paused';
@@ -406,15 +421,30 @@ export default class Game extends BaseGame {
 		this.outEvents = [];
 	}
 
+	// A battle already over when the server started: its field set up again and held still under its end card
+	showEnded() {
+		const { phase, result, battles } = this.state;
+
+		this.startBattle();
+		Object.assign(this.state, { phase, result, battles });
+		this.world.over = { winner: result?.winner ?? -1, spared: result?.spared };
+		this.world.overT = Infinity;
+		this.snap = this.world.snapshot();
+	}
+
 	// A gladiators' fight won: the winner into the hall (or its record up there); the loser, spared by the crowd, keeps
 	// its place there or earns one, and if not, is struck from it
-	honour(winner, spared) {
+	// (one who walked out keeps a place he had, his loss counted, but never earns one)
+	honour(winner, spared, walkedOut = false) {
 		const { state } = this;
 
 		if (state.style !== 'gladiator' || (winner !== 0 && winner !== 1)) return;
 
 		const loser = 1 - winner;
-		const ids = this.roster.record({ id: state.fame[winner], art: state.art[winner] }, { id: state.fame[loser], art: state.art[loser], spared });
+		const ids = this.roster.record(
+			{ id: state.fame[winner], art: state.art[winner] },
+			{ id: state.fame[loser], art: walkedOut ? null : state.art[loser], spared },
+		);
 
 		state.fame[winner] = ids.winner;
 		state.fame[loser] = ids.loser;
@@ -494,6 +524,8 @@ export default class Game extends BaseGame {
 		const team = this.state.seats.indexOf(id);
 
 		if (team < 0) return this.publish();
+		// Walking out of a duel is losing it: the other side's win counts (and the leaver's gladiator keeps its place)
+		if (this.state.style === 'gladiator' && this.state.phase === 'battle' && this.world) this.honour(1 - team, true, true);
 		this.state.seats[team] = null;
 		this.resetArt(team);
 		if (this.state.phase !== 'draw') {

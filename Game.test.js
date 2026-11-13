@@ -3,13 +3,13 @@ import { expect, test } from 'bun:test';
 import { DEFAULT_RAW, blobS, cpuArmy, cpuGladiator, judge, lineS, ringS, samePose, starS } from './art.js';
 import { AMMO, DT, FADE, GLADIATOR_HP, GROUND, LINGER, MERCY_WAIT, PLANS, STANCE_FOR, World, rockThrow } from './battle.js';
 import Game from './Game.js';
-import Armory from './armory.js';
+import Shelf from './shelf.js';
 import Roster from './roster.js';
 import { BASE_ARMY, CPU_SIZE, GLADIATOR_STEPS, STEPS, emptyArt } from './rules.js';
 
 const quiet = { info() {}, debug() {}, warning() {}, error() {} };
 const server = () => ({ games: {}, publish() {}, socketBroadcast() {} });
-const newGame = (mode, style, roster = new Roster(), armory = new Armory(), crowd = new Armory(null, { alike: samePose, show: item => ({ raw: item.raw, rig: item.rig }) })) => {
+const newGame = (mode, style, roster = new Roster(), armory = new Shelf(), crowd = new Shelf(null, { alike: samePose, show: item => ({ raw: item.raw, rig: item.rig }) })) => {
 	const game = new Game({ mode, style, roster, armory, crowd, server: server(), logger: quiet });
 
 	game.dispose();
@@ -104,7 +104,7 @@ test('two players each draw their own army, and fight once both are done', () =>
 	expect(game.state.phase).toBe('battle');
 	expect(game.world.auto).toEqual([false, false]);
 	expect(game.world.artOf).toEqual([0, 1]);
-	expect(game.act(owl.id, 'send').error).toBe('You are watching this one');
+	expect(game.act(owl.id, 'order', { ids: [], order: 'charge' }).error).toBe('You are watching this one');
 });
 
 test('every man stands at home from the start, one crewing the catapult', () => {
@@ -248,9 +248,10 @@ test('in battle a player sends men out, orders the ones they picked, and crews t
 	const frogs = () => world.stickmen.filter(s => s.team === 1);
 	const foxes = () => world.stickmen.filter(s => s.team === 0);
 
-	expect(game.act(frog.id, 'send')).toEqual({ ok: true, result: { sent: true } });
+	// One man sent out at a time (as the computer sends them), and not again straight away
+	expect(world.send(1)).toBe(true);
 	expect(frogs().filter(s => s.order === 'charge')).toHaveLength(1);
-	expect(game.act(frog.id, 'send')).toEqual({ ok: true, result: { sent: false } });
+	expect(world.send(1)).toBe(false);
 
 	const picked = foxes()
 		.filter(s => s.order === 'idle')
@@ -776,7 +777,7 @@ test('size has a price: a heavy rock flies shorter and loads slower; a spindly g
 
 	expect(spindly.speed).toBeGreaterThan(stubby.speed);
 	expect(spindly.maxHp).toBeLessThan(stubby.maxHp);
-	expect(spindly.tough).toBeGreaterThan(stubby.tough);
+	expect(spindly.limbFrailty).toBeGreaterThan(stubby.limbFrailty);
 });
 
 test('only different stick men and weapons earn more men: a copy fights, but earns nothing', () => {
@@ -797,7 +798,7 @@ test('only different stick men and weapons earn more men: a copy fights, but ear
 // ---------------------------------------------------------------- the armory
 
 test('every new weapon a player draws goes into the armory, a copy of one there doesn\'t, and it can be borrowed instead of drawn', () => {
-	const armory = new Armory();
+	const armory = new Shelf();
 	const game = newGame('cpu', 'war', new Roster(), armory);
 	const fox = game.addPlayer('🦊');
 
@@ -821,7 +822,7 @@ test('every new weapon a player draws goes into the armory, a copy of one there 
 });
 
 test('the computer arms itself partly from the armory, and a battle counts each weapon\'s uses and kills', () => {
-	const armory = new Armory();
+	const armory = new Shelf();
 	const id = armory.offer(judge('swords', DEFAULT_RAW.swords()[1]).item);
 	const game = newGame('cpu', 'war', new Roster(), armory);
 	const fox = game.addPlayer('🦊');
@@ -837,7 +838,7 @@ test('the computer arms itself partly from the armory, and a battle counts each 
 });
 
 test('players vote on weapons, one thumb each, and the armory sorts them loved, hated, controversial and deadliest', () => {
-	const armory = new Armory();
+	const armory = new Shelf();
 	const [a, b, c] = [DEFAULT_RAW.swords()[0], DEFAULT_RAW.swords()[1], [lineS(240, 450, 240, 200), starS(240, 140, 70, 45, 8)]].map(raw => armory.offer(judge('swords', raw).item));
 
 	for (const voter of ['v1', 'v2', 'v3']) armory.vote(a, voter, 1);
@@ -908,3 +909,134 @@ test('the medics fetch a limb he lost, carry it back and slap it on before the v
 	expect(loser.body.owned.every(Boolean)).toBe(true);
 	expect(world.bodies).not.toContain(piece);
 });
+
+// ---------------------------------------------------------------- what the review found
+
+// A duel fought to its end, the crowd's verdict forced
+const duelTo = (game, spared) => {
+	for (let i = 0; i < 60 * 150 && game.state.phase === 'battle'; i++) {
+		// The verdict, as the crowd would give it, made the one wanted (its whim and all)
+		const m = game.world.mercy;
+
+		if (m && !m.decided && game.world.time >= m.judgeAt - DT * 2) Object.assign(m, { decided: true, up: spared, next: game.world.time + 1.8 });
+		game.world.step(DT);
+		if (game.world.over && game.world.overT > 3) game.tick();
+	}
+	expect(game.state.phase).toBe('over');
+};
+
+test('a game over when the server restarts stays over, its result counted once, and a finished battle holds still', () => {
+	const roster = new Roster();
+	const game = newGame('cpu', 'gladiator', roster);
+	const fox = game.addPlayer('🦊');
+
+	drawGladiator(game, fox.id);
+	duelTo(game, true);
+
+	const wins = roster.load().map(entry => entry.wins).sort();
+	const back = new Game({ saveState: JSON.parse(JSON.stringify(game.toSaveState())), roster, server: server(), logger: quiet });
+
+	back.dispose();
+	for (let i = 0; i < 20; i++) back.tick();
+	expect(back.state.phase).toBe('over');
+	expect(back.state.result).toEqual(game.state.result);
+	expect(roster.load().map(entry => entry.wins).sort()).toEqual(wins);
+	// Still: nothing more is stepped or sent
+	const time = back.world.time;
+
+	back.tick();
+	expect(back.world.time).toBe(time);
+});
+
+test('"again" after a thumbs down never brings the quartered gladiator back', () => {
+	const game = newGame('cpu', 'gladiator');
+	const fox = game.addPlayer('🦊');
+
+	drawGladiator(game, fox.id);
+	duelTo(game, false);
+
+	const { winner } = game.state.result;
+	const theirs = game.state.art[1].stickmen[0].raw;
+
+	game.act(fox.id, 'again');
+	if (winner === 0) {
+		// The computer's gladiator fell: it sends another
+		expect(game.state.phase).toBe('battle');
+		expect(game.state.art[1].stickmen[0].raw).not.toEqual(theirs);
+	} else {
+		// Ours fell: draw a new one
+		expect(game.state.phase).toBe('draw');
+		expect(game.state.art[0].stickmen).toHaveLength(0);
+	}
+});
+
+test('walking out of a duel loses it, and a new game\'s options can\'t stand in for the shared stores', () => {
+	const roster = new Roster();
+	const game = newGame('duo', 'gladiator', roster);
+	const fox = game.addPlayer('🦊'), frog = game.addPlayer('🐸');
+
+	drawGladiator(game, fox.id);
+	drawGladiator(game, frog.id);
+	expect(game.state.phase).toBe('battle');
+	game.removePlayer(frog.id);
+	expect(roster.load()).toHaveLength(1);
+	expect(roster.get(game.state.fame[0]).wins).toBe(1);
+
+	const sneaky = new Game({ mode: 'cpu', armory: {}, roster: { pick: 1 }, crowd: [], server: server(), logger: quiet });
+
+	sneaky.dispose();
+	expect(sneaky.armory).toBeInstanceOf(Shelf);
+	expect(sneaky.roster).toBeInstanceOf(Roster);
+	expect(sneaky.crowd).toBeInstanceOf(Shelf);
+});
+
+test('a shelf keeps so many thumbs a drawing, lists only as many as asked, and is written once a burst of changes is over', async () => {
+	const { MOST_VOTERS } = await import('./shelf.js');
+	const { SAVE_AFTER } = await import('./store.js');
+	const shelf = new Shelf();
+	const id = shelf.offer(judge('swords', DEFAULT_RAW.swords()[0]).item);
+
+	for (let k = 0; k < MOST_VOTERS + 50; k++) shelf.vote(id, `v${k}`, 1);
+	expect(shelf.get(id).up).toBe(MOST_VOTERS);
+	// One already counted can still change their mind
+	shelf.vote(id, 'v0', -1);
+	expect(shelf.get(id)).toMatchObject({ up: MOST_VOTERS - 1, down: 1 });
+	shelf.offer(judge('swords', DEFAULT_RAW.swords()[1]).item);
+	expect(shelf.listing('loved', null, 1)).toHaveLength(1);
+
+	// A store with a file: many changes, one write, soon after
+	const { mkdtempSync, existsSync, readFileSync } = await import('node:fs');
+	const file = `${mkdtempSync('/tmp/stick-wars-store-')}/hall.json`;
+	const roster = new Roster(file);
+
+	roster.record({ art: cpuGladiator() }, {});
+	roster.record({ art: cpuGladiator() }, {});
+	expect(existsSync(file)).toBe(false);
+	await Bun.sleep(SAVE_AFTER + 100);
+	expect(JSON.parse(readFileSync(file, 'utf8'))).toHaveLength(2);
+});
+
+test('a new shelf is stocked once from drawings made before it, and the server starts up for real', async () => {
+	const { mkdtempSync, readFileSync } = await import('node:fs');
+	const dir = mkdtempSync('/tmp/stick-wars-boot-');
+	const shelf = new Shelf(`${dir}/weapons.json`);
+
+	shelf.stockOnce([judge('swords', DEFAULT_RAW.swords()[0]).item, judge('swords', DEFAULT_RAW.swords()[1]).item]);
+	expect(JSON.parse(readFileSync(`${dir}/weapons.json`, 'utf8'))).toHaveLength(2);
+	// Once only: a second stocking leaves it be
+	new Shelf(`${dir}/weapons.json`).stockOnce([judge('swords', [lineS(240, 450, 240, 200), starS(240, 140, 70, 45, 8)]).item]);
+	expect(JSON.parse(readFileSync(`${dir}/weapons.json`, 'utf8'))).toHaveLength(2);
+
+	// The server, in production, run from a scratch folder so its stores are made there and not in data/
+	const port = 47000 + Math.floor(Math.random() * 900);
+	const server = Bun.spawn(['bun', `${import.meta.dir}/server.js`], { cwd: dir, env: { ...process.env, NODE_ENV: 'production', PORT: String(port) }, stdout: 'pipe', stderr: 'pipe' });
+	let answer = null;
+
+	for (let tries = 0; tries < 40 && !answer; tries++) {
+		await Bun.sleep(150);
+		answer = await fetch(`http://127.0.0.1:${port}/hall`).catch(() => null);
+	}
+	server.kill();
+	expect(answer?.status).toBe(200);
+	expect(await answer.json()).toEqual([]);
+}, 20_000);

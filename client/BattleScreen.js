@@ -105,6 +105,9 @@ const Controls = styled(
 			& .picked { font-size: 1.1em; min-width: 2em; }
 			& .gap { width: 2px; }
 		}
+		&.shouts { gap: ${space.lg}; padding: ${space.sm}; }
+		&.shouts button { padding: 8px 22px !important; }
+		&.shouts button svg { width: 2.4em !important; height: 2.4em !important; }
 	`,
 );
 
@@ -201,7 +204,7 @@ export default class BattleScreen extends Screen {
 		this.flash = null;
 		this.mode = null;
 		this.selected = new Set();
-		// Catapults picked out, by which of ours: the aiming pad shows while there are any
+		// Our catapult picked out (as which of ours, 0): the aiming pad shows while it is
 		this.catsPicked = new Set();
 		this.padAim = null;
 		this.tops = new Float32Array(Math.ceil(W / BUCKET) + 1).fill(GROUND);
@@ -298,7 +301,8 @@ export default class BattleScreen extends Screen {
 
 	// A gladiator's player cheers him on: charge, back off, or shield up, each for a few seconds
 	armShouts() {
-		const controls = new Controls({ appendTo: this });
+		// Three buttons, the player's whole game: full size, even on a phone
+		const controls = new Controls({ appendTo: this, addClass: 'shouts' });
 		const shout = stance => act('shout', { stance }, { quiet: true });
 
 		this.shoutButtons = {
@@ -420,7 +424,7 @@ export default class BattleScreen extends Screen {
 		this.arena = view.state.style === 'gladiator';
 		if (this.arena && !this.crowdAsked) {
 			this.crowdAsked = true;
-			shelf('crowd', 'loved').then(list => this.seatCrowd(list)).catch(() => {});
+			shelf('crowd', 'loved', 40).then(list => this.seatCrowd(list)).catch(() => {});
 		}
 		this.arm(team);
 
@@ -544,7 +548,8 @@ export default class BattleScreen extends Screen {
 		if (state.phase === 'battle' && view.away.length) {
 			this.card.elem.append(
 				icon('pause', { size: '3em' }),
-				row(...view.away.map(t => icon('flag', { size: '1.6em', color: TEAMS[t].ink })), 'is away…'),
+				// Who it's waiting for: their flag, and an hourglass
+				row(...view.away.map(t => icon('flag', { size: '1.6em', color: TEAMS[t].ink })), icon('hourglass', { size: '1.6em' })),
 			);
 
 			return;
@@ -582,7 +587,6 @@ export default class BattleScreen extends Screen {
 			);
 	}
 
-	// How the world fits the stage: as big as it can, centered
 	// How the world sits on the stage. A big screen shows all of it; a small one (a phone) is zoomed in so the men stay
 	// readable, showing the field and the sky the catapults' arcs need, and the camera pans along the field. The bottom of
 	// the page sits at the stage's bottom.
@@ -712,8 +716,7 @@ export default class BattleScreen extends Screen {
 		return (this.cur?.cats ?? []).filter(c => c.t === this.team).map((cat, which) => ({ cat, which }));
 	}
 
-	// One of our catapults under a point of the page (a smashed one too: it can be repaired)
-	// Our catapult under a point of the page: anywhere on it, its pile of rocks in front, or the marks over it, and never
+	// Our catapult under a point of the page (a smashed one too: it can be repaired): anywhere on it, its pile of rocks in front, or the marks over it, and never
 	// less than a thumb's width across however far out the view is
 	catAt({ x, y }) {
 		const thumb = 30 / (this.fitting()?.scale ?? 1);

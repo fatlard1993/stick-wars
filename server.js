@@ -27,7 +27,11 @@ CROWD.stockOnce(drawnBefore('stickmen'));
 // Each shelf players vote on, by its address
 const SHELVES = { armory: ARMORY, crowd: CROWD };
 
-// The game's own pages' data, beside the games': the hall of gladiators, and the armory with its votes
+// A vote is a few words: anything bigger isn't one
+const MOST_BODY = 2048;
+
+// The game's own pages' data, beside the games': the hall of gladiators, and the armory's and the crowd's shelves with
+// their votes
 const extras = request => {
 	const url = new URL(request.url);
 
@@ -35,11 +39,12 @@ const extras = request => {
 
 	const list = request.method === 'GET' && url.pathname.match(/^\/(armory|crowd)$/);
 
-	if (list) return Response.json(SHELVES[list[1]].listing(url.searchParams.get('sort'), url.searchParams.get('voter')));
+	if (list) return Response.json(SHELVES[list[1]].listing(url.searchParams.get('sort'), url.searchParams.get('voter'), url.searchParams.get('take') ?? undefined));
 
 	const vote = request.method === 'POST' && url.pathname.match(/^\/(armory|crowd)\/(\w+)\/vote$/);
 
 	if (!vote) return null;
+	if (Number(request.headers.get('content-length') ?? MOST_BODY + 1) > MOST_BODY) return Response.json({ message: 'Too big for a vote' }, { status: 413 });
 
 	return request
 		.json()

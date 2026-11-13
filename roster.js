@@ -1,5 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import Store from './store.js';
 
 /** How many gladiators are kept at most: past it, the worst record goes */
 export const MOST_GLADIATORS = 40;
@@ -9,30 +8,7 @@ export const MOST_GLADIATORS = 40;
  * and fought again by the computer. One the crowd gives the thumbs down is struck from it. Kept in a file of its own (or
  * only in memory, with none), outliving any one game.
  */
-export default class Roster {
-	constructor(file = null) {
-		this.file = file;
-		this.list = null;
-	}
-
-	load() {
-		if (this.list) return this.list;
-		try {
-			this.list = this.file && existsSync(this.file) ? JSON.parse(readFileSync(this.file, 'utf8')) : [];
-		} catch {
-			this.list = [];
-		}
-
-		return this.list;
-	}
-
-	// Written only once it's been read: a list never loaded is never written over the one in the file
-	save() {
-		if (!this.file || !this.list) return;
-		mkdirSync(dirname(this.file), { recursive: true });
-		writeFileSync(this.file, JSON.stringify(this.list));
-	}
-
+export default class Roster extends Store {
 	/** Everyone in the hall, best record first, as their drawings and records: for the hall's page */
 	standings() {
 		const raw = items => items?.[0]?.raw ?? null;
@@ -40,10 +16,6 @@ export default class Roster {
 		return [...this.load()]
 			.sort((a, b) => b.wins - b.losses - (a.wins - a.losses) || b.wins - a.wins || a.born - b.born)
 			.map(({ id, wins, losses, art }) => ({ id, wins, losses, warrior: raw(art.stickmen), weapon: raw(art.swords), armor: raw(art.armor), shield: raw(art.shield) }));
-	}
-
-	get(id) {
-		return id ? this.load().find(entry => entry.id === id) : undefined;
 	}
 
 	/** One to fight, the better its record the likelier; null with none kept */
@@ -65,7 +37,7 @@ export default class Roster {
 	record(winner, loser) {
 		const list = this.load();
 		const enter = art => {
-			const entry = { id: Math.random().toString(36).slice(2, 10), art, wins: 0, losses: 0, born: Date.now() };
+			const entry = { id: Store.id(), art, wins: 0, losses: 0, born: Date.now() };
 
 			list.push(entry);
 
