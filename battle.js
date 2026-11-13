@@ -81,6 +81,9 @@ class Body {
 		this.kin = true;
 		this.stumps = [];
 		this.weapon = null;
+		// A gladiator's gear: armor drawn on him (bound to his bones), and a shield on his left forearm, { ref, hp }
+		this.armor = null;
+		this.shield = null;
 		this.wOff = -1.1;
 		this.owner = null;
 		this.squash = 1;
@@ -105,6 +108,12 @@ class Body {
 		if (g.owned[5] && this.weapon) {
 			g.weapon = this.weapon;
 			this.weapon = null;
+		}
+		// The armor on whatever's cut away goes with it; the shield with the forearm holding it
+		g.armor = this.armor;
+		if (g.owned[3] && this.shield) {
+			g.shield = this.shield;
+			this.shield = null;
 		}
 
 		return g;
@@ -235,6 +244,12 @@ class Body {
 			o: mask,
 			j: joints,
 			...(wp && { w: [wp.ref.a, wp.ref.i, Math.round(wp.blood * 100) / 100], wo: Math.round(this.wOff * 100) / 100 }),
+			...(this.armor && { ar: [this.armor.a, this.armor.i] }),
+			// A gladiator's health, for the bar over him
+			...(this.owner?.style && !this.owner.dead && { hp: Math.round(clamp(this.owner.hp / GLADIATOR_HP, 0, 1) * 100) / 100 }),
+			// The shield, and how much of it is left
+			...(this.shield &&
+				this.owned[3] && { sh: [this.shield.ref.a, this.shield.ref.i, Math.round((this.shield.hp / this.w.itemOf(this.shield.ref).stats.hp) * 100) / 100] }),
 			...(this.stumps.length && { st: this.stumps.map(st => st.j) }),
 			...(this.deadAt !== undefined && this.w.time - this.deadAt > LINGER.body && { fa: Math.round(faded(this.w.time - this.deadAt, LINGER.body) * 100) / 100 }),
 			// A man still in the fight: can be picked out and told what to do
@@ -244,6 +259,9 @@ class Body {
 }
 
 // ---------------------------------------------------------------- stick men
+
+/** A gladiator's health: a soldier has 100 */
+export const GLADIATOR_HP = 450;
 
 const POSE = new Float64Array(10);
 const FK = new Float64Array(22);
@@ -256,7 +274,8 @@ class Stickman {
 		this.body = new Body(w, w.pickArt(team, 'stickmen'), team, this.face, SM_H * rand(0.9, 1.1));
 		this.body.owner = this;
 		this.body.weapon = { ref: w.pickArt(team, 'swords'), blood: 0 };
-		const home = homeOf(team, k, w.army[team]);
+		// In the arena, the two face each other across its middle
+		const home = w.arena ? { x: W / 2 - this.face * 170, z: DEPTH / 2 } : homeOf(team, k, w.army[team]);
 
 		this.home = home.x;
 		this.homeZ = home.z;
@@ -283,7 +302,91 @@ class Stickman {
 		this.mv = 0;
 		this.writhe = 0;
 		this.slot = Math.random();
+		if (w.arena) this.gladiate();
 		this.pose(0, true);
+	}
+
+	// A gladiator: his gear on him, and how he moves and fights made of how he was drawn and what he carries
+	gladiate() {
+		const w = this.w, a = w.artOf[this.team], art = w.arts[a], L = this.body.tpl.lens;
+
+		this.body.armor = art.armor?.length ? { k: 'armor', a, i: 0 } : null;
+		this.body.shield = art.shield?.length ? { ref: { k: 'shield', a, i: 0 }, hp: art.shield[0].stats.hp } : null;
+
+		const armor = this.body.armor && w.itemOf(this.body.armor);
+		const shield = this.body.shield && art.shield[0].stats;
+		const st = this.stats(), load = (armor?.weight ?? 0) + (shield?.weight ?? 0);
+		const legs = (L[6] + L[7] + L[8] + L[9]) / 2, arms = (L[2] + L[3] + L[4] + L[5]) / 2;
+
+		this.order = 'charge';
+		// A gladiator is made to last: a duel is many blows, not one
+		this.hp = GLADIATOR_HP;
+		this.tough = 0.45;
+		// Long legs carry him faster; armor and a shield weigh him down
+		this.speed = 60 * clamp(legs / 0.42, 0.75, 1.3) * clamp(1.1 - 0.15 * load, 0.5, 1);
+		// Long arms reach further
+		this.armReach = clamp(arms / 0.28, 0.8, 1.25);
+		// Each part of him as well covered as his armor covers it
+		this.cover = armor?.cover ?? null;
+		this.style = {
+			// A long, light enough weapon is fought from the end of its reach
+			keepAway: st.lr > 0.75 && st.weight < 1.6,
+			// Light all over: in, strike, and out again
+			dart: st.weight < 0.8 && load < 0.8,
+			// Behind a shield: he stands his ground while he's swung at, and strikes back off a block
+			guard: Boolean(shield),
+			// Heavy armor: knocked about less
+			steady: clamp((armor?.weight ?? 0) / 1.5, 0, 0.7),
+			// The less he carries, the likelier he is to slip a blow
+			dodge: clamp(0.38 - 0.1 * load - 0.08 * st.weight, 0.05, 0.38),
+		};
+		this.retreat = 0;
+	}
+
+	// A swing at him slipped (a hop back out of it), or caught on his shield if he has one, it comes from in front, and
+	// he's quick enough (less so while he's swinging himself). A shield takes the blow, and breaks once it's taken enough.
+	fends(attacker) {
+		if (!this.style || !this.alive()) return false;
+		if (!this.atk && Math.random() < this.style.dodge) {
+			this.kb -= this.face * 120;
+			this.retreat = Math.max(this.retreat, 0.2);
+			this.w.sound('swing');
+
+			return true;
+		}
+
+		const sh = this.body.shield;
+
+		if (!sh || !this.body.owned[3] || Math.sign(attacker.x - this.x) !== this.face) return false;
+
+		const { block } = this.w.itemOf(sh.ref).stats;
+
+		if (Math.random() > block * (this.atk ? 0.5 : 1)) return false;
+
+		const hit = attacker.stats(), h = this.body.j[4];
+
+		sh.hp -= hit.dmg * 0.5;
+		this.kb += attacker.face * (25 + hit.knock * 35) * (1 - this.style.steady);
+		this.cd = Math.min(this.cd, 0.2);
+		this.w.dust(h.x, h.y, 5, 'wood', this.z);
+		this.w.sound('thud');
+		if (sh.hp <= 0) this.breakShield();
+
+		return true;
+	}
+
+	breakShield() {
+		const w = this.w, sh = this.body.shield, h = this.body.j[4];
+		const size = w.itemOf(sh.ref).stats.rel * this.body.s;
+		const pr = new Prop(w, sh.ref, h.x, h.y, size, size, 'wood', 0, 1.8);
+
+		pr.z = this.z;
+		pr.kick(rand(-90, 90), -rand(80, 170));
+		pr.va = rand(-8, 8);
+		w.props.push(pr);
+		w.sound('crash');
+		w.dust(h.x, h.y, 10, 'wood', this.z);
+		this.body.shield = null;
 	}
 
 	alive() {
@@ -308,7 +411,7 @@ class Stickman {
 	}
 
 	reach() {
-		return this.armed() ? this.stats().reach * 0.8 + 10 : 22;
+		return (this.armed() ? this.stats().reach * 0.8 + 10 : 22) * (this.armReach ?? 1);
 	}
 
 	// Where a side holding by its wall stands, each man his own spot
@@ -375,7 +478,8 @@ class Stickman {
 		let best = null, bd = Infinity;
 
 		for (const s of this.w.stickmen) {
-			if (s.team === this.team || !s.alive()) continue;
+			// In the arena, a foe down on the ground is still one to finish
+			if (s.team === this.team || s.dead || (!s.alive() && !this.w.arena)) continue;
 
 			const d = this.far(s);
 
@@ -444,12 +548,13 @@ class Stickman {
 		}
 		this.cd -= dt;
 		this.stag = Math.max(0, this.stag - dt);
+		this.retreat = Math.max(0, (this.retreat ?? 0) - dt);
 
 		let move = 0, want = null, goalZ = this.z;
 		const R = this.reach(), tg = this.target;
 		const forward = this.team === 0 ? 1 : -1;
 
-		if (tg && tg.alive()) {
+		if (tg && (tg.alive() || (this.w.arena && !tg.dead))) {
 			const dx = tg.x - this.x, adx = Math.abs(dx);
 			const lined = Math.abs(tg.z - this.z) < LANE;
 
@@ -458,6 +563,16 @@ class Stickman {
 			if (adx > R) move = this.face;
 			else if (adx < 9) move = -this.face;
 			if (adx <= R + 4 && lined) want = { type: 'sm' };
+
+			// A gladiator fights his own way: out again after a strike, a long reach kept at its length, a shield held
+			// steady while he's swung at
+			const style = this.style;
+
+			if (style && this.retreat > 0) {
+				move = -this.face;
+				want = null;
+			} else if (style?.keepAway && adx < R * 0.6) move = -this.face;
+			else if (style?.guard && tg.atk && adx < tg.reach() + 15 && move === this.face) move = 0;
 		} else if (this.order !== 'charge') {
 			if (this.order === 'crew' && (!this.post || this.post.dead)) this.order = 'idle';
 
@@ -522,7 +637,8 @@ class Stickman {
 		if (want && !this.atk && this.cd <= 0 && this.stag <= 0 && this.hasArm()) this.startAttack(want);
 
 		// A heavy weapon slows the man carrying it, as well as his swing
-		const pace = this.speed * dt * (this.hp < 35 ? 0.7 : 1) * this.burden();
+		// Badly hurt, he slows (a gladiator, made to last, when he's as hurt as a soldier would be)
+		const pace = this.speed * dt * (this.hp < (this.style ? GLADIATOR_HP : 100) * 0.35 ? 0.7 : 1) * this.burden();
 		const dz = clamp(goalZ, 0, DEPTH) - this.z;
 
 		if (this.atk) {
@@ -587,6 +703,11 @@ class Stickman {
 			this.atk = null;
 			this.cd = rand(0.1, 0.45);
 			this.prevSeg = null;
+			// A light gladiator darts out after a strike, and in again sooner
+			if (this.style?.dart && a.want.type === 'sm') {
+				this.retreat = rand(0.3, 0.55);
+				this.cd = rand(0.05, 0.2);
+			}
 		}
 	}
 
@@ -753,6 +874,14 @@ class Stickman {
 					hit = segDist(B.x, B.y, s[0], s[1], s[2], s[3]).d < r || segDist(B.x, B.y, p[0], p[1], p[2], p[3]).d < r;
 				}
 				if (!hit) continue;
+				// One chance a swing to slip it or catch it on a shield
+				if (o && !o.dead && !(a.blockTried ??= new Set()).has(body.id)) {
+					a.blockTried.add(body.id);
+					if (o.fends(this)) {
+						a.bodies.set(body.id, 2);
+						break;
+					}
+				}
 				a.bones.add(key);
 				a.bodies.set(body.id, ++n);
 
@@ -767,20 +896,26 @@ class Stickman {
 
 	takeHit(b, st, dir, hx, hy) {
 		const w = this.w, kind = BONE_KIND[b];
-		const dmg = st.dmg * { head: 1.9, torso: 1, arm: 0.5, leg: 0.6 }[kind] * rand(0.8, 1.25);
+		// Armor over where he's hit takes some of it, the more of that part it covers
+		const prot = (this.cover?.[kind] ?? 0) * 0.6, steady = this.style?.steady ?? 0;
+		const dmg = st.dmg * { head: 1.9, torso: 1, arm: 0.5, leg: 0.6 }[kind] * rand(0.8, 1.25) * (1 - prot);
 
 		this.hp -= dmg;
-		this.bleed = Math.min(25, this.bleed + st.bleed * 0.6);
-		w.spray(hx, hy, 6 + dmg * 0.5 + st.bleed * 3, dir, -0.35, 0.35, 160 + dmg * 3, this.z);
-		w.sound('hit');
-		this.kb += dir * (40 + st.knock * 70);
-		this.stag = 0.25;
+		this.bleed = Math.min(25, this.bleed + st.bleed * 0.6 * (1 - prot));
+		w.spray(hx, hy, (6 + dmg * 0.5 + st.bleed * 3) * (1 - prot), dir, -0.35, 0.35, 160 + dmg * 3, this.z);
+		if (prot > 0.2) w.dust(hx, hy, 4, 'stone', this.z);
+		w.sound(prot > 0.3 ? 'thud' : 'hit');
+		this.kb += dir * (40 + st.knock * 70) * (1 - steady);
+		this.stag = 0.25 * (1 - steady);
 		if (this.atk && Math.random() < 0.5) this.atk = null;
 
 		let cutP = (st.cut * dmg) / 22;
 
 		if (kind === 'torso') cutP = dmg > 40 && Math.random() < st.cut * 0.3 ? 1 : 0;
 		if (kind === 'head') cutP *= 0.7;
+		cutP *= Math.max(0, 1 - prot * 1.3) * (this.tough ?? 1);
+		// A gladiator loses his head only to a finishing blow, and a limb to no more than a lucky one
+		if (this.style) cutP = kind === 'head' && this.hp > GLADIATOR_HP * 0.4 ? 0 : Math.min(cutP, 0.3);
 		if (Math.random() < cutP) this.sever(b, dir * (1 + st.knock));
 		if (!this.dead && this.hp <= 0) this.die(dir * (2 + st.knock * 2), 1.5);
 	}
@@ -806,7 +941,8 @@ class Stickman {
 	goIncap() {
 		this.incap = true;
 		this.atk = null;
-		this.bleed = Math.max(this.bleed, 8);
+		// Down in the arena, he bleeds out fast, if he isn't finished first
+		this.bleed = Math.max(this.bleed, this.style ? 30 : 8);
 		this.body.kin = false;
 		this.body.dropWeapon();
 		for (const p of this.body.j) p.px += this.face * 1.2;
@@ -1258,10 +1394,13 @@ export class World {
 	 * @param {Array<number>} [options.armies] - How many men each side has
 	 * @param {Array<object>} [options.walls] - How big each side's wall is, { cols, rows }
 	 * @param {Array<string>} [options.plans] - How the computer plays each side it plays (a key of PLANS), else picked
+	 * @param {boolean} [options.arena] - A gladiators' fight: one man a side, his gear on him, in the open
 	 */
-	constructor({ arts, artOf = [0, 1], auto = [false, true], armies = [ARMY, ARMY], walls = [WALL, WALL], plans }) {
+	constructor({ arts, artOf = [0, 1], auto = [false, true], armies = [ARMY, ARMY], walls = [WALL, WALL], plans, arena = false }) {
 		this.arts = arts;
-		this.army = armies;
+		// Two gladiators in the open, no walls, no catapults, or a war
+		this.arena = arena;
+		this.army = arena ? [1, 1] : armies;
 		// How many rocks each side has drawn for its catapult so far
 		this.drawnRocks = [0, 0];
 		this.artOf = artOf;
@@ -1271,7 +1410,7 @@ export class World {
 		this.props = [];
 		this.projs = [];
 		// Each wall's face toward home stays put; a thicker one reaches further out into the field
-		this.walls = walls.map(({ cols, rows }, team) => {
+		this.walls = (arena ? [{ cols: 0, rows: 0 }, { cols: 0, rows: 0 }] : walls).map(({ cols, rows }, team) => {
 			const home = team === 0 ? WALL_X[0] : WALL_X[1] + WALL.cols * WALL.cw, x0 = team === 0 ? home : home - cols * WALL.cw;
 
 			return { team, x0, x1: x0 + cols * WALL.cw, cols, rows, isWall: true };
@@ -1284,7 +1423,7 @@ export class World {
 			onKnock: (x, y, impulse) => this.knocked(x, y, impulse),
 		});
 		this.knocks = 0;
-		this.cats = CAT_X.flatMap((xs, team) => xs.map((x, at) => new Catapult(this, team, x, CAT_Z[at])));
+		this.cats = arena ? [] : CAT_X.flatMap((xs, team) => xs.map((x, at) => new Catapult(this, team, x, CAT_Z[at])));
 		this.spawnX = [this.walls[0].x1 + 30, this.walls[1].x0 - 30];
 		this.stats = { kills: [0, 0], limbs: 0, heads: 0, blood: 0 };
 		this.time = 0;
@@ -1312,6 +1451,7 @@ export class World {
 			const [first] = this.stickmen.filter(s => s.team === team);
 			const [cat] = this.cats.filter(c => c.team === team);
 
+			if (!cat) continue;
 			Object.assign(first, { order: 'crew', post: cat });
 			// The rocks drawn before the battle start on the catapult's pile
 			(this.arts[this.artOf[team]].ammo ?? []).forEach((_, i) => this.addRock(team, i));
@@ -1755,7 +1895,9 @@ export class World {
 			return;
 		}
 
-		const a = this.aliveCount(0), b = this.aliveCount(1);
+		// A duel isn't over while a downed gladiator still breathes: he's to be finished
+		const left = t => (this.arena ? this.stickmen.filter(s => s.team === t && !s.dead).length : this.aliveCount(t));
+		const a = left(0), b = left(1);
 
 		if (a === 0 || b === 0) {
 			this.over = { winner: a === 0 && b === 0 ? -1 : a === 0 ? 1 : 0 };
@@ -1767,6 +1909,7 @@ export class World {
 	snapshot() {
 		return {
 			time: Math.round(this.time * 100) / 100,
+			...(this.arena && { arena: true }),
 			bodies: this.bodies.map(b => b.snapshot()),
 			props: this.props.map(p => p.snapshot()),
 			projs: this.projs.map(p => p.snapshot()),

@@ -149,7 +149,9 @@ export default class Play extends View {
 
 				whoIcon.classList.add('side-who');
 				side.append(icon('flag', { color: ink }), whoIcon);
-				if (battle) {
+				// A gladiator from the hall: its wins
+				if (view.fame?.[t]) side.append(count('trophy', view.fame[t].wins, ink));
+				if (battle && !battle.arena) {
 					const kills = count('sword', battle.kills[t], ink);
 
 					kills.classList.add('side-kills');

@@ -25,7 +25,7 @@ export const Doodle = styled(
 
 		&:hover, &:focus-visible { filter: none; transform: translate(-1px, -1px); box-shadow: 3px 4px 0 ${PENCIL}; }
 		&:active { filter: none; transform: translate(1px, 2px); box-shadow: none; }
-		&[aria-pressed='true'] { background: #ffe36e; }
+		&[aria-pressed='true'], &[aria-pressed='true']:hover, &[aria-pressed='true']:focus-visible { background: #ffe36e; color: ${PENCIL}; }
 		&.big { font-size: 1.5em; padding: 10px 22px; background: #ffe36e; }
 		&.red { background: #f4b9ad; }
 	`,

@@ -1,6 +1,7 @@
 // What the game is, shared by the server, which runs it, and the page, which draws it, so the two can't disagree.
 // Stick Men Wars: each side draws its army (stick men, wall stones, catapult beams, ammo, weapons) against the clock,
-// then the drawings fight: walls, catapults and stick men, last man standing wins. The battle itself is battle.js.
+// then the drawings fight: walls, catapults and stick men, last man standing wins. Or, as gladiators, each draws one
+// warrior with its weapon, armor and shield, and the two fight it out in the arena. The battle itself is battle.js.
 
 /** The kinds of art, in the order they're drawn, each with how long there is to draw it (seconds) */
 export const STEPS = [
@@ -10,6 +11,20 @@ export const STEPS = [
 	{ kind: 'ammo', seconds: 25, title: 'Draw rocks for the catapult' },
 	{ kind: 'swords', seconds: 40, title: 'Draw weapons in the box' },
 ];
+
+/** A gladiator's pages: one warrior, its weapon, and armor and a shield if wanted (left empty, it fights without) */
+export const GLADIATOR_STEPS = [
+	{ kind: 'stickmen', seconds: 40, title: 'Draw your gladiator' },
+	{ kind: 'swords', seconds: 35, title: 'Draw its weapon in the box' },
+	{ kind: 'armor', seconds: 40, title: 'Armor? Draw it on', optional: true },
+	{ kind: 'shield', seconds: 30, title: 'A shield?', optional: true },
+];
+
+/** The two ways to play: a war of armies, or one gladiator against another; each with its pages */
+export const STYLES = { war: STEPS, gladiator: GLADIATOR_STEPS };
+
+/** The pages a game draws on, for its style */
+export const stepsOf = state => STYLES[state?.style] ?? STEPS;
 
 /** How many drawings of one kind a side keeps, at most */
 export const MOST_KEPT = 12;
@@ -26,24 +41,28 @@ export const TEAMS = [
 /** How often the game moves on and every page is sent the picture, in ms */
 export const TICK_MS = 50;
 
-/** A new game's state, for a mode */
-export const newState = mode => ({
+/** A new game's state, for a mode and a style */
+export const newState = (mode, style) => ({
 	mode: mode === 'duo' ? 'duo' : 'cpu',
+	// A war of armies, or a gladiators' fight
+	style: style === 'gladiator' ? 'gladiator' : 'war',
+	// Which saved gladiator (the hall of them, roster.js) each side fights with, if it's one: a gladiators' fight only
+	fame: [null, null],
 	// Waiting for players, drawing, at war, or a battle won
 	phase: 'draw',
 	// Who sits on each side: team 0 (blue) and team 1 (green, the computer's in a game against it)
 	seats: [null, null],
 	// Each side's art, by kind
-	art: [emptyArt(), emptyArt()],
+	art: [emptyArt(style), emptyArt(style)],
 	// How far each side is through drawing: which step, and seconds left in it
-	drawing: [newDrawing(), newDrawing()],
+	drawing: [newDrawing(style), newDrawing(style)],
 	// The last battle's end: { winner (0, 1, or -1 for nobody), stats }
 	result: null,
 	// How many battles this game has had
 	battles: 0,
 });
 
-export const emptyArt = () => Object.fromEntries(STEPS.map(({ kind }) => [kind, []]));
+export const emptyArt = style => Object.fromEntries((STYLES[style] ?? STEPS).map(({ kind }) => [kind, []]));
 
 /** How many men a side has with none of the bonus, and how many the bonus can add */
 export const BASE_ARMY = 10, MOST_BONUS = 6;
@@ -66,7 +85,7 @@ export const wallSize = art => {
 	return { cols: 3 + (stones >= 5 ? 1 : 0), rows: 6 + Math.min(3, Math.max(0, stones - 1)) };
 };
 
-export const newDrawing = () => ({ step: 0, left: STEPS[0].seconds, done: false });
+export const newDrawing = style => ({ step: 0, left: (STYLES[style] ?? STEPS)[0].seconds, done: false });
 
 /** The sides played by people in this game: both against a friend, blue alone against the computer */
 export const humanTeams = state => (state.mode === 'duo' ? [0, 1] : [0]);

@@ -247,7 +247,8 @@ export function buildRig(strokes, head, bb) {
   const lens = BONES.map(([a, b]) => dist(J[a], J[b]) / Hh);
   const binds = rs.map(s => s.map(p => bindPoint(p, J, head)));
   const joints = J.map(p => ({ x: (p.x - J[2].x) / Hh, y: (p.y - J[2].y) / Hh }));
-  return { joints, lens, strokes: binds, headR: head.r / Hh };
+  // And where it all sits on the page, for armor drawn over it to be bound to the same bones (checkArmor)
+  return { joints, lens, strokes: binds, headR: head.r / Hh, raw: { J, head: { cx: head.cx, cy: head.cy, r: head.r } } };
 }
 
 // Express a point in the frame of its nearest bone: P = A + u*D + v*perp(D).
@@ -469,13 +470,69 @@ export const DEFAULT_RAW = {
   stones: () => [[blobS(240, 240, 150, 105, 9)], [blobS(240, 240, 125, 125, 7)], [blobS(240, 240, 165, 95, 11)]],
   beams: () => [[closedPoly([[50, 212], [430, 204], [433, 252], [47, 262]]), lineS(85, 236, 400, 229)]],
   ammo: () => [[blobS(240, 240, 115, 110, 12)], [starS(240, 240, 150, 95, 9)]],
+  // A kite shield: the example on its page (a shield is never filled in for you)
+  shield: () => [[closedPoly([[150, 120], [330, 120], [345, 230], [240, 400], [135, 230]])]],
   swords: () => [
     [polyS([[229, 385], [233, 112], [240, 58], [247, 112], [251, 385]]), lineS(192, 385, 288, 385), closedPoly([[233, 388], [247, 388], [247, 445], [233, 445]])],
     [lineS(215, 445, 215, 62), closedPoly([[215, 85], [290, 52], [322, 128], [290, 205], [215, 172]])],
   ],
 };
 
-export const CHECKS = { stickmen: checkStickman, stones: checkStone, beams: checkBeam, ammo: checkAmmo, swords: checkSword };
+// ---------- a gladiator's gear ----------
+
+// Where a warrior's skeleton sits on its page (judged again for a drawing kept before rigs carried it)
+const frameOf = warrior => warrior?.rig?.raw ?? (warrior?.raw ? (checkStickman(warrior.raw).item?.rig.raw ?? null) : null);
+
+// How tall a warrior stands on its page, head to feet
+const standing = ({ J, head }) => Math.max(...J.map(p => p.y)) - (head.cy - head.r);
+
+/**
+ * Armor, drawn over the warrior it's for: each line bound to the bone it lies on, so it moves (and comes off) with it.
+ * How much of each part it covers is how well that part is protected; all of it together is how much it weighs.
+ */
+export function checkArmor(strokes, { warrior } = {}) {
+  const frame = frameOf(warrior);
+  if (!frame) return fail('Draw your warrior first.');
+  const { J, head } = frame, height = standing(frame);
+  const xs = J.map(p => p.x);
+  const box = { x0: Math.min(...xs) - head.r * 1.6, x1: Math.max(...xs) + head.r * 1.6, y0: head.cy - head.r * 2.2, y1: head.cy - head.r + height + head.r };
+  const rs = strokes.map(st => resample(st, 5)).filter(st => st.length > 1);
+  const pts = rs.flat();
+  if (pts.length < 4) return fail('Draw the armor on your warrior.');
+  if (pts.filter(p => p.x > box.x0 && p.x < box.x1 && p.y > box.y0 && p.y < box.y1).length < pts.length * 0.7) return fail('Draw the armor on your warrior.');
+
+  const binds = rs.map(st => st.map(p => bindPoint(p, J, head)));
+  const ink = { head: 0, torso: 0, arm: 0, leg: 0 };
+  rs.forEach((st, k) => st.forEach((p, i) => { if (i) ink[BONE_KIND[binds[k][i].b]] += dist(p, st[i - 1]); }));
+  const total = ink.head + ink.torso + ink.arm + ink.leg;
+  if (total < height * 0.25) return fail('More armor than that.');
+  if (total > height * 14) return fail("That's a scribble. Armor is a few plates.");
+  // All of a part covered: about a ring round the head, the rest about twice along their bones
+  const len = b => dist(J[BONES[b][0]], J[BONES[b][1]]);
+  const full = { head: TAU * head.r * 0.8, torso: len(0) * 2.5, arm: (len(2) + len(3) + len(4) + len(5)) * 1.6, leg: (len(6) + len(7) + len(8) + len(9)) * 1.6 };
+  const cover = Object.fromEntries(Object.keys(ink).map(k => [k, clamp(ink[k] / full[k], 0, 1)]));
+  return { ok: true, item: { raw: strokes, binds, cover, weight: clamp((total / height) * 0.3, 0.1, 2.5) } };
+}
+
+/** A shield: one closed outline. Drawn big beside the warrior, it blocks more and weighs more, and takes longer to break. */
+export function checkShield(strokes, { warrior } = {}) {
+  const r = checkBlob(strokes, 'shield');
+  if (!r.ok) return r;
+  const frame = frameOf(warrior), shape = normBlob(strokes);
+  const rel = clamp(shape.size / (frame ? standing(frame) : PAD * 0.75), 0.15, 1.2);
+  const stats = { rel, block: clamp(0.12 + 0.48 * rel, 0.15, 0.6), weight: clamp(0.3 + 1.6 * rel * rel, 0.3, 2.4), hp: Math.round(20 + 70 * rel) };
+  return { ok: true, item: { raw: strokes, shape, stats } };
+}
+
+export const CHECKS = {
+  stickmen: checkStickman,
+  stones: checkStone,
+  beams: checkBeam,
+  ammo: checkAmmo,
+  swords: checkSword,
+  armor: checkArmor,
+  shield: checkShield,
+};
 
 // The defaults as they fill a page left empty: redrawn by the same shaky hand as the computer's army (a steadier one
 // if a shaky one keeps failing, and at the last, as drawn), so no army looks machine-made
@@ -549,13 +606,13 @@ export const cleanStrokes = strokes => {
  * @param {*} strokes - The drawing, as sent
  * @returns {{ ok: boolean, item?: object, msg?: string }} The verdict
  */
-export const judge = (kind, strokes) => {
+export const judge = (kind, strokes, context) => {
 	const clean = cleanStrokes(strokes);
 
 	if (!CHECKS[kind]) return fail('Not a kind of art');
 	if (!clean) return fail('Draw something first.');
 
-	const verdict = CHECKS[kind](clean);
+	const verdict = CHECKS[kind](clean, context);
 
 	return verdict.ok ? { ok: true, item: tidy(verdict.item, 3) } : verdict;
 };
@@ -680,6 +737,50 @@ export const cpuArmy = () =>
       return [kind, items.length ? items : defaultsFor(kind)];
     }),
   );
+
+// The computer's armor for a warrior of its own, drawn on its skeleton: a helmet, a breastplate, greaves, bracers, some
+// or none of them
+const cpuArmorOn = ({ J, head }) => {
+  const parts = [];
+  const along = (a, b, wide) => {
+    const A = J[a], B = J[b], l = dist(A, B) || 1, nx = (-(B.y - A.y) / l) * wide, ny = ((B.x - A.x) / l) * wide;
+    const at = t => [lerp(A.x, B.x, t), lerp(A.y, B.y, t)];
+    const [p, q] = [at(0.25), at(0.9)];
+    return closedPoly([[p[0] + nx, p[1] + ny], [q[0] + nx, q[1] + ny], [q[0] - nx, q[1] - ny], [p[0] - nx, p[1] - ny]]);
+  };
+  if (Math.random() < 0.7) {
+    const r = head.r * rand(1.15, 1.35), a0 = PI * rand(0.92, 1.05), a1 = TAU * rand(1, 1.06);
+    parts.push(Array.from({ length: 18 }, (_, i) => ({ x: head.cx + Math.cos(lerp(a0, a1, i / 17)) * r, y: head.cy + Math.sin(lerp(a0, a1, i / 17)) * r })));
+  }
+  if (Math.random() < 0.65) parts.push(along(1, 2, head.r * rand(0.7, 1.1)));
+  if (Math.random() < 0.45) parts.push(along(7, 8, rand(7, 11)), along(9, 10, rand(7, 11)));
+  if (Math.random() < 0.35) parts.push(along(3, 4, rand(6, 9)), along(5, 6, rand(6, 9)));
+  return parts;
+};
+
+// The first of a kind's drawings that passes, from tries of a maker (shaky, then steadier), or null
+const firstPassing = (kind, make, context) => {
+  for (let tries = 0; tries < 10; tries++) {
+    const verdict = judge(kind, scrawl(make(), tries < 6 ? rand(0.6, 1.1) : 0.3), context);
+    if (verdict.ok) return verdict.item;
+  }
+  return null;
+};
+
+/** The computer's own gladiator: a warrior, a weapon, and maybe armor and a shield, all drawn and checked like a player's */
+export const cpuGladiator = () => {
+  const warrior = firstPassing('stickmen', cpuStickman) ?? defaultsFor('stickmen')[0];
+  const weapon = firstPassing('swords', () => pick(CPU_RAW.swords())) ?? defaultsFor('swords')[0];
+  const frame = frameOf(warrior);
+  const plates = frame && cpuArmorOn(frame);
+  const armor = plates?.length ? firstPassing('armor', () => plates, { warrior }) : null;
+  // A round shield or a kite, from a buckler to one nearly as tall as he is
+  const size = (frame ? standing(frame) : 360) * rand(0.3, 0.62);
+  const kite = () => DEFAULT_RAW.shield()[0].map(st => st.map(p => ({ x: 240 + ((p.x - 240) * size) / 280, y: 260 + ((p.y - 260) * size) / 280 })));
+  const round = () => [blobS(240, 240, size / 2, size / 2, 10)];
+  const shield = Math.random() < 0.55 ? firstPassing('shield', Math.random() < 0.5 ? round : kite, { warrior }) : null;
+  return { stickmen: [warrior], swords: [weapon], armor: armor ? [armor] : [], shield: shield ? [shield] : [] };
+};
 
 /** How many of the computer's drawings pass, kind by kind, out of how many it means to have: for tests */
 export const cpuCounts = () => Object.fromEntries(Object.keys(CPU_RAW).map(kind => [kind, CPU_RAW[kind]().length]));

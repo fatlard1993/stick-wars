@@ -1,14 +1,15 @@
 import { expect, test } from 'bun:test';
 
-import { DEFAULT_RAW, blobS, cpuArmy, judge, lineS } from './art.js';
-import { AMMO, DT, FADE, GROUND, LINGER, PLANS, World } from './battle.js';
+import { DEFAULT_RAW, blobS, cpuArmy, cpuGladiator, judge, lineS, ringS } from './art.js';
+import { AMMO, DT, FADE, GLADIATOR_HP, GROUND, LINGER, PLANS, World } from './battle.js';
 import Game from './Game.js';
-import { BASE_ARMY, CPU_SIZE, STEPS, emptyArt } from './rules.js';
+import Roster, { MOST_BEHIND } from './roster.js';
+import { BASE_ARMY, CPU_SIZE, GLADIATOR_STEPS, STEPS, emptyArt } from './rules.js';
 
 const quiet = { info() {}, debug() {}, warning() {}, error() {} };
 const server = () => ({ games: {}, publish() {}, socketBroadcast() {} });
-const newGame = mode => {
-	const game = new Game({ mode, server: server(), logger: quiet });
+const newGame = (mode, style, roster = new Roster()) => {
+	const game = new Game({ mode, style, roster, server: server(), logger: quiet });
 
 	game.dispose();
 
@@ -339,7 +340,7 @@ test('the art is saved and the battle is not; a game saved mid-battle comes back
 
 	const save = JSON.parse(JSON.stringify(game.toSaveState()));
 
-	expect(save.version).toBe(3);
+	expect(save.version).toBe(4);
 	expect(save.state.art[0].swords).toHaveLength(1);
 
 	const back = new Game({ saveState: save, server: server(), logger: quiet });
@@ -532,4 +533,132 @@ test('a stone knocked out of the wall fades once it has lain loose a while, and 
 	expect(world.masonry.bricks).not.toContain(top);
 	// Anything it knocked loose on the way goes the same way, in its own time
 	expect(world.masonry.bricks.filter(b => b.loose && world.masonry.time - b.looseAt > LINGER.brick + FADE + 0.1)).toHaveLength(0);
+});
+
+// ---------------------------------------------------------------- gladiators
+
+// A gladiator drawn: the default warrior and weapon, a helmet and breastplate over him, and a round shield
+const helmetOn = warrior => {
+	const { head } = warrior.rig.raw;
+
+	return [ringS(head.cx, head.cy, head.r * 1.25, head.r * 1.25), ringS(head.cx, head.cy + head.r * 3, head.r * 0.9, head.r * 1.6)];
+};
+const drawGladiator = (game, id, { armor = true, shield = true } = {}) => {
+	expect(game.act(id, 'keep', { strokes: DEFAULT_RAW.stickmen()[0] }).ok).toBe(true);
+	game.act(id, 'next');
+	expect(game.act(id, 'keep', { strokes: DEFAULT_RAW.swords()[0] }).ok).toBe(true);
+	game.act(id, 'next');
+	if (armor) expect(game.act(id, 'keep', { strokes: helmetOn(game.state.art[game.state.seats.indexOf(id)].stickmen[0]) }).ok).toBe(true);
+	game.act(id, 'next');
+	if (shield) expect(game.act(id, 'keep', { strokes: [blobS(240, 240, 90, 90, 10)] }).ok).toBe(true);
+	game.act(id, 'next');
+};
+
+test('a gladiator is one warrior and its weapon, with armor and a shield if drawn; each page keeps one, the last kept', () => {
+	const game = newGame('cpu', 'gladiator');
+	const fox = game.addPlayer('🦊');
+
+	expect(game.state.style).toBe('gladiator');
+	expect(game.state.drawing[0].left).toBe(GLADIATOR_STEPS[0].seconds);
+	// Armor has to be drawn on the warrior
+	game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[0] });
+	expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[1] }).ok).toBe(true);
+	expect(game.state.art[0].stickmen).toHaveLength(1);
+	game.act(fox.id, 'next');
+	game.act(fox.id, 'next');
+	expect(game.act(fox.id, 'keep', { strokes: [lineS(10, 10, 60, 12)] }).error).toBe('Draw the armor on your warrior.');
+	expect(game.act(fox.id, 'keep', { strokes: helmetOn(game.state.art[0].stickmen[0]) }).ok).toBe(true);
+	expect(game.state.art[0].armor[0].cover.head).toBeGreaterThan(0.5);
+	game.act(fox.id, 'next');
+	// No shield drawn: none had, not a default
+	game.act(fox.id, 'next');
+	expect(game.state.phase).toBe('battle');
+	expect(game.state.art[0].swords).toHaveLength(1);
+	expect(game.state.art[0].shield).toHaveLength(0);
+	expect(game.world.arena).toBe(true);
+	expect(game.world.stickmen).toHaveLength(2);
+	expect(game.world.cats).toHaveLength(0);
+
+	const [mine] = game.world.stickmen;
+
+	expect(mine.body.armor).not.toBeNull();
+	expect(mine.body.shield).toBeNull();
+	expect(mine.hp).toBe(GLADIATOR_HP);
+	expect(game.act(fox.id, 'rock', { strokes: DEFAULT_RAW.ammo()[0] }).ok).toBe(false);
+});
+
+test('armor takes some of a blow where it covers, and a big shield blocks some blows', () => {
+	const hits = gear => {
+		const world = new World({ arts: [cpuGladiator(), { ...cpuGladiator(), ...gear }], auto: [false, false], arena: true });
+		const [a, b] = world.stickmen;
+
+		b.style.dodge = 0;
+		for (let k = 0; k < 40; k++) {
+			b.hp = GLADIATOR_HP;
+			b.takeHit(1, { ...a.stats(), cut: 0 }, 1, b.x, b.y);
+		}
+
+		return GLADIATOR_HP - b.hp;
+	};
+	const warrior = judge('stickmen', DEFAULT_RAW.stickmen()[0]).item;
+	const helmet = judge('armor', helmetOn(warrior), { warrior }).item;
+
+	expect(hits({ stickmen: [warrior], armor: [helmet] })).toBeLessThan(hits({ stickmen: [warrior], armor: [] }));
+
+	const shield = judge('shield', [blobS(240, 240, 160, 160, 10)], { warrior }).item;
+	const world = new World({ arts: [cpuGladiator(), { ...cpuGladiator(), stickmen: [warrior], shield: [shield] }], auto: [false, false], arena: true });
+	const [a, b] = world.stickmen;
+	let blocked = 0;
+
+	b.style.dodge = 0;
+	for (let k = 0; k < 200; k++) {
+		b.body.shield.hp = 999;
+		if (b.fends(a)) blocked++;
+	}
+	expect(blocked).toBeGreaterThan(40);
+	expect(blocked).toBeLessThan(160);
+});
+
+test('two gladiators fight it out to the death, and the winner goes into the hall to be fought again', () => {
+	const roster = new Roster();
+	const game = newGame('cpu', 'gladiator', roster);
+	const fox = game.addPlayer('🦊');
+
+	drawGladiator(game, fox.id);
+	for (let i = 0; i < 60 * 120 && game.state.phase === 'battle'; i++) {
+		game.world.step(DT);
+		if (game.world.over && game.world.overT > 3) game.tick();
+	}
+	expect(game.state.phase).toBe('over');
+
+	const { winner } = game.state.result;
+
+	expect(roster.load()).toHaveLength(1);
+	expect(game.state.fame[winner]).toBe(roster.load()[0].id);
+	expect(roster.load()[0].wins).toBe(1);
+	expect(game.viewFor(fox.id).fame[winner]).toEqual({ wins: 1, losses: 0 });
+
+	// A new game against the computer sends a gladiator from the hall
+	const next = newGame('cpu', 'gladiator', roster);
+	const frog = next.addPlayer('🐸');
+
+	drawGladiator(next, frog.id, { armor: false, shield: false });
+	expect(next.state.fame[1]).toBe(roster.load()[0].id);
+	expect(next.state.art[1].swords[0].raw).toEqual(game.state.art[winner].swords[0].raw);
+});
+
+test('a saved gladiator that keeps losing is kept a few fights, then retired', () => {
+	const roster = new Roster();
+	const art = cpuGladiator();
+	const champion = roster.record({ art }, {});
+	let losses = 0;
+
+	// One win to its name: kept through its losses until it's MOST_BEHIND behind
+	while (roster.get(champion)) {
+		roster.record({ art: cpuGladiator() }, { id: champion });
+		losses++;
+	}
+	expect(losses).toBe(MOST_BEHIND + 1);
+	// The ones that beat it are kept
+	expect(roster.load()).toHaveLength(losses);
 });

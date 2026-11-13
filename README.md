@@ -1,12 +1,12 @@
 # Stick Men Wars
 
-Draw your own army of stick men, stones, catapults and weapons, then watch them hack each other to bits. Play the computer or a friend.
+Draw your own army of stick men, stones, catapults and weapons, then watch them hack each other to bits. Or draw one gladiator, armed and armored as you like, and send it into the arena. Play the computer or a friend.
 
 ![A battle: hand-drawn stick men with axes and swords swarming a stone wall, catapults behind each wall, blood on the ground](screenshot.png)
 
 ## Playing
 
-Pick **vs computer**, or **two players** to fight a friend on their own device (the invite button in the bar shows a code for their phone).
+Pick **war** or **gladiators**, then **vs computer**, or **two players** to fight a friend on their own device (the invite button in the bar shows a code for their phone).
 
 ### Drawing your army
 
@@ -53,6 +53,22 @@ So the field stays readable, the dead, cut-off parts, rubble, dropped weapons an
 The last side with anyone standing wins. A man with no arms left can't fight, and bleeds out. Then fight again with the same armies (the circling arrows), or draw new ones (the pencil).
 
 If a player's page closes, their drawing clock and the battle wait for them. If they leave the game (the door), their side is free for the next person to join, who draws their own army.
+
+## Gladiators
+
+Four pages: your gladiator (one stick man), its weapon (in the box, as for an army), then armor and a shield if you want them: leave either page empty to fight without. Armor is drawn right over your gladiator, shown faintly on its page; a shield beside it, its size against your gladiator's being its size in the arena. Each page keeps one drawing: keep another and it takes the last one's place.
+
+Then the two fight it out in the open, by themselves, each its own way, all of it from how it was drawn:
+
+- **Its body**: long legs walk faster, long arms reach further.
+- **Its weapon**: as in a war, reach from length, weight from width and ink, shredding from jagged edges; a long, not too heavy one is fought from the end of its reach.
+- **Armor**: each part of it (helmet, chest, arms, legs) takes some of a blow landing there, the more of that part it covers, and spares that part from being cut off. Heavy armor is knocked about less, but slows.
+- **A shield**: catches some of the blows that come from in front, the bigger the more, and the gladiator strikes straight back off a block. It weighs, and it breaks after enough of a battering.
+- **Light all over**: darts in to strike and out again, and slips blows more often.
+
+A gladiator is tough: a duel is many blows. A head comes off only to a finishing blow, and a gladiator down on the ground (a leg gone) isn't beaten until he's finished off or bleeds out. A bar over each shows how much it has left.
+
+Every gladiator that wins is kept in the hall of gladiators, with its record, and the computer sends them back into the arena against whoever plays it next (the better its record, the likelier); one of them shows its wins by its flag. A kept gladiator that loses is given a few more fights, and retired once it has lost three more than it has won. With nobody in the hall yet, the computer draws its own.
 
 ## Running it
 

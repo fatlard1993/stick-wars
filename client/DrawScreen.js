@@ -2,7 +2,7 @@ import { Component, Notify, styled } from '@vanilla-bean/components';
 import { act, createInput } from '@fatlard1993/web-game-framework/client';
 
 import { DEFAULT_RAW, PAD, WEAPON_AREA, clamp, pick } from '../art.js';
-import { STEPS, TEAMS } from '../rules.js';
+import { TEAMS, stepsOf } from '../rules.js';
 import { icon } from './icons.js';
 import { PEN, Pad, SHEET, inkStrokes, offPad } from './Pad.js';
 import { drawRawFit } from './paint.js';
@@ -15,6 +15,8 @@ const PRAISE = {
 	beams: ['Timber!', 'Sturdy.', 'Nailed it.'],
 	ammo: ['Loaded!', 'That will hurt.', 'Incoming!'],
 	swords: ['Sharp!', 'Brutal.', 'Oh, that is nasty.'],
+	armor: ['Clank!', 'Tin can!', 'Well wrapped.'],
+	shield: ['Blocked!', 'Hide behind that.', 'Sturdy.'],
 };
 const Screen = styled(
 	Component,
@@ -266,6 +268,7 @@ export default class DrawScreen extends Screen {
 	update(view, { team, sound }) {
 		this.team = team;
 		this.sound = sound;
+		this.steps = stepsOf(view.state);
 
 		const mine = view.state.drawing[team];
 
@@ -280,18 +283,19 @@ export default class DrawScreen extends Screen {
 	}
 
 	setStep(step) {
-		const { kind, title } = STEPS[step];
+		const { kind, title } = this.steps[step];
 
 		this.step = step;
 		this.kind = kind;
 		this.strokes = [];
-		this.ghost = DEFAULT_RAW[kind]()[0];
+		// The dashed example; armor has none, as it's drawn over the warrior shown under it
+		this.ghost = DEFAULT_RAW[kind]?.()[0] ?? null;
 
 		const dots = document.createElement('span');
 
 		dots.className = 'dots';
 		dots.append(
-			...STEPS.map((_, at) => Object.assign(document.createElement('i'), { className: at < step ? 'done' : at === step ? 'now' : '' })),
+			...this.steps.map((_, at) => Object.assign(document.createElement('i'), { className: at < step ? 'done' : at === step ? 'now' : '' })),
 		);
 		this.heading.elem.replaceChildren(Object.assign(document.createElement('span'), { textContent: title }), dots);
 		this.redraw();
@@ -301,6 +305,7 @@ export default class DrawScreen extends Screen {
 	setArt(art) {
 		this.art = art;
 		this.showKept();
+		this.redraw();
 	}
 
 	showKept() {
@@ -323,7 +328,7 @@ export default class DrawScreen extends Screen {
 		if (this.step < 0) return;
 
 		const left = Math.max(0, (this.deadline - performance.now()) / 1000);
-		const of = STEPS[this.step].seconds;
+		const of = this.steps[this.step].seconds;
 
 		this.clockBar.style.transform = `scaleX(${clamp(left / of, 0, 1)})`;
 		this.clock.elem.classList.toggle('low', left < 6);
@@ -378,6 +383,16 @@ export default class DrawScreen extends Screen {
 
 		this.pad.clearCanvas();
 		g.lineCap = g.lineJoin = 'round';
+		// Armor and a shield are drawn for the warrior: shown faintly under them, in its side's ink
+		const warrior = (this.kind === 'armor' || this.kind === 'shield') && this.art?.art?.[this.team]?.stickmen?.[0];
+
+		if (warrior) {
+			g.strokeStyle = TEAMS[Math.max(0, this.team)].ink;
+			g.globalAlpha = 0.35;
+			g.lineWidth = PEN * k;
+			path(warrior.raw);
+			g.globalAlpha = 1;
+		}
 		// A weapon's box: drawn inside it, its handle at the bottom
 		if (this.kind === 'swords') {
 			const { x0, y0, x1, y1 } = WEAPON_AREA;
@@ -429,7 +444,7 @@ export default class DrawScreen extends Screen {
 			row.append(icon('flag', { size: '1.4em', color: ink }));
 			if (!seats[t]) row.append(icon('invite', { size: '1.4em', color: ink }), 'waiting for someone to join');
 			else if (drawing[t].done) row.append(icon('person', { size: '1.4em', color: ink }), icon('keep', { size: '1.4em', color: ink }));
-			else row.append(icon('person', { size: '1.4em', color: ink }), icon('draw', { size: '1.4em', color: ink }), `${drawing[t].step + 1} of ${STEPS.length}`);
+			else row.append(icon('person', { size: '1.4em', color: ink }), icon('draw', { size: '1.4em', color: ink }), `${drawing[t].step + 1} of ${stepsOf(view.state).length}`);
 
 			return row;
 		});

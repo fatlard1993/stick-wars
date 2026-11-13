@@ -27,6 +27,9 @@ const Screen = styled(
 		& .title { font-size: 4.2em; transform: rotate(-2deg); color: ${PENCIL}; }
 		& .modes { display: flex; flex-wrap: wrap; justify-content: center; gap: ${space.xl}; }
 		& .modes button { flex-direction: column; min-width: 190px; }
+		/* War or gladiators: the one picked is inked in */
+		& .styles { display: flex; gap: ${space.lg}; }
+		& .styles button { flex-direction: column; min-width: 130px; font-size: 1.2em; }
 	`,
 );
 
@@ -37,7 +40,32 @@ export default class Start extends View {
 
 		screen.elem.append(Object.assign(document.createElement('img'), { src: icon, alt: '' }));
 		new Heading({ appendTo: screen, addClass: 'title', textContent: 'Stick Men Wars' });
-		screen.append(modes);
+		// A war of armies, or two gladiators: remembered for next time
+		const styles = new Component({ addClass: 'styles' });
+		const pick = style => {
+			this.style = style;
+			try {
+				localStorage.setItem('style', style);
+			} catch {
+				// Remembering it is only a convenience
+			}
+			for (const [name, button] of Object.entries(this.styleButtons)) button.elem.setAttribute('aria-pressed', String(name === style));
+		};
+
+		this.styleButtons = {
+			war: doodle('catapult', { size: '2.4em', label: 'war', onPress: () => pick('war') }),
+			gladiator: doodle('helmet', { size: '2.4em', label: 'gladiators', onPress: () => pick('gladiator') }),
+		};
+		styles.append(...Object.values(this.styleButtons));
+		screen.append(styles, modes);
+		let saved = 'war';
+
+		try {
+			saved = localStorage.getItem('style') === 'gladiator' ? 'gladiator' : 'war';
+		} catch {
+			// A fresh start is a war
+		}
+		pick(saved);
 		modes.append(
 			doodle('robot', { big: true, size: '3em', label: 'vs computer', onPress: () => this.play('cpu') }),
 			doodle('twoPlayers', { big: true, size: '3em', label: 'two players', onPress: () => this.play('duo') }),
@@ -47,9 +75,9 @@ export default class Start extends View {
 	async play(mode) {
 		try {
 			const { body: games = [] } = await getGames({ invalidateAfter: 0 });
-			const mine = games.find(
-				game => game.state?.mode === mode && game.players.some(({ id }) => id === localStorage.getItem(game.id)),
-			);
+			const style = this.style ?? 'war';
+			const sameKind = game => game.state?.mode === mode && (game.state.style ?? 'war') === style;
+			const mine = games.find(game => sameKind(game) && game.players.some(({ id }) => id === localStorage.getItem(game.id)));
 
 			if (mine) {
 				window.location.href = `#/play/${mine.id}`;
@@ -60,12 +88,10 @@ export default class Start extends View {
 			// A friend's game with a free side, whose waiting player is here now: an empty seat at a table left long ago isn't one
 			const open =
 				mode === 'duo'
-					? games.find(
-							game =>
-								game.state?.mode === 'duo' && game.state.seats.includes(null) && game.players.some(({ online }) => online),
-						)
+					? games.find(game => sameKind(game) && game.state.seats.includes(null) && game.players.some(({ online }) => online))
 					: null;
-			const game = open ?? (await createGame({ body: { name: `${MODES[mode]} ${new Date().toLocaleTimeString()}`, mode } })).body;
+			const name = `${style === 'gladiator' ? 'gladiators, ' : ''}${MODES[mode]} ${new Date().toLocaleTimeString()}`;
+			const game = open ?? (await createGame({ body: { name, mode, style } })).body;
 			const joined = await joinGame(game.id, { body: { name: 'player' } });
 
 			if (!joined.body?.id) throw new Error(`could not join: ${JSON.stringify(joined.body)}`);

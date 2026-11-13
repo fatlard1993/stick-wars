@@ -48,6 +48,10 @@ const UPRIGHT_SPAN = 360;
 const UPRIGHT_HOME = 330;
 // How far a pinch or the wheel zooms in, past the readable view
 const MOST_ZOOM = 2.4;
+// How much of the field a gladiators' fight shows across, on a wide screen and on an upright phone: the two of them, close
+const ARENA_SPAN = 640, ARENA_SPAN_UPRIGHT = 290;
+// Armor's ink
+const STEEL = '#59656e';
 
 const Screen = styled(
 	Component,
@@ -211,7 +215,7 @@ export default class BattleScreen extends Screen {
 	arm(team) {
 		if (this.armed !== undefined) return;
 		this.armed = team;
-		if (team < 0) return;
+		if (team < 0 || this.arena) return;
 
 		const controls = new Controls({ appendTo: this });
 
@@ -374,6 +378,8 @@ export default class BattleScreen extends Screen {
 		this.sound = sound;
 		this.art = art;
 		this.view = view;
+		// A gladiators' fight: only watched, nothing to order
+		this.arena = view.state.style === 'gladiator';
 		this.arm(team);
 
 		const { state, battle } = view;
@@ -532,17 +538,30 @@ export default class BattleScreen extends Screen {
 		// A phone held upright: the whole field in a strip across the top, and under it a main view filling the rest,
 		// all of the world's height (the sky the arcs need) in it
 		const upright = height > width * 1.15 && width < 900;
-		const overview = upright ? { scale: width / W, top: VIEW_TOP + 40, h: Math.round(((H - VIEW_TOP - 40) * width) / W) } : null;
+		const overview = upright && !this.arena ? { scale: width / W, top: VIEW_TOP + 40, h: Math.round(((H - VIEW_TOP - 40) * width) / W) } : null;
 		const mainTop = overview ? overview.h : 0;
 		const mainHeight = height - mainTop;
 		const fit = Math.min(width / W, mainHeight / H);
 		// Upright, the main view crops the sky like the side-on view does, zoomed in as far as still shows a base and its
 		// wall across (UPRIGHT_SPAN of the field); what's left over above is sky for the arcs
-		const base = upright ? Math.min(mainHeight / (H - VIEW_TOP), width / UPRIGHT_SPAN) : Math.max(fit, Math.min(READABLE, height / (H - VIEW_TOP)));
+		// A gladiators' fight is seen close up, the two of them across the screen
+		const base = this.arena
+			? Math.min(mainHeight / (H - VIEW_TOP), width / (upright ? ARENA_SPAN_UPRIGHT : ARENA_SPAN))
+			: upright
+				? Math.min(mainHeight / (H - VIEW_TOP), width / UPRIGHT_SPAN)
+				: Math.max(fit, Math.min(READABLE, height / (H - VIEW_TOP)));
 		// Zoomed out no further than the whole field fits
 		const scale = Math.max(fit, base * this.cam.zoom);
 		const seen = width / scale;
 
+		// In the arena it follows the fight: between the two gladiators, easing along as they move
+		const fighters = this.arena ? (this.cur?.bodies ?? []).filter(body => body.hp !== undefined) : [];
+
+		if (fighters.length) {
+			const mid = fighters.reduce((sum, body) => sum + body.j[4], 0) / fighters.length;
+
+			this.cam.x = this.cam.x === null ? mid : lerp(this.cam.x, mid, 0.06);
+		}
 		// It starts over our own side, once it's known which that is: upright, on the army at home by its wall
 		if (this.cam.x === null && this.team !== undefined) {
 			if (this.team < 0) this.cam.x = W / 2;
@@ -874,7 +893,7 @@ export default class BattleScreen extends Screen {
 		for (const brick of bricks) {
 			if (brick[10] >= 0) scene.push({ z: brick[10], draw: fading(brick[13], () => atDepth(g, brick[4], brick[10], () => this.drawBrick(g, brick, true))) });
 		}
-		for (const wall of cur.walls) scene.push({ z: 4, draw: () => this.drawFlag(g, wall) });
+		if (!cur.arena) for (const wall of cur.walls) scene.push({ z: 4, draw: () => this.drawFlag(g, wall) });
 
 		return scene.sort((a, b) => b.z - a.z);
 	}
@@ -1013,6 +1032,13 @@ export default class BattleScreen extends Screen {
 		if (!rig) return;
 		if (this.selected.has(body.id)) this.drawPicked(g, body);
 		drawBody(g, rig, body, teamInk(body.t), this.ink);
+
+		// A gladiator's armor, moving with the bones it was drawn on (and gone with any cut away)
+		const armor = body.ar && this.item(body.ar, 'armor');
+
+		if (armor) drawBody(g, { strokes: armor.binds }, body, STEEL, this.ink * 1.5);
+		this.drawShield(g, body);
+		this.drawHealth(g, body);
 		// One of ours holding the wall carries a little shield over his head, a repairer a hammer
 		const mark = { h: 'hold', r: 'hammer' }[body.u];
 
@@ -1043,6 +1069,34 @@ export default class BattleScreen extends Screen {
 				g.fill();
 			}
 		}
+	}
+
+	// A gladiator's shield on his left hand, as big beside him as it was drawn beside him, darkening as it's battered
+	drawShield(g, body) {
+		const shield = body.sh && this.item(body.sh, 'shield');
+
+		if (!shield) return;
+
+		const size = shield.stats.rel * body.s, j = body.j;
+		const y = body.q < 1 ? GROUND - (GROUND - j[9]) * body.q : j[9];
+
+		// A little see-through, so the man behind a big one still shows
+		g.globalAlpha *= 0.82;
+		placeShape(g, shield.shape, { x: j[8], y, sx: size * body.f, sy: size }, mixColor(FILLS.wood, '#4a3826', 1 - body.sh[2]), WOOD_INK, 1.8);
+		g.globalAlpha /= 0.82;
+	}
+
+	// How much a gladiator has left: a pencilled bar over his head
+	drawHealth(g, body) {
+		if (body.hp === undefined) return;
+
+		const x = body.j[0], y = Math.min(body.j[1], body.j[3]) - body.s * 0.32;
+
+		g.strokeStyle = INK;
+		g.lineWidth = 1.5;
+		g.strokeRect(x - 22, y - 3, 44, 6);
+		g.fillStyle = body.hp > 0.35 ? teamInk(body.t) : RED_PENCIL;
+		g.fillRect(x - 22, y - 3, 44 * body.hp, 6);
 	}
 
 	drawProp(g, prop) {

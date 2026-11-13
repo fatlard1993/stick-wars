@@ -1,11 +1,10 @@
 import { Game as BaseGame, refuse } from '@fatlard1993/web-game-framework';
 
-import { cpuArmy, defaultsFor, judge } from './art.js';
+import { cpuArmy, cpuGladiator, defaultsFor, judge } from './art.js';
 import { AMMO, ARMY, DT, ORDERS, World } from './battle.js';
 import {
 	CPU_SIZE,
 	MOST_KEPT,
-	STEPS,
 	TICK_MS,
 	armySize,
 	artOf,
@@ -13,8 +12,13 @@ import {
 	humanTeams,
 	newDrawing,
 	newState,
+	stepsOf,
 	wallSize,
 } from './rules.js';
+import Roster from './roster.js';
+
+// The hall of gladiators every game shares: winners kept and fought again (only in memory while testing)
+const HALL = new Roster(process.env.NODE_ENV === 'test' ? null : 'data/gladiators.json');
 
 // How long a won battle plays on before its end is called, in battle seconds
 const END_AFTER = 2.2;
@@ -23,7 +27,7 @@ const END_AFTER = 2.2;
 // battle (battle.js), stepped here and sent to every page many times a second. Drawings are judged here too, so what
 // a page keeps is what passed.
 export default class Game extends BaseGame {
-	static version = 3;
+	static version = 4;
 	static migrations = {
 		// Version 2 drew without an ammo page (weapons were step 3); version 3 has it back, as version 1 did. A save made
 		// with version 2 (save.version is what it was saved as, while migrating) and part way past beams moves on a step.
@@ -31,13 +35,20 @@ export default class Game extends BaseGame {
 			if (save.version !== 2) return;
 			for (const drawing of save.state?.drawing ?? []) if (!drawing.done && drawing.step >= 3) drawing.step++;
 		},
+		// Version 4 added gladiators: a game saved before is a war, with no saved gladiators in it
+		4: save => {
+			if (!save.state) return;
+			save.state.style ??= 'war';
+			save.state.fame ??= [null, null];
+		},
 	};
 
 	constructor(options) {
 		super(options);
 
 		// Back from the save file after a restart, or new
-		this.state = options.saveState?.state ?? newState(this.options.mode);
+		this.state = options.saveState?.state ?? newState(this.options.mode, this.options.style);
+		this.roster = options.roster ?? HALL;
 		this.outEvents = [];
 		this.world = null;
 		this.shown = '';
@@ -57,17 +68,21 @@ export default class Game extends BaseGame {
 
 			if (this.state.phase !== 'draw' || !drawing || drawing.done) refuse('Not drawing now');
 
-			const { kind } = STEPS[drawing.step];
+			const { kind } = stepsOf(this.state)[drawing.step];
 			const kept = this.state.art[team][kind];
+			const gladiator = this.state.style === 'gladiator';
 
 			// Rocks are the catapult's whole pile for a battle, so no more than it may throw
 			const most = kind === 'ammo' ? AMMO : MOST_KEPT;
 
-			if (kept.length >= most) refuse(`That's plenty: ${most} is the most.`);
+			if (!gladiator && kept.length >= most) refuse(`That's plenty: ${most} is the most.`);
 
-			const verdict = judge(kind, strokes);
+			// Armor and a shield are drawn for the warrior already drawn, and sized by it
+			const verdict = judge(kind, strokes, { warrior: this.state.art[team].stickmen?.[0] });
 
 			if (!verdict.ok) refuse(verdict.msg);
+			// A gladiator has one of each: a new one kept takes the place of the last
+			if (gladiator) kept.length = 0;
 			// Drawn by a person, so it counts toward a bigger army or wall (the defaults never do)
 			kept.push({ ...verdict.item, drawn: true });
 			this.artChanged();
@@ -80,6 +95,7 @@ export default class Game extends BaseGame {
 			const team = this.teamOf(player.id);
 
 			if (this.state.phase !== 'battle' || !this.world) refuse('No battle on');
+			if (this.world.arena) refuse('No catapult in the arena');
 			if (this.world.drawnRocks[team] >= AMMO) refuse('No more rocks this battle');
 
 			const verdict = judge('ammo', strokes);
@@ -153,8 +169,11 @@ export default class Game extends BaseGame {
 			this.teamOf(player.id);
 			if (this.state.phase !== 'over') refuse('The battle is still on');
 			for (const team of humanTeams(this.state)) this.resetArt(team);
-			// And the computer draws itself a new one too
-			if (this.state.mode === 'cpu') this.state.art[1] = emptyArt();
+			// And the computer draws itself a new one too (or picks another gladiator to send)
+			if (this.state.mode === 'cpu') {
+				this.state.art[1] = emptyArt(this.state.style);
+				this.state.fame[1] = null;
+			}
 			this.world = null;
 			this.state.phase = 'draw';
 		},
@@ -170,8 +189,10 @@ export default class Game extends BaseGame {
 	}
 
 	resetArt(team) {
-		this.state.art[team] = emptyArt();
-		this.state.drawing[team] = newDrawing();
+		this.state.art[team] = emptyArt(this.state.style);
+		this.state.drawing[team] = newDrawing(this.state.style);
+		// A new drawing is a new gladiator, not the saved one it was
+		this.state.fame[team] = null;
 		this.artChanged();
 	}
 
@@ -186,16 +207,25 @@ export default class Game extends BaseGame {
 
 	finishStep(team) {
 		const drawing = this.state.drawing[team];
-		const { kind } = STEPS[drawing.step];
+		const steps = stepsOf(this.state);
+		const { kind, optional } = steps[drawing.step];
 
-		if (!this.state.art[team][kind].length) {
-			this.state.art[team][kind] = defaultsFor(kind);
+		// Left empty, a page gets the defaults; armor and a shield are only had if drawn
+		if (!optional && !this.state.art[team][kind].length) {
+			this.state.art[team][kind] = this.defaults(kind);
 			this.artChanged();
 		}
 		drawing.step++;
-		if (drawing.step >= STEPS.length) drawing.done = true;
-		else drawing.left = STEPS[drawing.step].seconds;
+		if (drawing.step >= steps.length) drawing.done = true;
+		else drawing.left = steps[drawing.step].seconds;
 		this.startWhenReady();
+	}
+
+	// A kind's defaults, for a page left empty: all of them for an army, the first for a gladiator, who has one of each
+	defaults(kind) {
+		const all = defaultsFor(kind);
+
+		return this.state.style === 'gladiator' ? all.slice(0, 1) : all;
 	}
 
 	// The battle starts once every side played by a person is seated and done drawing
@@ -209,12 +239,32 @@ export default class Game extends BaseGame {
 	startBattle() {
 		const { state } = this;
 		const uses = new Set(artOf(state));
+		const steps = stepsOf(state), gladiator = state.style === 'gladiator';
 
-		// The computer's army is its own, made when it's first needed and kept for rematches
-		if (state.mode === 'cpu' && STEPS.some(({ kind }) => !state.art[1][kind]?.length)) state.art[1] = cpuArmy();
+		// The computer's side is its own, made when it's first needed and kept for rematches: against a gladiator, one from
+		// the hall of them if there are any, or one it draws
+		if (state.mode === 'cpu' && steps.some(({ kind, optional }) => !optional && !state.art[1][kind]?.length)) {
+			const champion = gladiator ? this.roster.pick() : null;
+
+			state.art[1] = champion ? structuredClone(champion.art) : gladiator ? cpuGladiator() : cpuArmy();
+			state.fame[1] = champion?.id ?? null;
+		}
 		// Every army fights with something: anything missing (an old save, a side left half drawn) is the defaults
 		for (const team of uses) {
-			for (const { kind } of STEPS) if (!state.art[team][kind]?.length) state.art[team][kind] = defaultsFor(kind);
+			for (const { kind, optional } of steps) {
+				if (!state.art[team][kind]) state.art[team][kind] = [];
+				if (!optional && !state.art[team][kind].length) state.art[team][kind] = this.defaults(kind);
+			}
+		}
+		if (gladiator) {
+			this.world = new World({ arts: state.art, artOf: artOf(state), auto: [false, false], arena: true });
+			this.snap = null;
+			state.phase = 'battle';
+			state.result = null;
+			state.battles++;
+			this.artChanged();
+
+			return;
 		}
 		// Every battle a person's catapult starts with the rocks drawn before it; those drawn in the last one are gone
 		for (const team of humanTeams(state)) state.art[team].ammo = state.art[team].ammo.filter(rock => !rock.inBattle);
@@ -282,11 +332,20 @@ export default class Game extends BaseGame {
 		if (state.phase === 'battle' && world.over && world.overT > END_AFTER) {
 			state.result = { winner: world.over.winner, stats: structuredClone(world.stats) };
 			state.phase = 'over';
+			this.honour(world.over.winner);
 		}
 		this.outEvents = world.takeEvents();
 		this.snap = world.snapshot();
 		this.publish();
 		this.outEvents = [];
+	}
+
+	// A gladiators' fight won: the winner into the hall (or its record up there), the loser's record down
+	honour(winner) {
+		const { state } = this;
+
+		if (state.style !== 'gladiator' || (winner !== 0 && winner !== 1)) return;
+		state.fame[winner] = this.roster.record({ id: state.fame[winner], art: state.art[winner] }, { id: state.fame[1 - winner] });
 	}
 
 	// What each page is sent: the game's state (the art itself goes once, on a page's first view and when it changes,
@@ -298,6 +357,12 @@ export default class Game extends BaseGame {
 			state: { ...rest, kept: art.map(byKind => Object.fromEntries(Object.entries(byKind).map(([kind, items]) => [kind, items.length]))) },
 			players: this.toClient().players,
 			away: this.away(),
+			// Each side's record in the hall of gladiators, if it's one of them
+			fame: (this.state.fame ?? []).map(id => {
+				const entry = this.roster.get(id);
+
+				return entry ? { wins: entry.wins, losses: entry.losses } : null;
+			}),
 			battle: this.world ? (this.snap ?? this.world.snapshot()) : null,
 			events: this.outEvents,
 			...(how?.first && { art: this.artView() }),
@@ -315,9 +380,9 @@ export default class Game extends BaseGame {
 
 	// What the lobby lists: who, which mode, how far along; never the art
 	toClient() {
-		const { mode, phase, seats } = this.state ?? {};
+		const { mode, style, phase, seats } = this.state ?? {};
 
-		return { ...super.toClient(), state: { mode, phase, seats } };
+		return { ...super.toClient(), state: { mode, style, phase, seats } };
 	}
 
 	toSaveState() {
