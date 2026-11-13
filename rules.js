@@ -14,6 +14,8 @@ export const STEPS = [
 	{ kind: 'beams', seconds: 40, title: 'Build your catapult', optional: true, parts: ['beams', 'beams', 'beams', 'beams', 'wheels', 'wheels'] },
 	{ kind: 'ammo', seconds: 25, title: 'Draw rocks for the catapult' },
 	{ kind: 'swords', seconds: 40, title: 'Draw weapons in the box' },
+	// Shields, if wanted: about half the men carry one, blocking some blows and rocks, a little slower for it
+	{ kind: 'shield', seconds: 25, title: 'Shields for your men?', optional: true },
 ];
 
 /** The part a page built from parts wants next (its kind), with this art kept so far; null once all are there */

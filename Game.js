@@ -45,7 +45,7 @@ const SKETCH_EVERY = 150;
 // battle (battle.js), stepped here and sent to every page many times a second. Drawings are judged here too, so what
 // a page keeps is what passed.
 export default class Game extends BaseGame {
-	static version = 7;
+	static version = 8;
 	static migrations = {
 		// A save from version 2, which had no ammo page, part way past beams moves on a step (save.version is the version
 		// it was saved as, while migrating)
@@ -84,6 +84,11 @@ export default class Game extends BaseGame {
 				art.wheels = fill(art.wheels, 2);
 			}
 			for (const drawing of save.state.drawing ?? []) if (drawing && !drawing.done && drawing.step >= 5) Object.assign(drawing, { step: 5, done: true });
+		},
+		// Version 8 added soldiers' shields, a war's last page: a war saved before has none
+		8: save => {
+			if (save.state?.style !== 'war') return;
+			for (const art of save.state.art ?? []) if (art) art.shield ??= [];
 		},
 	};
 

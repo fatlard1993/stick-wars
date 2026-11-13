@@ -298,6 +298,14 @@ class Stickman {
 		this.body = new Body(w, w.pickArt(team, 'stickmen'), team, this.face, SM_H * rand(0.9, 1.1));
 		this.body.owner = this;
 		this.body.weapon = { ref: w.pickArt(team, 'swords'), blood: 0 };
+		// In a war, about half the men carry one of their side's shields, if it drew any (a gladiator's is his own: gladiate)
+		const shields = w.arts[w.artOf[team]].shield;
+
+		if (!w.arena && shields?.length && Math.random() < SOLDIER_SHIELDS) {
+			const ref = w.pickArt(team, 'shield');
+
+			this.body.shield = { ref, hp: w.itemOf(ref).stats.hp };
+		}
 		// In the arena, each walks out of its own gate in the back wall
 		const home = w.arena ? { x: W / 2 - this.face * ARENA_GATE, z: DEPTH - 12 } : homeOf(team, k, w.army[team]);
 
@@ -316,7 +324,7 @@ class Stickman {
 		this.hp = this.maxHp;
 		this.bleed = 0;
 		this.phase = rand(0, TAU);
-		this.speed = rand(52, 68) * (1 - 0.08 * this.beef.legs);
+		this.speed = rand(52, 68) * (1 - 0.08 * this.beef.legs) * (this.body.shield ? 0.9 : 1);
 		this.atk = null;
 		this.cd = rand(0.2, 0.8);
 		this.kb = 0;
@@ -384,15 +392,16 @@ class Stickman {
 	// A swing at him slipped (a hop back out of it), or caught on his shield if he has one, it comes from in front, and
 	// he's quick enough (less so while he's swinging himself). A shield takes the blow, and breaks once it's taken enough.
 	fends(attacker) {
-		if (!this.style || !this.alive()) return false;
-		const stance = this.stance();
+		if (!this.alive()) return false;
+		// A soldier has no knack for slipping a blow, but a shield catches it as well in his hands as a gladiator's
+		const stance = this.style ? this.stance() : null;
 		// Charging, he's reckless; backing off or guarding, he's watching for it
 		const wary = { charge: 0.3, back: 2, guard: 1.5 }[stance] ?? 1;
 
 		// Guarding, a blow caught or slipped earns him a harder one back
 		const earned = () => stance === 'guard' && (this.riposte = this.w.time + 1.2);
 
-		if (!this.atk && Math.random() < this.style.dodge * wary) {
+		if (this.style && !this.atk && Math.random() < this.style.dodge * wary) {
 			earned();
 			this.kb -= this.face * 120;
 			this.retreat = Math.max(this.retreat, 0.2);
@@ -414,7 +423,7 @@ class Stickman {
 
 		earned();
 		sh.hp -= hit.dmg * 0.5;
-		this.kb += attacker.face * (25 + hit.knock * 35) * (1 - this.style.steady);
+		this.kb += attacker.face * (25 + hit.knock * 35) * (1 - (this.style?.steady ?? 0.35 * (this.beef?.legs ?? 0)));
 		this.cd = Math.min(this.cd, 0.2);
 		this.w.dust(h.x, h.y, 5, 'wood', this.z);
 		this.w.sound('thud');
@@ -1280,7 +1289,17 @@ class Proj extends Prop {
 	}
 
 	crush(s, sp) {
-		const w = this.w, e = sp * this.mass, dmg = e * 0.16;
+		const w = this.w, e = sp * this.mass, sh = s.body.shield;
+		// A shield held toward it catches a rock now and then, taking most of it (and maybe breaking)
+		const caught = sh && s.body.owned[3] && Math.sign(this.vx) === -s.face && Math.random() < w.itemOf(sh.ref).stats.block;
+		const dmg = e * 0.16 * (caught ? 0.3 : 1);
+
+		if (caught) {
+			sh.hp -= e * 0.16 * 0.7;
+			w.sound('thud');
+			w.dust(this.x, this.y, 6, 'wood', s.z);
+			if (sh.hp <= 0) s.breakShield();
+		}
 		const fromAbove = this.vy > 150 && this.y < s.body.j[2].y;
 
 		s.hp -= dmg;
@@ -1319,6 +1338,9 @@ class Proj extends Prop {
 		this.vy *= 0.8;
 	}
 }
+
+/** How likely each soldier is to carry a shield, when his side drew any */
+const SOLDIER_SHIELDS = 0.5;
 
 // ---------------------------------------------------------------- catapults
 

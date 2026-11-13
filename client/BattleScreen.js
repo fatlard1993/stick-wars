@@ -478,6 +478,8 @@ export default class BattleScreen extends Screen {
 
 			const mine = this.myCats()[0]?.cat;
 
+			// No catapult built, no rocks to draw for it
+			if (this.rockPad && !mine) this.rockPad.show(0, false, this.team);
 			if (this.rockPad && mine) {
 				this.rockPad.sound = sound;
 				this.rockPad.show(mine.dr ?? 0, !mine.n, this.team);
