@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 
-import { DEFAULT_RAW, blobS, cpuArmy, cpuGladiator, judge, lineS, ringS } from './art.js';
-import { AMMO, DT, FADE, GLADIATOR_HP, GROUND, LINGER, MERCY_WAIT, PLANS, STANCE_FOR, World } from './battle.js';
+import { DEFAULT_RAW, blobS, cpuArmy, cpuGladiator, judge, lineS, ringS, starS } from './art.js';
+import { AMMO, DT, FADE, GLADIATOR_HP, GROUND, LINGER, MERCY_WAIT, PLANS, STANCE_FOR, World, rockThrow } from './battle.js';
 import Game from './Game.js';
 import Roster from './roster.js';
 import { BASE_ARMY, CPU_SIZE, GLADIATOR_STEPS, STEPS, emptyArt } from './rules.js';
@@ -583,7 +583,8 @@ test('a gladiator is one warrior and its weapon, with armor and a shield if draw
 
 	expect(mine.body.armor).not.toBeNull();
 	expect(mine.body.shield).toBeNull();
-	expect(mine.hp).toBe(GLADIATOR_HP);
+	expect(mine.hp).toBe(mine.maxHp);
+	expect(mine.maxHp).toBeGreaterThan(GLADIATOR_HP * 0.7);
 	expect(game.act(fox.id, 'rock', { strokes: DEFAULT_RAW.ammo()[0] }).ok).toBe(false);
 });
 
@@ -746,4 +747,22 @@ test('the hall lists its gladiators best first, and one picked from it is the on
 
 	drawGladiator(game, fox.id, { armor: false, shield: false });
 	expect(game.state.fame[1]).toBe(first);
+});
+
+test('size has a price: a heavy rock flies shorter and loads slower; a spindly gladiator is frailer than a stubby one', () => {
+	const small = judge('ammo', [blobS(240, 240, 40, 40, 10)]).item, big = judge('ammo', [starS(240, 240, 200, 120, 10)]).item;
+
+	expect(rockThrow(big).speed).toBeLessThan(rockThrow(small).speed);
+	expect(rockThrow(big).reload).toBeGreaterThan(rockThrow(small).reload);
+
+	const man = (legs, arms) => {
+		const warrior = judge('stickmen', [ringS(240, 70, 26, 26), lineS(240, 96, 240, 220), lineS(240, 130, 240 - arms, 160), lineS(240, 130, 240 + arms, 160), lineS(240, 220, 200, 220 + legs), lineS(240, 220, 280, 220 + legs)]).item;
+
+		return new World({ arts: [{ ...cpuGladiator(), stickmen: [warrior] }, cpuGladiator()], auto: [false, false], arena: true }).stickmen[0];
+	};
+	const spindly = man(230, 120), stubby = man(90, 45);
+
+	expect(spindly.speed).toBeGreaterThan(stubby.speed);
+	expect(spindly.maxHp).toBeLessThan(stubby.maxHp);
+	expect(spindly.tough).toBeGreaterThan(stubby.tough);
 });

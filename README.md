@@ -17,7 +17,7 @@ Five pages, each against the clock. Draw as many as you like on each: the check 
 | Stick men | 45s | a roundish closed head on top, a body hanging from it, arms and legs sticking out both sides, not a scribble |
 | Stones | 25s | one closed, lumpy outline |
 | Beams | 25s | long and thin, at least three times as long as it is wide |
-| Rocks | 25s | a closed, round-ish lump: bigger hits harder, spikier tears more. Each one kept is a rock on your catapult's pile (10 at most) |
+| Rocks | 25s | a closed, round-ish lump: bigger hits harder and spikier tears more, but a heavy one flies shorter and takes longer to load. Each one kept is a rock on your catapult's pile (10 at most) |
 | Weapons | 40s | anything with some size to it, inside the box on the page, handle at the bottom |
 
 A weapon is drawn in the box on its page (the pen lifts at the box's edge), and its shape is how it fights: length is reach, width and ink are weight, jagged edges shred and bleed, a thin blade cuts cleaner. Any shape will do: a big clunky one hits hard but swings slowly and slows the man carrying it. Each gets a name: Shredder, Bone Crusher, Skewer, Shiv or Blade. Skewers stab.
@@ -60,7 +60,7 @@ Four pages: your gladiator (one stick man, a minute), its weapon (in the box, as
 
 Then the two walk out of their gates into the arena, sand underfoot and a packed crowd in the stands that roars at a limb lost or a kill, gasps at a big blow or a shield smashed, and boos whoever's told to back off; and they fight it out by themselves, each its own way, all of it from how it was drawn:
 
-- **Its body**: long legs walk faster, long arms reach further.
+- **Its body**: long legs walk faster and long arms reach further, but a spindly gladiator is frailer (less in him, limbs that come off easier) and a long arm swings slower; a stubby one is sturdier.
 - **Its weapon**: as in a war, reach from length, weight from width and ink, shredding from jagged edges; a long, not too heavy one is fought from the end of its reach.
 - **Armor**: each part of it (helmet, chest, arms, legs) takes some of a blow landing there, the more of that part it covers, and spares that part from being cut off. Heavy armor is knocked about less, but slows.
 - **A shield**: catches some of the blows that come from in front, the bigger the more, and the gladiator strikes straight back off a block. It weighs, and it breaks after enough of a battering.
@@ -74,7 +74,7 @@ You cheer yours on with three doodles under the arena, each shout holding for th
 
 The computer cheers its own gladiator on the same way.
 
-A gladiator is tough: a duel is many blows, and no blow kills outright. A bar over each shows how much it has left. Beaten down (badly hurt, or a leg gone), a gladiator yields: on his knees, the fight stopped, the winner standing over him, while the crowd decides. A big thumb wavers over him... then it's **thumbs up**, and he's spared, or **thumbs down**, and he's drawn and quartered, his arms and legs torn off one by one. The crowd is kinder to a gladiator with a good record and to one who made the winner work for it, and now and then spares one anyway.
+A gladiator is tough: a duel is many blows, and no blow kills outright. A bar over each shows how much it has left. Beaten down (badly hurt, or a leg gone), a gladiator yields: on his knees, the fight stopped, the winner standing over him, while the crowd decides. A big thumb wavers over him... then it's **thumbs up**, and he's spared, or **thumbs down**, and he's drawn and quartered, his arms and legs torn off one by one. The crowd judges mostly by the fight it just watched: how badly he hurt the winner, and how long he lasted. His record in the hall only nudges it, and now and then it spares one on a whim.
 
 Every gladiator that wins is kept in the hall of gladiators, with its record, and the computer sends them back into the arena against whoever plays it next (the better its record, the likelier); one of them shows its wins by its flag. A loser the crowd spares keeps its place in the hall, or earns one; one it gives the thumbs down is struck from it. With nobody in the hall yet, the computer draws its own.
 

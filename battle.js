@@ -27,6 +27,7 @@ import {
 	faded,
 	ADJ,
 	AMMO,
+	rockThrow,
 	ARENA_GATE,
 	ARMY,
 	CAT_FIRE,
@@ -247,7 +248,7 @@ class Body {
 			...(wp && { w: [wp.ref.a, wp.ref.i, Math.round(wp.blood * 100) / 100], wo: Math.round(this.wOff * 100) / 100 }),
 			...(this.armor && { ar: [this.armor.a, this.armor.i] }),
 			// A gladiator's health, for the bar over him, and what he's been told, while it holds
-			...(this.owner?.style && !this.owner.dead && { hp: Math.round(clamp(this.owner.hp / GLADIATOR_HP, 0, 1) * 100) / 100 }),
+			...(this.owner?.style && !this.owner.dead && { hp: Math.round(clamp(this.owner.hp / this.owner.maxHp, 0, 1) * 100) / 100 }),
 			...(this.owner?.style && this.owner.alive() && this.owner.stance() && { cs: STANCE_CODE[this.owner.stance()] }),
 			// The shield, and how much of it is left
 			...(this.shield &&
@@ -267,7 +268,7 @@ export const YIELD_AT = 0.22;
 /** How long the crowd keeps him waiting, then how long between each limb torn off if it's thumbs down, in seconds */
 export const MERCY_WAIT = 1.8, QUARTER_EVERY = 0.3;
 /** The small chance the crowd spares him whatever else */
-export const MERCY_LUCK = 0.1;
+export const MERCY_LUCK = 0.05;
 
 /** What a gladiator's player can shout at him, and how long a shout holds, in seconds */
 export const STANCES = ['charge', 'back', 'guard'], STANCE_FOR = 3;
@@ -333,9 +334,14 @@ class Stickman {
 		const legs = (L[6] + L[7] + L[8] + L[9]) / 2, arms = (L[2] + L[3] + L[4] + L[5]) / 2;
 
 		this.order = 'charge';
+		// Long limbs reach and stride, but break: a spindly gladiator has less in him and loses limbs more easily, a stubby
+		// one more, and holds on to them
+		const spindly = clamp(legs / 0.42 - 1 + (arms / 0.28 - 1), -0.4, 0.6);
+
 		// A gladiator is made to last: a duel is many blows, not one
-		this.hp = GLADIATOR_HP;
-		this.tough = 0.45;
+		this.maxHp = Math.round(GLADIATOR_HP * clamp(1 - 0.65 * spindly, 0.68, 1.15));
+		this.hp = this.maxHp;
+		this.tough = 0.45 * clamp(1 + 1.6 * spindly, 0.6, 1.9);
 		// Long legs carry him faster; armor and a shield weigh him down
 		this.speed = 60 * clamp(legs / 0.42, 0.75, 1.3) * clamp(1.1 - 0.15 * load, 0.5, 1);
 		// Long arms reach further
@@ -553,7 +559,7 @@ class Stickman {
 		const w = this.w;
 
 		// A gladiator beaten down yields, to wait on the crowd: he doesn't bleed while he does
-		if (this.style && !this.yielded && !w.mercy && !w.over && (this.incap || this.hp < GLADIATOR_HP * YIELD_AT)) w.yieldBy(this);
+		if (this.style && !this.yielded && !w.mercy && !w.over && (this.incap || this.hp < this.maxHp * YIELD_AT)) w.yieldBy(this);
 		if (!this.yielded) this.hp -= (this.bleed + this.body.stumps.length * 5) * dt;
 		if (this.hp <= 0) {
 			this.die(0, 0);
@@ -590,7 +596,7 @@ class Stickman {
 		// Backing off, he catches his breath: his bleeding slows, and a little of what he's lost comes back
 		if (this.stance() === 'back') {
 			this.bleed *= Math.pow(0.4, dt);
-			this.hp = Math.min(GLADIATOR_HP, this.hp + 8 * dt);
+			this.hp = Math.min(this.maxHp, this.hp + 8 * dt);
 		}
 
 		let move = 0, want = null, goalZ = this.z;
@@ -699,7 +705,7 @@ class Stickman {
 
 		// A heavy weapon slows the man carrying it, as well as his swing
 		// Badly hurt, he slows (a gladiator, made to last, when he's as hurt as a soldier would be)
-		const pace = this.speed * dt * (this.hp < (this.style ? GLADIATOR_HP : 100) * 0.35 ? 0.7 : 1) * this.burden();
+		const pace = this.speed * dt * (this.hp < (this.maxHp ?? 100) * 0.35 ? 0.7 : 1) * this.burden();
 		const dz = clamp(goalZ, 0, DEPTH) - this.z;
 
 		if (this.atk) {
@@ -730,7 +736,10 @@ class Stickman {
 			if (st.name === 'Skewer') kind = r < 0.65 ? 'stab' : 'chop';
 			else kind = r < 0.6 ? 'chop' : 'sweep';
 		}
-		this.atk = { t: 0, dur: st.swing * rand(0.9, 1.1), kind, want, bones: new Set(), bodies: new Map(), done: false };
+		// A long arm is a long lever: a gladiator's longer reach swings slower
+		const lever = Math.pow(this.armReach ?? 1, 1.4);
+
+		this.atk = { t: 0, dur: st.swing * rand(0.9, 1.1) * lever, kind, want, bones: new Set(), bodies: new Map(), done: false };
 		this.prevSeg = null;
 	}
 
@@ -1310,6 +1319,11 @@ class Catapult {
 		this.aim = null;
 	}
 
+	// How long loading the next takes after a rock: quicker with more crew, slower for a heavy rock
+	reload(rock) {
+		return (RELOAD * rockThrow(rock && this.w.itemOf(rock)).reload) / (1 + 0.5 * (Math.min(Math.max(this.crew(), 1), MOST_CREW) - 1));
+	}
+
 	get ammo() {
 		return this.rocks.length;
 	}
@@ -1340,7 +1354,10 @@ class Catapult {
 	fire(vx, vy) {
 		if (!this.ready()) return false;
 		this.fireT = 0;
-		this.pend = holdFling(this.team, vx, vy);
+		// A heavy rock flies shorter than it was aimed, held to what the catapult can do with it
+		const k = rockThrow(this.w.itemOf(this.rocks[0])).speed;
+
+		this.pend = holdFling(this.team, vx, vy).map(v => v * k);
 		this.flying = this.rocks.shift();
 		this.w.sound('launch');
 
@@ -1362,10 +1379,10 @@ class Catapult {
 				const [lx, ly] = this.geometry().launch;
 
 				this.w.projs.push(new Proj(this.w, this.flying, lx, ly, this.pend[0], this.pend[1], this.team, this.z));
-				this.flying = null;
 				this.pend = null;
-				// One loads it, each more of its crew (up to its most) loads it faster
-				this.cd = RELOAD / (1 + 0.5 * (Math.min(Math.max(this.crew(), 1), MOST_CREW) - 1));
+				// One loads it, each more of its crew (up to its most) loads it faster; a heavy rock loads slower
+				this.cd = this.reload(this.flying);
+				this.flying = null;
 			}
 			if (this.fireT > 0.4) this.fireT = -1;
 		} else this.arm += (CAT_REST - this.arm) * Math.min(1, dt * 2.2);
@@ -1415,7 +1432,7 @@ class Catapult {
 			hp: Math.round(this.hp),
 			n: this.ammo,
 			cd: Math.round(Math.max(0, this.cd) * 10) / 10,
-			rl: Math.round((RELOAD / (1 + 0.5 * (Math.min(Math.max(this.crew(), 1), MOST_CREW) - 1))) * 10) / 10,
+			rl: Math.round(this.reload(this.rocks[0] ?? this.flying) * 10) / 10,
 			cr: this.crew(),
 			cw: this.crewing().length,
 			...(this.aim && { aim: this.aim.map(v => Math.round(v)) }),
@@ -1776,15 +1793,17 @@ export class World {
 	yieldBy(man) {
 		const winner = this.stickmen.find(s => s.team !== man.team);
 		const record = this.records?.[man.team];
-		// The crowd's mercy: for a good record so far, and for having made the winner work for it
-		const earned = record ? clamp((record.wins - record.losses) * 0.12, -0.3, 0.35) : 0;
-		const fought = 1 - clamp((winner?.hp ?? GLADIATOR_HP) / GLADIATOR_HP, 0, 1);
+		// The crowd's mercy is mostly for the fight it just watched: how hard he made the winner work, and how long he
+		// lasted. His record in the hall only nudges it, as does luck (MERCY_LUCK).
+		const fought = winner ? 1 - clamp(winner.hp / winner.maxHp, 0, 1) : 0;
+		const lasted = clamp(this.time / 30, 0, 1);
+		const earned = record ? clamp((record.wins - record.losses) * 0.04, -0.12, 0.12) : 0;
 
 		man.yielded = true;
 		if (!man.incap) man.goIncap();
 		man.bleed = 0;
 		man.atk = null;
-		this.mercy = { loser: man, winner, at: this.time, chance: clamp(0.2 + earned + fought * 0.5, 0.05, 0.9), decided: false, torn: 0 };
+		this.mercy = { loser: man, winner, at: this.time, chance: clamp(0.05 + fought * 0.8 + lasted * 0.12 + earned, 0.03, 0.95), decided: false, torn: 0 };
 		this.crowd('ooh');
 		this.slowmo(0.6);
 	}

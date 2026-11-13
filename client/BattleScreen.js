@@ -20,6 +20,7 @@ import {
 	flingFor,
 	flingPath,
 	project,
+	rockThrow,
 } from '../field.js';
 import { TEAMS, TICK_MS } from '../rules.js';
 import AimPad from './AimPad.js';
@@ -1424,7 +1425,10 @@ export default class BattleScreen extends Screen {
 			const live = picked && this.padAim;
 
 			g.fillStyle = ink;
-			flingPath(from, aim[0], aim[1], x => this.groundAt(x)).forEach(([x, y], at) => {
+			// Where the next rock on its pile would land: a heavy one flies shorter
+			const k = this.throwOf(cat);
+
+			flingPath(from, aim[0] * k, aim[1] * k, x => this.groundAt(x)).forEach(([x, y], at) => {
 				if (at % 4) return;
 
 				const [px, py] = project(x, y, cat.z, x);
@@ -1436,6 +1440,11 @@ export default class BattleScreen extends Screen {
 			});
 			g.globalAlpha = 1;
 		}
+	}
+
+	// How much of its aimed speed a catapult's next rock leaves with: a heavy one, less
+	throwOf(cat) {
+		return rockThrow(cat.p?.[0] && this.item(cat.p[0], 'ammo')).speed;
 	}
 
 	drawAim(g) {
@@ -1461,7 +1470,7 @@ export default class BattleScreen extends Screen {
 		g.stroke();
 		g.setLineDash([]);
 		g.fillStyle = ink;
-		flingPath(from, vx, vy, x => this.groundAt(x)).forEach(([x, y], at) => {
+		flingPath(from, vx * this.throwOf(cat), vy * this.throwOf(cat), x => this.groundAt(x)).forEach(([x, y], at) => {
 			if (at % 4) return;
 
 			const [px, py] = project(x, y, cat.z, x);

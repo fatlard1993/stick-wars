@@ -130,6 +130,16 @@ export const flingPath = (from, vx, vy, groundAt = () => GROUND) => {
 	return out;
 };
 
+/**
+ * How a rock's heft tells on its throw: a big, spiky one hits harder (its mass, in battle.js) but flies shorter and takes
+ * longer to load. `speed` is the part of the aimed speed it leaves the bucket with, `reload` how much longer loading takes.
+ */
+export const rockThrow = rock => {
+	const heft = rock ? clamp((rock.radius - 9) / 7, 0, 1) + 0.25 * (rock.spiky ?? 0) : 0;
+
+	return { speed: 1 - 0.2 * heft, reload: 1 + 0.6 * heft };
+};
+
 /** The lowest and steepest a catapult throws, in radians above level, and always forward */
 export const FLING_ANGLES = [0.35, 1.2];
 
