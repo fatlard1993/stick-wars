@@ -1060,12 +1060,8 @@ class Stickman {
 		}
 		b.deadAt = this.w.time;
 		this.w.stats.kills[1 - this.team]++;
-		// Each weapon's kills, by its drawing (whose art, which): for the armory's records
-		if (this.lastHit) {
-			const key = `${this.lastHit.a}:${this.lastHit.i}`;
-
-			this.w.stats.weaponKills[key] = (this.w.stats.weaponKills[key] ?? 0) + 1;
-		}
+		// Each weapon's kills, by its drawing: for the armory's records (in the arena, the duel's win is the kill)
+		if (this.lastHit && !this.w.arena) this.w.creditKill(this.lastHit);
 		this.w.crowd('roar');
 		if (this.w.arena) this.w.dust(this.x, GROUND - 4, 14, 'sand', this.z);
 	}
@@ -2066,6 +2062,13 @@ export class World {
 	}
 
 	/** What happened since the last call, for the pages, and the slate wiped */
+	// A kill for a weapon, by its drawing (whose art, which)
+	creditKill(ref) {
+		const key = `${ref.a}:${ref.i}`;
+
+		this.stats.weaponKills[key] = (this.stats.weaponKills[key] ?? 0) + 1;
+	}
+
 	takeEvents() {
 		const events = this.events;
 
@@ -2286,8 +2289,12 @@ export class World {
 
 		if (this.arena && m) {
 			this.judgeYielded();
-			// Over once he's spared or torn apart (or, somehow, dead before the crowd had its say)
-			if ((m.decided && m.up) || m.loser.dead) this.over = { winner: m.winner.team, spared: Boolean(m.decided && m.up) };
+			// Over once he's spared or torn apart (or, somehow, dead before the crowd had its say): either way, a kill for
+			// the winner's weapon
+			if ((m.decided && m.up) || m.loser.dead) {
+				this.over = { winner: m.winner.team, spared: Boolean(m.decided && m.up) };
+				if (m.winner.body.weapon?.ref) this.creditKill(m.winner.body.weapon.ref);
+			}
 
 			return;
 		}

@@ -1173,3 +1173,47 @@ test('every kill in a war is a weapon\'s in the armory: drawn copies, the comput
 	expect(killed).toBeGreaterThan(0);
 	expect(counted).toBeGreaterThan(killed * 0.9);
 });
+
+test('in the arena a duel won is one kill for the winner\'s weapon, spared or quartered', async () => {
+	const { stockWeapons } = await import('./art.js');
+
+	for (const spared of [true, false]) {
+		const armory = new Shelf(null, { alike: sameWeapon });
+
+		for (const weapon of stockWeapons()) armory.offer(weapon);
+
+		const game = newGame('cpu', 'gladiator', new Roster(), armory);
+		const fox = game.addPlayer('🦊');
+
+		drawGladiator(game, fox.id);
+		duelTo(game, spared);
+
+		const winner = game.state.result.winner;
+		const weapon = game.state.art[game.world.artOf[winner]].swords[0];
+
+		expect(armory.load().reduce((sum, entry) => sum + entry.kills, 0)).toBe(1);
+		expect(armory.get(weapon.armory ?? armory.match(weapon)).kills).toBe(1);
+	}
+});
+
+test('two servers sharing a store\'s file each see what the other wrote, and neither writes over it', async () => {
+	const { mkdtempSync } = await import('node:fs');
+	const { tmpdir } = await import('node:os');
+	const { join } = await import('node:path');
+	const file = join(mkdtempSync(join(tmpdir(), 'stick-wars-')), 'weapons.json');
+	const [house, preview] = [new Shelf(file, { alike: sameWeapon }), new Shelf(file, { alike: sameWeapon })];
+
+	house.offer(judge('swords', DEFAULT_RAW.swords()[0]).item);
+	house.flush();
+	// The file's time moves on in whole steps on some disks: the preview's write is a later one
+	await Bun.sleep(20);
+	expect(preview.load()).toHaveLength(1);
+	preview.vote(preview.load()[0].id, 'v1', 1);
+	preview.flush();
+	await Bun.sleep(20);
+	expect(house.load()[0].up).toBe(1);
+	house.fought([house.load()[0].id], { [house.load()[0].id]: 2 });
+	house.flush();
+	await Bun.sleep(20);
+	expect(preview.load()[0]).toMatchObject({ up: 1, kills: 2 });
+});
