@@ -1328,7 +1328,9 @@ class Catapult {
 		this.shk = 0;
 		this.arm = CAT_REST;
 		this.beams = [0, 1, 2, 3].map(() => w.pickArt(team, 'beams'));
-		this.wheels = [w.pickArt(team, 'stones'), w.pickArt(team, 'stones')];
+		// On its side's drawn wheels it rolls; with none drawn, it sits on two of its wall's stones and stays put
+		this.rolls = w.hasArt(team, 'wheels');
+		this.wheels = [0, 1].map(() => w.pickArt(team, this.rolls ? 'wheels' : 'stones'));
 		// The rock that's flying off it, between letting go and leaving the bucket
 		this.flying = null;
 		// The way a player has set it to fling, [vx, vy]: it fires that way by itself whenever it's ready
@@ -1436,7 +1438,7 @@ class Catapult {
 			w.props.push(pr);
 		});
 		g.wheels.forEach(([x, y], i) => {
-			const pr = new Prop(w, this.wheels[i], x, y, 26, 26, 'stone');
+			const pr = new Prop(w, this.wheels[i], x, y, 26, 26, this.rolls ? 'wood' : 'stone');
 
 			pr.round = true;
 			pr.z = this.z;
@@ -1471,6 +1473,8 @@ class Catapult {
 			shk: this.shk > 0,
 			b: this.beams.map(ref => [ref.a, ref.i]),
 			wh: this.wheels.map(ref => [ref.a, ref.i]),
+			// On wheels (it rolls), or on stones (it doesn't)
+			...(this.rolls && { rw: true }),
 			...((this.flying ?? this.rocks[0]) && { l: [(this.flying ?? this.rocks[0]).a, (this.flying ?? this.rocks[0]).i] }),
 			// How many rocks its side can still draw
 			dr: AMMO - this.w.drawnRocks[this.team],
@@ -1583,6 +1587,11 @@ export class World {
 	}
 
 	/** One of a side's drawings of a kind, at random, as a reference to it */
+	// Whether a side drew any of a kind
+	hasArt(team, kind) {
+		return Boolean(this.arts[this.artOf[team]][kind]?.length);
+	}
+
 	pickArt(team, kind) {
 		const a = this.artOf[team], items = this.arts[a][kind];
 
@@ -1720,7 +1729,7 @@ export class World {
 	rollCat(team, x) {
 		const cat = this.cats.find(c => c.team === team);
 
-		if (!cat || cat.dead || !Number.isFinite(x)) return false;
+		if (!cat || cat.dead || !cat.rolls || !Number.isFinite(x)) return false;
 
 		const [home, far] = catRange(team);
 

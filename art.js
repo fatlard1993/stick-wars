@@ -283,7 +283,7 @@ export function normBlob(strokes) {
 const areaOf = pts => Math.abs(pts.reduce((sum, p, i) => { const q = pts[(i + 1) % pts.length]; return sum + p.x * q.y - q.x * p.y; }, 0)) / 2;
 
 /** The smallest a stone, a rock or a shield may be across, in pad units: a page shows it as a ring when one's too small */
-export const LEAST_ACROSS = { stone: 50, ammo: 50, shield: 34 };
+export const LEAST_ACROSS = { stone: 50, ammo: 50, shield: 34, wheel: 50 };
 
 export function checkBlob(strokes, what) {
   const pts = allPts(strokes);
@@ -307,9 +307,10 @@ export function checkBlob(strokes, what) {
   for (let i = 0; i < h.length; i++) perim += dist(h[i], h[(i + 1) % h.length]);
   const ink = strokes.reduce((t, s) => t + strokeLen(s), 0);
   if (ink > perim * 2.6) return fail("That's a scribble. Just draw the outline.");
-  // A tall tower shield is still a shield; a stone or a rock that long isn't
-  if (size / Math.max(1, Math.min(bb.w, bb.h)) > (what === 'shield' ? 4.5 : 3)) {
-    return fail(what === 'stone' ? "Too stretched. That's a beam, not a stone." : what === 'shield' ? 'Too thin for a shield.' : 'Too stretched. Ammo should be round-ish.');
+  // A tall tower shield is still a shield; a stone or a rock that long isn't, and a wheel is round
+  if (size / Math.max(1, Math.min(bb.w, bb.h)) > (what === 'shield' ? 4.5 : what === 'wheel' ? 1.5 : 3)) {
+    const msg = { stone: "Too stretched. That's a beam, not a stone.", shield: 'Too thin for a shield.', wheel: 'Wheels are round.' }[what];
+    return fail(msg ?? 'Too stretched. Ammo should be round-ish.');
   }
   return { ok: true };
 }
@@ -344,6 +345,13 @@ export function checkAmmo(strokes) {
   const radius = 9 + 7 * clamp(shape.size / PAD, 0, 1);
   const name = spiky > 0.45 ? 'Spiky Death Ball' : radius > 14 ? 'Big Boulder' : 'Rock';
   return { ok: true, item: { raw: strokes, shape, radius, spiky, name } };
+}
+
+/** A wheel for the catapult: round, spokes or not; with two, it rolls */
+export function checkWheel(strokes) {
+  const r = checkBlob(strokes, 'wheel');
+  if (!r.ok) return r;
+  return { ok: true, item: { raw: strokes, shape: normBlob(strokes) } };
 }
 
 // ---------- long things: beams and weapons ----------
@@ -480,6 +488,8 @@ export const DEFAULT_RAW = {
   stones: () => [[blobS(240, 240, 150, 105, 9)], [blobS(240, 240, 125, 125, 7)], [blobS(240, 240, 165, 95, 11)]],
   beams: () => [[closedPoly([[50, 212], [430, 204], [433, 252], [47, 262]]), lineS(85, 236, 400, 229)]],
   ammo: () => [[blobS(240, 240, 115, 110, 12)], [starS(240, 240, 150, 95, 9)]],
+  // A wheel: a rim and two spokes across it
+  wheels: () => [[ringS(240, 240, 110, 110, 0.03), lineS(150, 240, 330, 240), lineS(240, 150, 240, 330)]],
   // A kite shield at the warrior's hand, a fair size beside him: the example on its page (a shield is never filled in for you)
   shield: () => [[closedPoly([[115, 195], [205, 195], [212, 250], [160, 330], [108, 250]])]],
   swords: () => [
@@ -595,6 +605,7 @@ export const CHECKS = {
   stones: checkStone,
   beams: checkBeam,
   ammo: checkAmmo,
+  wheels: checkWheel,
   swords: checkSword,
   armor: checkArmor,
   shield: checkShield,
@@ -779,6 +790,7 @@ const CPU_RAW = {
     [closedPoly([[55, 220], [425, 214], [428, 250], [52, 258]]), ringS(250, 236, 10, 7)],
   ],
   ammo: () => [[ringS(240, 240, 95, 120, 0.04)], [starS(240, 240, 130, 85, 12)], [blobS(240, 240, 80, 80, 7)]],
+  wheels: () => [[ringS(240, 240, 100, 100, 0.04), lineS(170, 240, 310, 240), lineS(240, 170, 240, 310)]],
   swords: () => [
     // A spear
     [lineS(240, 450, 240, 90), closedPoly([[222, 110], [240, 38], [258, 110]])],

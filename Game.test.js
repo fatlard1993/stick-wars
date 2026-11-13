@@ -346,7 +346,7 @@ test('the art is saved and the battle is not; a game saved mid-battle comes back
 
 	const save = JSON.parse(JSON.stringify(game.toSaveState()));
 
-	expect(save.version).toBe(5);
+	expect(save.version).toBe(Game.version);
 	expect(save.state.art[0].swords).toHaveLength(1);
 
 	const back = new Game({ saveState: save, server: server(), logger: quiet });
@@ -1316,4 +1316,42 @@ test('a catapult rolls forward when its side sends it, pushed by its crew, held 
 	game.act(fox.id, 'roll', { x: -500 });
 	expect(cat.goal).toBe(home);
 	expect(game.viewFor(fox.id).battle.cats.find(c => c.t === 0).g).toBe(home);
+});
+
+test('wheels are drawn last, in the time saved on the pages before: drawn, the catapult rolls; too slow, it sits on stones', () => {
+	// Quick: every page finished early, time saved for the wheels
+	const quick = newGame('cpu', 'war');
+	const fox = quick.addPlayer('🦊');
+
+	for (const { kind } of STEPS.filter(step => !step.banked)) {
+		quick.act(fox.id, 'keep', { strokes: DEFAULT_RAW[kind]()[0] });
+		quick.act(fox.id, 'next');
+	}
+	expect(STEPS[quick.state.drawing[0].step].kind).toBe('wheels');
+	expect(quick.state.drawing[0].left).toBe(30);
+	expect(quick.act(fox.id, 'keep', { strokes: DEFAULT_RAW.wheels()[0] }).ok).toBe(true);
+	quick.act(fox.id, 'next');
+	expect(quick.state.phase).toBe('battle');
+	expect(quick.world.cats.find(c => c.team === 0).rolls).toBe(true);
+
+	// Slow: every page's clock run out, nothing saved, no wheels page, a catapult that stays put
+	const slow = newGame('cpu', 'war');
+	const owl = slow.addPlayer('🦉');
+
+	for (const { kind } of STEPS.filter(step => !step.banked)) {
+		slow.act(owl.id, 'keep', { strokes: DEFAULT_RAW[kind]()[0] });
+		slow.state.drawing[0].left = 0.01;
+		slow.tick();
+	}
+	expect(slow.state.phase).toBe('battle');
+	expect(slow.state.art[0].wheels).toHaveLength(0);
+	expect(slow.world.cats.find(c => c.team === 0).rolls).toBe(false);
+	expect(slow.act(owl.id, 'roll', { x: 600 }).error).toBe('No wheels: it stays put');
+});
+
+test('a war saved before wheels loads with none', () => {
+	const save = { version: 5, state: { style: 'war', art: [{ stickmen: [] }, { stickmen: [] }] } };
+
+	for (const v of [6]) Game.migrations[v](save);
+	expect(save.state.art[0].wheels).toEqual([]);
 });

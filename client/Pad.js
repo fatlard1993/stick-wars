@@ -57,7 +57,7 @@ export const inkStrokes = (g, strokes, k) => {
 };
 
 // What a page draws of each kind, by the name its size check knows it by
-const ACROSS_OF = { stones: 'stone', ammo: 'ammo', shield: 'shield' };
+const ACROSS_OF = { stones: 'stone', ammo: 'ammo', shield: 'shield', wheels: 'wheel' };
 
 /** For a drawing turned down: the ring of the smallest it may be, around it, if it was too small; null if not */
 export const tooSmallRing = (kind, strokes) => {

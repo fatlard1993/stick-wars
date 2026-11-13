@@ -1518,10 +1518,10 @@ export default class BattleScreen extends Screen {
 		g.save();
 		if (cat.shk) g.translate(rand(-2, 2), rand(-1, 1));
 		geo.wheels.forEach(([x, wy], at) => {
-			const wheel = this.item(cat.wh[at], 'stones');
+			const wheel = this.item(cat.wh[at], cat.rw ? 'wheels' : 'stones');
 
 			// Turning as far as it's rolled
-			if (wheel) placeShape(g, wheel.shape, { x, y: wy, a: ((cat.rd ?? 0) / 13) * cat.d, sx: 26, sy: 26 }, FILLS.stone, INK, 1.6);
+			if (wheel) placeShape(g, wheel.shape, { x, y: wy, a: ((cat.rd ?? 0) / 13) * cat.d, sx: 26, sy: 26 }, cat.rw ? FILLS.wood : FILLS.stone, cat.rw ? WOOD_INK : INK, 1.6);
 		});
 		// Rolling somewhere: a dotted track to where it's going, and a dotted wheel there
 		if (cat.g !== undefined) {

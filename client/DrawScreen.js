@@ -17,6 +17,7 @@ const PRAISE = {
 	stones: ['Solid.', 'Rock on.', 'Stacked!'],
 	beams: ['Timber!', 'Sturdy.', 'Nailed it.'],
 	ammo: ['Loaded!', 'That will hurt.', 'Incoming!'],
+	wheels: ['Rolling!', 'Round enough.', 'Wheee.'],
 	swords: ['Sharp!', 'Brutal.', 'Oh, that is nasty.'],
 	armor: ['Clank!', 'Tin can!', 'Well wrapped.'],
 	shield: ['Blocked!', 'Hide behind that.', 'Sturdy.'],
@@ -88,8 +89,15 @@ const Heading = styled(
 			font-size: 1.4em;
 		}
 
-		& .dots { margin-left: auto; display: flex; gap: 6px; }
+		/* The title gives way first (cut short) so the counts and dots always fit */
+		& > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+		& .dots { margin-left: auto; display: flex; gap: 6px; flex-shrink: 0; }
 		& .dots i { width: 14px; height: 14px; border: 2.5px solid ${PENCIL}; border-radius: 50% 45% 50% 40%; }
+		@media (max-width: 480px) {
+			gap: ${space.sm};
+			& .dots { gap: 4px; }
+			& .dots i { width: 10px; height: 10px; border-width: 2px; }
+		}
 		& .dots i.done { background: ${PENCIL}; }
 		& .dots i.now { background: #ffe36e; }
 	`,
@@ -293,6 +301,13 @@ export default class DrawScreen extends Screen {
 		if (!mine || mine.done) return this.showWaiting(view);
 		this.showPad();
 		if (mine.step !== this.step) this.setStep(mine.step);
+		// The time saved so far for the wheels page, shown on the pages before it
+		const banked = this.steps.find(step => step.banked);
+
+		if (this.bankBadge) {
+			this.bankBadge.style.display = banked && !this.steps[mine.step].banked ? 'inline-flex' : 'none';
+			if (banked) this.bankBadge.replaceChildren(icon('wheel', { size: '1.2em' }), `${Math.floor(Math.min(mine.bank ?? 0, banked.seconds))}`);
+		}
 
 		const ends = performance.now() + mine.left * 1000;
 
@@ -315,7 +330,9 @@ export default class DrawScreen extends Screen {
 		dots.append(
 			...this.steps.map((_, at) => Object.assign(document.createElement('i'), { className: at < step ? 'done' : at === step ? 'now' : '' })),
 		);
-		this.heading.elem.replaceChildren(Object.assign(document.createElement('span'), { textContent: title }), dots);
+		this.bankBadge = Object.assign(document.createElement('span'), { title: 'Time saved for the wheels' });
+		this.bankBadge.style.cssText = 'display: none; align-items: center; gap: 3px; margin-left: auto; flex-shrink: 0; font-size: 0.9em; opacity: 0.8';
+		this.heading.elem.replaceChildren(Object.assign(document.createElement('span'), { textContent: title }), this.bankBadge, dots);
 		this.borrowButton.elem.style.display = kind === 'swords' ? '' : 'none';
 		this.enlistButton.elem.style.display = kind === 'stickmen' && this.steps === STYLES.gladiator ? '' : 'none';
 		// No skipping a gladiator: it's drawn, or enlisted from the hall

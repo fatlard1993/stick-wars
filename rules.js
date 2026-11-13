@@ -12,7 +12,12 @@ export const STEPS = [
 	{ kind: 'beams', seconds: 25, title: 'Draw beams for the catapult' },
 	{ kind: 'ammo', seconds: 25, title: 'Draw rocks for the catapult' },
 	{ kind: 'swords', seconds: 40, title: 'Draw weapons in the box' },
+	// Last, and only as long as the time saved on the pages before (up to its seconds): a catapult with wheels rolls
+	{ kind: 'wheels', seconds: 30, title: 'Wheels for the catapult, in the time you saved', optional: true, banked: true },
 ];
+
+/** The least time saved that still gets a banked page: any less and it's skipped */
+export const LEAST_BANKED = 2;
 
 /** A gladiator's pages: one warrior, its weapon, and armor and a shield if wanted (left empty, it fights without) */
 export const GLADIATOR_STEPS = [

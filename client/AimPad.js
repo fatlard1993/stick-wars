@@ -123,6 +123,8 @@ export default class AimPad extends Pad {
 
 		this.backButton.elem.style.transform = toward > 0 ? 'scaleX(-1)' : '';
 		this.onButton.elem.style.transform = toward > 0 ? '' : 'scaleX(-1)';
+		// No wheels drawn, no rolling: the arrows aren't there at all
+		this.backButton.elem.style.display = this.onButton.elem.style.display = cat?.rw ? '' : 'none';
 		this.backButton.elem.style.visibility = Math.abs(at - home) > 1 ? 'visible' : 'hidden';
 		this.onButton.elem.style.visibility = Math.abs(far - at) > 1 ? 'visible' : 'hidden';
 		this.fit();

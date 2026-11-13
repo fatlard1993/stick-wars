@@ -6,6 +6,7 @@ import { AMMO, DT, ORDERS, World } from './battle.js';
 import {
 	BASE_ARMY,
 	CPU_SIZE,
+	LEAST_BANKED,
 	MOST_BONUS,
 	MOST_KEPT,
 	TICK_MS,
@@ -42,7 +43,7 @@ const END_AFTER = 2.2, SETTLE = 8, NEXT_DUEL = 6;
 // battle (battle.js), stepped here and sent to every page many times a second. Drawings are judged here too, so what
 // a page keeps is what passed.
 export default class Game extends BaseGame {
-	static version = 5;
+	static version = 6;
 	static migrations = {
 		// A save from version 2, which had no ammo page, part way past beams moves on a step (save.version is the version
 		// it was saved as, while migrating)
@@ -62,6 +63,11 @@ export default class Game extends BaseGame {
 			save.state.entrants ??= [];
 			save.state.host ??= null;
 			save.state.bracket ??= null;
+		},
+		// Version 6 added wheels to a war's catapult: a war saved before has none drawn (its catapult won't roll)
+		6: save => {
+			if (save.state?.style !== 'war') return;
+			for (const art of save.state.art ?? []) if (art) art.wheels ??= [];
 		},
 	};
 
@@ -257,6 +263,7 @@ export default class Game extends BaseGame {
 
 			if (this.state.phase !== 'battle' || !this.world) refuse('No battle on');
 			if (this.world.arena) refuse('No catapult in the arena');
+			if (!this.world.cats.find(c => c.team === team)?.rolls) refuse('No wheels: it stays put');
 			if (!this.world.rollCat(team, Number(x))) refuse('Not now');
 		},
 
@@ -415,11 +422,15 @@ export default class Game extends BaseGame {
 			side.art[kind] = this.defaults(kind);
 			this.artChanged();
 		}
+		// Time left on a page finished early is saved, for the page drawn in the time saved (the catapult's wheels)
+		if (!steps[drawing.step].banked) drawing.bank = (drawing.bank ?? 0) + Math.max(0, drawing.left);
 		drawing.step++;
 		// An enlisted gladiator comes with its gear: only its weapon's page is left
 		while (drawing.enlisted && drawing.step < steps.length && steps[drawing.step].kind !== 'swords') drawing.step++;
+		// Too little time saved for the last page: none
+		while (drawing.step < steps.length && steps[drawing.step].banked && (drawing.bank ?? 0) < LEAST_BANKED) drawing.step++;
 		if (drawing.step >= steps.length) drawing.done = true;
-		else drawing.left = steps[drawing.step].seconds;
+		else drawing.left = steps[drawing.step].banked ? Math.min(drawing.bank, steps[drawing.step].seconds) : steps[drawing.step].seconds;
 		this.startWhenReady();
 	}
 
