@@ -7,7 +7,7 @@ import { STYLES, TEAMS, stepsOf } from '../rules.js';
 import BorrowPicker from './BorrowPicker.js';
 import HallPicker from './HallPicker.js';
 import { icon } from './icons.js';
-import { PEN, Pad, SHEET, inkStrokes, offPad } from './Pad.js';
+import { PEN, Pad, SHEET, drawRing, inkStrokes, offPad, tooSmallRing } from './Pad.js';
 import { drawRawFit } from './paint.js';
 import { PENCIL } from './theme.js';
 import { doodle } from './ui.js';
@@ -372,6 +372,11 @@ export default class DrawScreen extends Screen {
 		const pieces = offPad(line, { x0: area.x0 / k, y0: area.y0 / k, x1: area.x1 / k, y1: area.y1 / k });
 		const first = !this.strokes.length;
 
+		// Drawing again: the ring showing how big is big enough has done its job
+		if (this.ring) {
+			this.ring = null;
+			this.redraw();
+		}
 		for (const piece of pieces) this.strokes.push(piece.map(({ x, y }) => ({ x: x * k, y: y * k })));
 		// The first line wipes the example away; a line that left the pad is drawn again without what was off it
 		if ((first && this.strokes.length) || pieces.length !== 1 || pieces[0].length !== line.length) this.redraw();
@@ -379,11 +384,13 @@ export default class DrawScreen extends Screen {
 
 	undo() {
 		this.strokes.pop();
+		this.ring = null;
 		this.redraw();
 	}
 
 	clear() {
 		this.strokes = [];
+		this.ring = null;
 		this.redraw();
 	}
 
@@ -400,6 +407,8 @@ export default class DrawScreen extends Screen {
 
 		if (!said.ok) {
 			this.sound?.play('nope');
+			// Too small: the smallest it may be, drawn as a ring around it, so the next one's drawn big enough
+			if (this.strokes === strokes && (this.ring = tooSmallRing(kind, strokes))) this.redraw();
 
 			return;
 		}
@@ -455,6 +464,7 @@ export default class DrawScreen extends Screen {
 		g.strokeStyle = '#222';
 		g.lineWidth = PEN * k;
 		path(this.strokes);
+		drawRing(g, this.ring, k);
 	}
 
 	showPad() {

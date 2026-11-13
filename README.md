@@ -65,7 +65,7 @@ The last side with anyone standing wins. Then fight again with the same armies (
 
 ### Drawing your gladiator
 
-Four pages: your gladiator (one stick man, a minute), its weapon (in the box, as for an army, 50 seconds), then armor (a minute) and a shield (45 seconds) if you want them: leave either page empty to fight without. Armor is drawn right over your gladiator, shown faintly on its page; a shield beside it, its size against your gladiator's being its size in the arena. Each page takes one drawing: keep it and it's on to the next page. The gladiator's own page can't be skipped: draw one, or enlist one from the hall (the trophy). The weapon can be borrowed from the armory instead.
+Four pages: your gladiator (one stick man, a minute), its weapon (in the box, as for an army, 50 seconds), then armor (a minute) and a shield (45 seconds) if you want them: leave either page empty to fight without. Armor is drawn right over your gladiator, shown faintly on its page; a shield beside it, its size against your gladiator's being its size in the arena: anything from a little buckler to a tall tower shield. A drawing turned down for being too small (a shield, a stone, a rock) gets a red dotted ring around it, the smallest it may be. Each page takes one drawing: keep it and it's on to the next page. The gladiator's own page can't be skipped: draw one, or enlist one from the hall (the trophy). The weapon can be borrowed from the armory instead.
 
 ### The fight
 

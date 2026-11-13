@@ -279,17 +279,27 @@ export function normBlob(strokes) {
   return { strokes: ns, hull: hull(ns.flat()), size: s };
 }
 
+// The room a closed outline goes round (shoelace)
+const areaOf = pts => Math.abs(pts.reduce((sum, p, i) => { const q = pts[(i + 1) % pts.length]; return sum + p.x * q.y - q.x * p.y; }, 0)) / 2;
+
+/** The smallest a stone, a rock or a shield may be across, in pad units: a page shows it as a ring when one's too small */
+export const LEAST_ACROSS = { stone: 50, ammo: 50, shield: 34 };
+
 export function checkBlob(strokes, what) {
   const pts = allPts(strokes);
   if (pts.length < 6) return fail('Draw something first.');
   const bb = bboxOf(pts), size = Math.max(bb.w, bb.h);
-  if (size < 50) return fail('Too tiny. Draw it bigger.');
+  if (size < (LEAST_ACROSS[what] ?? 50)) return fail('Too small. At least as big as the red ring.');
   let closed = false;
   for (const s of strokes) {
     for (const l of findLoops(s)) {
       const lb = bboxOf(l);
       if (Math.max(lb.w, lb.h) >= size * 0.5) closed = true;
     }
+    // Or an outline back where it started, around real room: a thin one (a tower shield) is too short to look like a
+    // loop to findLoops, which a line drawn there and back must not
+    const sb = bboxOf(s);
+    if (s.length > 5 && Math.max(sb.w, sb.h) >= size * 0.5 && dist(s[0], s.at(-1)) < Math.max(16, Math.max(sb.w, sb.h) * 0.2) && areaOf(s) > sb.w * sb.h * 0.35) closed = true;
   }
   if (!closed) return fail('Close the shape: one lumpy outline, no gaps.');
   const h = hull(pts);
@@ -297,8 +307,9 @@ export function checkBlob(strokes, what) {
   for (let i = 0; i < h.length; i++) perim += dist(h[i], h[(i + 1) % h.length]);
   const ink = strokes.reduce((t, s) => t + strokeLen(s), 0);
   if (ink > perim * 2.6) return fail("That's a scribble. Just draw the outline.");
-  if (size / Math.max(1, Math.min(bb.w, bb.h)) > 3) {
-    return fail(what === 'stone' ? "Too stretched. That's a beam, not a stone." : 'Too stretched. Ammo should be round-ish.');
+  // A tall tower shield is still a shield; a stone or a rock that long isn't
+  if (size / Math.max(1, Math.min(bb.w, bb.h)) > (what === 'shield' ? 4.5 : 3)) {
+    return fail(what === 'stone' ? "Too stretched. That's a beam, not a stone." : what === 'shield' ? 'Too thin for a shield.' : 'Too stretched. Ammo should be round-ish.');
   }
   return { ok: true };
 }

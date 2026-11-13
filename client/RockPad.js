@@ -3,7 +3,7 @@ import { act } from '@fatlard1993/web-game-framework/client';
 
 import { DEFAULT_RAW, PAD, clamp } from '../art.js';
 import { icon } from './icons.js';
-import { PEN, Pad, SHEET, inkStrokes, offPad } from './Pad.js';
+import { PEN, Pad, SHEET, drawRing, inkStrokes, offPad, tooSmallRing } from './Pad.js';
 import { PENCIL } from './theme.js';
 import { doodle } from './ui.js';
 
@@ -129,12 +129,17 @@ export default class RockPad extends Corner {
 		const first = !this.strokes.length;
 		const pieces = offPad(line, { x0: 0, y0: 0, x1: this.size, y1: this.size });
 
+		if (this.ring) {
+			this.ring = null;
+			this.redraw();
+		}
 		for (const piece of pieces) this.strokes.push(piece.map(({ x, y }) => ({ x: x * k, y: y * k })));
 		if ((first && this.strokes.length) || pieces.length !== 1 || pieces[0].length !== line.length) this.redraw();
 	}
 
 	undo() {
 		this.strokes.pop();
+		this.ring = null;
 		this.redraw();
 	}
 
@@ -147,7 +152,12 @@ export default class RockPad extends Corner {
 
 		const said = await act('rock', { strokes }).finally(() => (this.keeping = false));
 
-		if (!said.ok) return this.sound?.play('nope');
+		if (!said.ok) {
+			// Too small: the smallest a rock may be, ringed around it
+			if (this.strokes === strokes && (this.ring = tooSmallRing('ammo', strokes))) this.redraw();
+
+			return this.sound?.play('nope');
+		}
 		this.sound?.play('keep');
 		if (this.strokes === strokes) {
 			this.strokes = [];
@@ -171,5 +181,6 @@ export default class RockPad extends Corner {
 		g.strokeStyle = '#222';
 		g.lineWidth = PEN * k;
 		inkStrokes(g, this.strokes, k);
+		drawRing(g, this.ring, k);
 	}
 }
