@@ -8,6 +8,7 @@ import DrawScreen from './DrawScreen.js';
 import { icon } from './icons.js';
 import { count, doodle, lined, soundSwitch } from './ui.js';
 import battle from './sounds/battle.mp3';
+import boo from './sounds/boo.mp3';
 import crash from './sounds/crash.mp3';
 import deploy from './sounds/deploy.mp3';
 import drawing from './sounds/drawing.mp3';
@@ -16,6 +17,8 @@ import keep from './sounds/keep.mp3';
 import launch from './sounds/launch.mp3';
 import lose from './sounds/lose.mp3';
 import nope from './sounds/nope.mp3';
+import ooh from './sounds/ooh.mp3';
+import roar from './sounds/roar.mp3';
 import sever from './sounds/sever.mp3';
 import squish from './sounds/squish.mp3';
 import swing from './sounds/swing.mp3';
@@ -56,7 +59,7 @@ export default class Play extends View {
 	constructor(options, ...children) {
 		const status = new Status();
 		const sound = createSound({
-			effects: { hit, sever, squish, swing, launch, crash, thud, deploy, keep, nope, win, lose },
+			effects: { hit, sever, squish, swing, launch, crash, thud, deploy, keep, nope, win, lose, roar, ooh, boo },
 			music: { drawing, battle },
 		});
 

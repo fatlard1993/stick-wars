@@ -13,6 +13,8 @@ export const ARMY = 12, AMMO = 10, RELOAD = 4.5;
 export const MOST_FLING = 1350;
 export const CAT_REST = PI - 0.3, CAT_FIRE = 1.5 * PI + 0.35, CAT_ARM = 74, CAT_PIV = -56;
 export const WALL_X = [430, W - 430 - WALL.cols * WALL.cw];
+/** How far either side of the arena's middle its two gates stand, in its back wall: where gladiators walk out */
+export const ARENA_GATE = 330;
 /** Each side's catapult, behind its wall among its army's rows */
 export const CAT_X = [[170], [W - 170]];
 /** How long a side waits between sending stick men out one at a time, in seconds */

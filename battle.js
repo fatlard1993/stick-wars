@@ -27,6 +27,7 @@ import {
 	faded,
 	ADJ,
 	AMMO,
+	ARENA_GATE,
 	ARMY,
 	CAT_FIRE,
 	CAT_REST,
@@ -280,8 +281,8 @@ class Stickman {
 		this.body = new Body(w, w.pickArt(team, 'stickmen'), team, this.face, SM_H * rand(0.9, 1.1));
 		this.body.owner = this;
 		this.body.weapon = { ref: w.pickArt(team, 'swords'), blood: 0 };
-		// In the arena, the two face each other across its middle
-		const home = w.arena ? { x: W / 2 - this.face * 170, z: DEPTH / 2 } : homeOf(team, k, w.army[team]);
+		// In the arena, each walks out of its own gate in the back wall
+		const home = w.arena ? { x: W / 2 - this.face * ARENA_GATE, z: DEPTH - 12 } : homeOf(team, k, w.army[team]);
 
 		this.home = home.x;
 		this.homeZ = home.z;
@@ -365,6 +366,7 @@ class Stickman {
 			this.kb -= this.face * 120;
 			this.retreat = Math.max(this.retreat, 0.2);
 			this.w.sound('swing');
+			this.w.dust(this.x, GROUND - 4, 6, 'sand', this.z);
 
 			return true;
 		}
@@ -386,6 +388,7 @@ class Stickman {
 		this.w.dust(h.x, h.y, 5, 'wood', this.z);
 		this.w.sound('thud');
 		if (sh.hp <= 0) this.breakShield();
+		else this.w.dust(this.x, GROUND - 4, 4, 'sand', this.z);
 
 		return true;
 	}
@@ -411,6 +414,7 @@ class Stickman {
 		w.props.push(pr);
 		w.sound('crash');
 		w.dust(h.x, h.y, 10, 'wood', this.z);
+		w.crowd('ooh');
 		this.body.shield = null;
 	}
 
@@ -588,7 +592,8 @@ class Stickman {
 			const dx = tg.x - this.x, adx = Math.abs(dx);
 			const lined = Math.abs(tg.z - this.z) < LANE;
 
-			goalZ = tg.z;
+			// Gladiators meet out in the middle of the arena, not along its back wall
+			goalZ = this.style ? lerp(tg.z, DEPTH / 2, 0.5) : tg.z;
 			this.face = dx >= 0 ? 1 : -1;
 			if (adx > R) move = this.face;
 			else if (adx < 9) move = -this.face;
@@ -949,6 +954,11 @@ class Stickman {
 		w.spray(hx, hy, (6 + dmg * 0.5 + st.bleed * 3) * (1 - prot), dir, -0.35, 0.35, 160 + dmg * 3, this.z);
 		if (prot > 0.2) w.dust(hx, hy, 4, 'stone', this.z);
 		w.sound(prot > 0.3 ? 'thud' : 'hit');
+		// The arena's crowd gasps at a big blow, and he skids in the sand
+		if (w.arena) {
+			if (dmg > 45) w.crowd('ooh');
+			w.dust(this.x, GROUND - 4, 5, 'sand', this.z);
+		}
 		this.kb += dir * (40 + st.knock * 70) * (1 - steady);
 		this.stag = 0.25 * (1 - steady);
 		if (this.atk && Math.random() < 0.5) this.atk = null;
@@ -967,6 +977,7 @@ class Stickman {
 	sever(b, ix) {
 		if (!this.body.owned[b]) return;
 		this.w.cut(this.body, b, ix);
+		this.w.crowd('roar');
 		if (b === 1) {
 			this.w.stats.heads++;
 			this.w.slowmo(0.35);
@@ -1011,6 +1022,8 @@ class Stickman {
 		}
 		b.deadAt = this.w.time;
 		this.w.stats.kills[1 - this.team]++;
+		this.w.crowd('roar');
+		if (this.w.arena) this.w.dust(this.x, GROUND - 4, 14, 'sand', this.z);
 	}
 }
 
@@ -1629,6 +1642,8 @@ export class World {
 		const man = this.arena && this.stickmen.find(s => s.team === team && s.alive());
 
 		if (!man || !STANCES.includes(name)) return false;
+		// The crowd has no time for one backing off
+		if (name === 'back' && man.stance() !== 'back') this.crowd('boo');
 		man.shout = { name, until: this.time + STANCE_FOR };
 
 		return true;
@@ -1733,6 +1748,11 @@ export class World {
 	bigSplat(x, z = 0) {
 		this.emit({ e: 'splat', x: Math.round(x), z: Math.round(z) });
 		this.spray(x, GROUND - 5, 60, 0, -1, 0.45, 380, z);
+	}
+
+	/** The arena's crowd roaring, gasping or booing (in a war there's nobody watching): heard, and seen in the stands */
+	crowd(kind) {
+		if (this.arena && !this.events.some(event => event.e === 'crowd')) this.emit({ e: 'crowd', n: kind });
 	}
 
 	sound(name) {

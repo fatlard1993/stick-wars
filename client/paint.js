@@ -2,7 +2,7 @@
 // ammo, weapons) filled and inked, a stick man skinned onto its joints, and the lined-paper battlefield.
 
 import { BONES, TAU, allPts, bboxOf, clamp } from '../art.js';
-import { ADJ, DEPTH, GROUND, H, SKEW_X, SKEW_Y, W } from '../field.js';
+import { ADJ, ARENA_GATE, DEPTH, GROUND, H, SKEW_X, SKEW_Y, W, depthScale } from '../field.js';
 import { TEAMS } from '../rules.js';
 
 export const INK = '#2b2b2b';
@@ -156,6 +156,142 @@ export const drawBody = (g, rig, body, color, width = 2.6) => {
 };
 
 let paper = null;
+let arena = null;
+
+/** How tall the arena's back wall stands, and how high its stands rise behind it, in world units at the back */
+export const ARENA_WALL = 64, ARENA_STANDS = 260;
+/** How many rows of benches the stands have */
+export const ARENA_ROWS = 8;
+
+/**
+ * The arena, drawn once: the notebook's sky, a floor of raked sand running back to a stone wall, two gates in it where the
+ * gladiators come out, and wooden stands rising behind it (the crowd on them is drawn live, by the battle)
+ */
+export const arenaBackground = () => {
+	if (arena) return arena;
+	arena = document.createElement('canvas');
+	arena.width = W;
+	arena.height = H;
+
+	const g = arena.getContext('2d');
+	const backY = GROUND - DEPTH * SKEW_Y, backX = DEPTH * SKEW_X, k = depthScale(DEPTH);
+	const wallTop = backY - ARENA_WALL * k, standsTop = wallTop - ARENA_STANDS * k;
+
+	g.fillStyle = '#f7f2e4';
+	g.fillRect(0, 0, W, H);
+	g.strokeStyle = 'rgba(90,130,210,0.22)';
+	g.lineWidth = 1.5;
+	for (let y = 60; y < standsTop; y += 32) {
+		g.beginPath();
+		g.moveTo(0, y);
+		g.lineTo(W, y);
+		g.stroke();
+	}
+	g.lineCap = g.lineJoin = 'round';
+	// The stands: wooden benches stepping up, the crowd's rows
+	g.fillStyle = '#e2cfa8';
+	g.fillRect(0, standsTop, W, wallTop - standsTop);
+	g.strokeStyle = 'rgba(110,80,45,0.55)';
+	g.lineWidth = 2;
+	for (let row = 0; row <= ARENA_ROWS; row++) {
+		const y = standsTop + ((wallTop - standsTop) * row) / ARENA_ROWS;
+
+		g.beginPath();
+		g.moveTo(0, y);
+		g.lineTo(W, y);
+		g.stroke();
+	}
+	// The wall: big stones in rows, pencilled
+	g.fillStyle = '#d9cfba';
+	g.fillRect(0, wallTop, W, backY - wallTop);
+	g.strokeStyle = 'rgba(60,60,60,0.45)';
+	g.lineWidth = 1.6;
+	const course = (backY - wallTop) / 3;
+
+	for (let row = 0; row < 3; row++) {
+		const y = wallTop + row * course;
+
+		g.beginPath();
+		g.moveTo(0, y);
+		g.lineTo(W, y);
+		for (let x = (row % 2) * 30; x < W; x += 60) {
+			g.moveTo(x + Math.sin(x + row) * 3, y);
+			g.lineTo(x + Math.sin(x * 2 + row) * 3, y + course);
+		}
+		g.stroke();
+	}
+	// The gates: dark arches, their portcullis raised
+	for (const side of [-1, 1]) {
+		const x = W / 2 + side * ARENA_GATE + backX, wide = 70 * k, tall = ARENA_WALL * k * 0.92;
+
+		g.fillStyle = '#4a3f33';
+		g.beginPath();
+		g.moveTo(x - wide / 2, backY);
+		g.lineTo(x - wide / 2, backY - tall + wide / 2);
+		g.arc(x, backY - tall + wide / 2, wide / 2, Math.PI, 0);
+		g.lineTo(x + wide / 2, backY);
+		g.closePath();
+		g.fill();
+		g.strokeStyle = '#2b2b2b';
+		g.lineWidth = 2.5;
+		g.stroke();
+		g.strokeStyle = 'rgba(30,30,30,0.8)';
+		g.lineWidth = 1.5;
+		g.beginPath();
+		for (let bar = -2; bar <= 2; bar++) {
+			g.moveTo(x + bar * wide * 0.18, backY - tall + 4);
+			g.lineTo(x + bar * wide * 0.18, backY - tall + wide * 0.45);
+		}
+		g.moveTo(x - wide * 0.42, backY - tall + wide * 0.45);
+		g.lineTo(x + wide * 0.42, backY - tall + wide * 0.45);
+		g.stroke();
+	}
+	g.strokeStyle = '#3a3a3a';
+	g.lineWidth = 2.5;
+	g.beginPath();
+	g.moveTo(0, wallTop);
+	g.lineTo(W, wallTop);
+	g.moveTo(0, backY);
+	g.lineTo(W, backY);
+	g.stroke();
+	// The floor: sand, raked in long curves and speckled
+	g.fillStyle = '#ecdcae';
+	g.beginPath();
+	g.moveTo(-50, GROUND);
+	g.lineTo(W + 50, GROUND);
+	g.lineTo(W + 50 + backX, backY);
+	g.lineTo(-50 + backX, backY);
+	g.closePath();
+	g.fill();
+	g.fillStyle = '#e2cf9b';
+	g.fillRect(0, GROUND, W, H - GROUND);
+	g.strokeStyle = 'rgba(150,120,70,0.22)';
+	g.lineWidth = 1.4;
+	for (let z = 14; z < DEPTH; z += 22) {
+		g.beginPath();
+		for (let x = -40; x <= W + 40; x += 30) {
+			const px = x + z * SKEW_X, py = GROUND - z * SKEW_Y + Math.sin(x * 0.012 + z) * 3;
+
+			if (x > -40) g.lineTo(px, py);
+			else g.moveTo(px, py);
+		}
+		g.stroke();
+	}
+	g.fillStyle = 'rgba(120,95,55,0.35)';
+	for (let i = 0; i < 900; i++) {
+		const z = Math.random() * DEPTH, x = Math.random() * W + z * SKEW_X, y = GROUND - z * SKEW_Y;
+
+		g.fillRect(x, y, 1.6, 1.6);
+	}
+	g.strokeStyle = '#3a3a3a';
+	g.lineWidth = 3;
+	g.beginPath();
+	g.moveTo(0, GROUND);
+	g.lineTo(W, GROUND);
+	g.stroke();
+
+	return arena;
+};
 
 /** The battlefield's paper: lines, a margin, a scribbled sun and clouds, the ground hatched under its pencil line */
 export const paperBackground = () => {

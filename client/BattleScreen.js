@@ -2,7 +2,7 @@ import { Component, styled } from '@vanilla-bean/components';
 import { act, createInput } from '@fatlard1993/web-game-framework/client';
 import { Stage } from '@fatlard1993/web-game-framework/ui';
 
-import { TAU, clamp, lerp, rand, segDist } from '../art.js';
+import { TAU, clamp, lerp, pick, rand, segDist } from '../art.js';
 import {
 	DEPTH,
 	GRAV,
@@ -25,11 +25,26 @@ import { TEAMS, TICK_MS } from '../rules.js';
 import AimPad from './AimPad.js';
 import RockPad from './RockPad.js';
 import { drawIcon, icon } from './icons.js';
-import { FILLS, GORE, INK, WOOD_INK, drawBlade, drawBody, mixColor, paperBackground, placeShape, teamInk } from './paint.js';
+import {
+	ARENA_ROWS,
+	ARENA_STANDS,
+	ARENA_WALL,
+	FILLS,
+	GORE,
+	INK,
+	WOOD_INK,
+	arenaBackground,
+	drawBlade,
+	drawBody,
+	mixColor,
+	paperBackground,
+	placeShape,
+	teamInk,
+} from './paint.js';
 import { HAND, PENCIL, RED_PENCIL } from './theme.js';
 import { count, doodle } from './ui.js';
 
-const DUST = { stone: '#9b9488', wood: '#b98a55' };
+const DUST = { stone: '#9b9488', wood: '#b98a55', sand: '#d2b77c' };
 // A full-strength fling is a drag this long on the screen, in CSS pixels, whatever the screen's size
 const FULL_PULL = 130;
 // How far a press may wander and still be a tap, in screen pixels
@@ -479,6 +494,11 @@ export default class BattleScreen extends Screen {
 		} else if (event.e === 'splat') {
 			for (let i = 0; i < 30; i++) this.splat(event.x + rand(-40, 40), clamp(z + rand(-12, 12), 0, DEPTH), rand(2, 6));
 		} else if (event.e === 'sound') this.sound?.play(event.n);
+		else if (event.e === 'crowd') {
+			// The stands react: up on their feet for a roar or a gasp, arms down and swaying for a boo
+			this.cheer = { kind: event.n, at: performance.now() };
+			this.sound?.play(event.n);
+		}
 		else if (event.e === 'shake') this.shake = Math.min(14, this.shake + event.v);
 		if (this.parts.length > 3000) this.parts.splice(0, this.parts.length - 3000);
 	}
@@ -569,9 +589,14 @@ export default class BattleScreen extends Screen {
 		const fit = Math.min(width / W, mainHeight / H);
 		// Upright, the main view crops the sky like the side-on view does, zoomed in as far as still shows a base and its
 		// wall across (UPRIGHT_SPAN of the field); what's left over above is sky for the arcs
-		// A gladiators' fight is seen close up, the two of them across the screen
+		// A gladiators' fight is seen close up, zoomed out only as far as keeps both of them in sight
+		const fighters = this.arena ? (this.cur?.bodies ?? []).filter(body => body.hp !== undefined) : [];
+		const apart = fighters.length > 1 ? Math.abs(fighters[0].j[4] - fighters[1].j[4]) + 140 : 0;
+
+		this.arenaSpan = lerp(this.arenaSpan ?? apart, Math.max(upright ? ARENA_SPAN_UPRIGHT : ARENA_SPAN, apart), 0.08);
+
 		const base = this.arena
-			? Math.min(mainHeight / (H - VIEW_TOP), width / (upright ? ARENA_SPAN_UPRIGHT : ARENA_SPAN))
+			? Math.min(mainHeight / (H - VIEW_TOP), width / this.arenaSpan)
 			: upright
 				? Math.min(mainHeight / (H - VIEW_TOP), width / UPRIGHT_SPAN)
 				: Math.max(fit, Math.min(READABLE, height / (H - VIEW_TOP)));
@@ -580,8 +605,6 @@ export default class BattleScreen extends Screen {
 		const seen = width / scale;
 
 		// In the arena it follows the fight: between the two gladiators, easing along as they move
-		const fighters = this.arena ? (this.cur?.bodies ?? []).filter(body => body.hp !== undefined) : [];
-
 		if (fighters.length) {
 			const mid = fighters.reduce((sum, body) => sum + body.j[4], 0) / fighters.length;
 
@@ -923,17 +946,74 @@ export default class BattleScreen extends Screen {
 		return scene.sort((a, b) => b.z - a.z);
 	}
 
-	// The paper, the blood on it, the field's things and what's flying, in whatever transform the context has
+	// The paper (or the arena, its crowd and all), the blood on it, the field's things and what's flying, in whatever
+	// transform the context has
 	drawWorld(g, scene) {
 		g.save();
 		g.beginPath();
 		g.rect(0, 0, W, H);
 		g.clip();
-		g.drawImage(paperBackground(), 0, 0);
+		g.drawImage(this.arena ? arenaBackground() : paperBackground(), 0, 0);
+		if (this.arena) this.drawCrowd(g);
 		g.drawImage(this.decal, 0, 0);
 		g.lineCap = g.lineJoin = 'round';
 		for (const thing of scene) thing.draw();
 		this.drawParts(g);
+		g.restore();
+	}
+
+	// The arena's crowd in its stands: little stick people in rows, bobbing; on their feet with their arms up when the crowd
+	// roars or gasps, arms down and swaying when it boos, settling again over a couple of seconds
+	drawCrowd(g) {
+		const k = depthScale(DEPTH), backY = GROUND - DEPTH * SKEW_Y, wallTop = backY - ARENA_WALL * k;
+		const t = performance.now() / 1000, since = this.cheer ? t - this.cheer.at / 1000 : 9;
+		const heat = clamp(1 - since / 2.5, 0, 1), booing = this.cheer?.kind === 'boo' && heat > 0;
+		// Over at the end: everyone on their feet
+		const roused = this.cur?.over || this.view?.state.phase === 'over' ? 1 : booing ? 0 : heat;
+
+		// Each row's people in order of their ink, so a row is drawn in a few strokes, not hundreds
+		this.fans ??= Array.from({ length: ARENA_ROWS }, () =>
+			Array.from({ length: Math.ceil(W / 22) + 4 }, (_, i) => ({
+				x: i * 22 - 30 + rand(-6, 6),
+				phase: rand(0, TAU),
+				ink: Math.random() < 0.7 ? PENCIL : pick(['#1f3f9e', '#1c6e35', '#8a3b2a', '#6b5a8e', '#a0702a']),
+				s: rand(0.85, 1.1),
+			})).sort((a, b) => (a.ink < b.ink ? -1 : 1)),
+		);
+		g.save();
+		g.lineWidth = 1.6;
+		this.fans.forEach((row, r) => {
+			const base = wallTop - 4 - r * ((ARENA_STANDS * k) / ARENA_ROWS), size = 11 * k * (1 - r * 0.04);
+			let ink = null;
+
+			for (const fan of row) {
+				if (fan.ink !== ink) {
+					if (ink) g.stroke();
+					ink = fan.ink;
+					g.strokeStyle = ink;
+					g.beginPath();
+				}
+				const x = fan.x + DEPTH * SKEW_X, s = size * fan.s;
+				const hop = roused * Math.max(0, Math.sin(t * 13 + fan.phase)) * 6 + Math.sin(t * 2 + fan.phase) * 0.8;
+				const sway = booing ? Math.sin(t * 6 + fan.phase) * 2.5 : 0;
+				const feet = base - hop, hip = feet - s * 0.8, neck = hip - s * 0.9, head = neck - s * 0.45;
+				// Arms: up and waving when roused, hanging limp when booing, down at their sides otherwise
+				const up = roused > 0.15 ? -1 : booing ? 1.2 : 0.9;
+
+				g.moveTo(x + sway + s * 0.42, head);
+				g.arc(x + sway, head, s * 0.42, 0, TAU);
+				g.moveTo(x + sway, neck);
+				g.lineTo(x, hip);
+				g.lineTo(x - s * 0.35, feet);
+				g.moveTo(x, hip);
+				g.lineTo(x + s * 0.35, feet);
+				g.moveTo(x + sway, neck + s * 0.15);
+				g.lineTo(x + sway - s * 0.6, neck + s * 0.6 * up + Math.sin(t * 15 + fan.phase) * roused * 2);
+				g.moveTo(x + sway, neck + s * 0.15);
+				g.lineTo(x + sway + s * 0.6, neck + s * 0.6 * up + Math.cos(t * 15 + fan.phase) * roused * 2);
+			}
+			if (ink) g.stroke();
+		});
 		g.restore();
 	}
 
