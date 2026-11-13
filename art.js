@@ -786,7 +786,20 @@ const cpuStone = () => {
 };
 
 // A stick man of its own build: head, body, arms and legs in proportions and a pose of their own, knees bent or not
-const cpuStickman = () => {
+// A limb drawn beefy, from one end to the other: an outline round it, thickest at its muscle (near the near end)
+const limbS = (x1, y1, x2, y2, w) => {
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1, nx = -(y2 - y1) / len, ny = (x2 - x1) / len, side = [];
+  for (let i = 0; i <= 8; i++) {
+    const t = i / 8, bulge = w * (0.45 + 0.75 * Math.sin(Math.PI * Math.min(1, t * 1.4)));
+    side.push([x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, bulge]);
+  }
+  return closedPoly([...side.map(([x, y, b]) => [x + nx * b, y + ny * b]), ...side.reverse().map(([x, y, b]) => [x - nx * b, y - ny * b])]);
+};
+
+// How often the computer draws a man beefy: his arms, his legs (each its own chance)
+const CPU_BEEFY = { arms: 0.25, legs: 0.15 };
+
+export const cpuStickman = (beefy = { arms: Math.random() < CPU_BEEFY.arms, legs: Math.random() < CPU_BEEFY.legs }) => {
   const cx = 240 + rand(-20, 20), hr = rand(26, 42), hy = rand(66, 100);
   const neckY = hy + hr, hipY = neckY + rand(110, 160), footY = Math.min(440, hipY + rand(115, 150));
   const shoulderY = neckY + rand(18, 40);
@@ -795,13 +808,15 @@ const cpuStickman = () => {
   const [lh, rh, lf, rf] = [hand(-1), hand(1), foot(-1), foot(1)];
   const bent = Math.random() < 0.5;
   const leg = ([fx, fy], side) =>
-    bent ? polyS([[cx, hipY], [cx + side * rand(15, 40), (hipY + fy) / 2 - rand(-10, 10)], [fx, fy]]) : lineS(cx, hipY, fx, fy);
+    beefy.legs ? limbS(cx + side * 6, hipY, fx, fy, rand(12, 17)) : bent ? polyS([[cx, hipY], [cx + side * rand(15, 40), (hipY + fy) / 2 - rand(-10, 10)], [fx, fy]]) : lineS(cx, hipY, fx, fy);
+  // A beefy arm: a big bulging outline, and a fist at its end
+  const arm = ([hx, hy2]) => (beefy.arms ? [limbS(cx, shoulderY, hx, hy2, rand(13, 19)), ringS(hx, hy2, 11, 11, 0.08)] : [lineS(cx, shoulderY, hx, hy2)]);
 
   return [
     ringS(cx, hy, hr, hr * rand(0.9, 1.15)),
     lineS(cx, neckY, cx + rand(-8, 8), hipY),
-    lineS(cx, shoulderY, ...lh),
-    lineS(cx, shoulderY, ...rh),
+    ...arm(lh),
+    ...arm(rh),
     leg(lf, -1),
     leg(rf, 1),
   ];
