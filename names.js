@@ -1,3 +1,5 @@
+import { beefOf } from './art.js';
+
 // Names, earned: a gladiator gets one after a few wins in the hall, a weapon after a few kills, each made from what it is
 // (its build, its gear, its shape) and always the same for the same drawing, so nothing about it is stored.
 
@@ -13,6 +15,7 @@ const FIRSTS = [
 const TITLES = {
 	armored: ['the Tin Can', 'Iron-Belly'],
 	shielded: ['Shield-Wall', 'the Turtle'],
+	beefy: ['the Beefcake', 'Big Arms'],
 	spindly: ['Stick-Legs', 'the Lanky'],
 	stubby: ['the Squat', 'Stumpy'],
 	crusher: ['Bonecruncher', 'the Mallet'],
@@ -56,6 +59,7 @@ const traitOf = art => {
 
 	if (armor?.weight > 1.1) return 'armored';
 	if (shield?.stats?.rel > 0.65) return 'shielded';
+	if (beefOf(art.stickmen?.[0]?.rig).arms > 0.5) return 'beefy';
 	if (spindly > 0.25) return 'spindly';
 	if (spindly < -0.15) return 'stubby';
 	if (weapon?.name === 'Bone Crusher') return 'crusher';

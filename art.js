@@ -203,8 +203,11 @@ export function checkStickman(strokes) {
   return { ok: true, item: { raw: strokes, rig: buildRig(strokes, head, bb) } };
 }
 
+// How far apart a rig's points are bound along its ink
+const RIG_STEP = 5;
+
 export function buildRig(strokes, head, bb) {
-  const rs = strokes.map(s => resample(s, 5)).filter(s => s.length > 1);
+  const rs = strokes.map(s => resample(s, RIG_STEP)).filter(s => s.length > 1);
   const pts = rs.flat();
   const top = head.cy - head.r, bottom = bb.y + bb.h, Hh = bottom - top;
   const J = new Array(11);
@@ -251,6 +254,22 @@ export function buildRig(strokes, head, bb) {
 }
 
 // Express a point in the frame of its nearest bone: P = A + u*D + v*perp(D).
+/**
+ * How beefy a stick man's arms and legs are drawn, each 0 (single lines) to 1 (outlined thick, muscled): how much ink
+ * went into them against how long they are. A single line lays about its length in ink; an outline twice that and
+ * more, its ends and bulges more still. From its rig (its binding is its ink, a point every RIG_STEP along it, and its
+ * joints where they were drawn), so saved men have it too.
+ */
+export function beefOf(rig) {
+  const J = rig?.raw?.J;
+  if (!J) return { arms: 0, legs: 0 };
+  const ink = { arm: 0, leg: 0 }, bone = { arm: 0, leg: 0 };
+  for (const stroke of rig.strokes ?? []) for (const { b } of stroke) if (BONE_KIND[b] in ink) ink[BONE_KIND[b]] += RIG_STEP;
+  BONES.forEach(([a, b], i) => { if (BONE_KIND[i] in bone) bone[BONE_KIND[i]] += dist(J[a], J[b]); });
+  const of = kind => (bone[kind] ? clamp((ink[kind] / bone[kind] - 1.4) / 1.4, 0, 1) : 0);
+  return { arms: of('arm'), legs: of('leg') };
+}
+
 export function bindPoint(p, J, head) {
   let best = 0, bd = Infinity;
   const dHead = dist(p, J[0]);

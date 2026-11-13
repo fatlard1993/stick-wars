@@ -1372,3 +1372,38 @@ test('a champion given the thumbs down leaves the hall for the fallen: remembere
 
 	expect(game.act(fox.id, 'enlist', { id: champion }).ok).toBe(false);
 });
+
+test('a gladiator drawn beefy hits harder and swings slower; beefy legs stand firmer and walk slower', async () => {
+	const { beefOf } = await import('./art.js');
+	const oval = (cx, cy, rx, ry, rot = 0) =>
+		Array.from({ length: 29 }, (_, i) => {
+			const t = (i / 28) * Math.PI * 2, x = Math.cos(t) * rx, y = Math.sin(t) * ry;
+
+			return { x: cx + x * Math.cos(rot) - y * Math.sin(rot), y: cy + x * Math.sin(rot) + y * Math.cos(rot) };
+		});
+	const head = oval(240, 90, 32, 32), body = lineS(240, 122, 240, 280);
+	const beefy = judge('stickmen', [head, body, oval(205, 165, 40, 18, 0.6), oval(170, 215, 34, 15, 1.1), oval(275, 165, 40, 18, -0.6), oval(310, 215, 34, 15, -1.1), oval(225, 315, 16, 40, 0.25), oval(255, 315, 16, 40, -0.25), oval(207, 385, 13, 36, 0.25), oval(273, 385, 13, 36, -0.25)]).item;
+	const plain = judge('stickmen', DEFAULT_RAW.stickmen()[0]).item;
+
+	expect(beefOf(plain.rig)).toEqual({ arms: 0, legs: 0 });
+	expect(beefOf(beefy.rig).arms).toBeGreaterThan(0.5);
+	expect(beefOf(beefy.rig).legs).toBeGreaterThan(0.5);
+
+	const fighter = man => {
+		const art = cpuGladiator();
+
+		art.stickmen = [man];
+		art.armor = [];
+		art.shield = [];
+
+		const world = new World({ arts: [art, cpuGladiator()], artOf: [0, 1], auto: [false, false], arena: true });
+
+		return world.stickmen.find(s => s.team === 0);
+	};
+	const [big, thin] = [fighter(beefy), fighter(plain)];
+
+	expect(big.maxHp).toBeGreaterThan(thin.maxHp * 0.95);
+	expect(big.style.steady).toBeGreaterThan(thin.style.steady);
+	expect(big.speed / thin.speed).toBeLessThan(1.3 * 0.95);
+	expect(big.beef.arms).toBeGreaterThan(0.5);
+});
