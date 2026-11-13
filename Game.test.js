@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
 
 import { DEFAULT_RAW, blobS, cpuArmy, cpuGladiator, judge, lineS, ringS } from './art.js';
-import { AMMO, DT, FADE, GLADIATOR_HP, GROUND, LINGER, PLANS, STANCE_FOR, World } from './battle.js';
+import { AMMO, DT, FADE, GLADIATOR_HP, GROUND, LINGER, MERCY_WAIT, PLANS, STANCE_FOR, World } from './battle.js';
 import Game from './Game.js';
-import Roster, { MOST_BEHIND } from './roster.js';
+import Roster from './roster.js';
 import { BASE_ARMY, CPU_SIZE, GLADIATOR_STEPS, STEPS, emptyArt } from './rules.js';
 
 const quiet = { info() {}, debug() {}, warning() {}, error() {} };
@@ -633,34 +633,72 @@ test('two gladiators fight it out to the death, and the winner goes into the hal
 
 	const { winner } = game.state.result;
 
-	expect(roster.load()).toHaveLength(1);
-	expect(game.state.fame[winner]).toBe(roster.load()[0].id);
-	expect(roster.load()[0].wins).toBe(1);
+	// The winner in the hall; the loser too only if the crowd spared it
+	const { spared } = game.state.result;
+
+	expect(roster.load()).toHaveLength(spared ? 2 : 1);
+	expect(roster.get(game.state.fame[winner]).wins).toBe(1);
 	expect(game.viewFor(fox.id).fame[winner]).toEqual({ wins: 1, losses: 0 });
+	expect(Boolean(game.state.fame[1 - winner])).toBe(spared);
 
 	// A new game against the computer sends a gladiator from the hall
 	const next = newGame('cpu', 'gladiator', roster);
 	const frog = next.addPlayer('🐸');
 
 	drawGladiator(next, frog.id, { armor: false, shield: false });
-	expect(next.state.fame[1]).toBe(roster.load()[0].id);
-	expect(next.state.art[1].swords[0].raw).toEqual(game.state.art[winner].swords[0].raw);
+	expect(roster.get(next.state.fame[1])).toBeDefined();
 });
 
-test('a saved gladiator that keeps losing is kept a few fights, then retired', () => {
+test('the crowd decides a beaten gladiator\'s place in the hall: spared, it keeps it or earns one; thumbs down, it\'s struck out', () => {
 	const roster = new Roster();
-	const art = cpuGladiator();
-	const champion = roster.record({ art }, {});
-	let losses = 0;
+	const champion = roster.record({ art: cpuGladiator() }, {}).winner;
 
-	// One win to its name: kept through its losses until it's MOST_BEHIND behind
-	while (roster.get(champion)) {
-		roster.record({ art: cpuGladiator() }, { id: champion });
-		losses++;
+	// Spared, it keeps its place, its loss counted
+	expect(roster.record({ art: cpuGladiator() }, { id: champion, spared: true }).loser).toBe(champion);
+	expect(roster.get(champion)).toMatchObject({ wins: 1, losses: 1 });
+	// A newcomer spared earns a place
+	const favourite = roster.record({ id: champion, art: null }, { art: cpuGladiator(), spared: true }).loser;
+
+	expect(roster.get(favourite)).toMatchObject({ wins: 0, losses: 1 });
+	// Thumbs down, and it's gone
+	expect(roster.record({ art: cpuGladiator() }, { id: champion, spared: false }).loser).toBeNull();
+	expect(roster.get(champion)).toBeUndefined();
+});
+
+// A duel fought until one yields: the world, and the crowd's pending verdict
+const toYield = () => {
+	for (let tries = 0; tries < 10; tries++) {
+		const world = new World({ arts: [cpuGladiator(), cpuGladiator()], auto: [false, false], arena: true });
+
+		for (let i = 0; i < 60 * 120 && !world.mercy && !world.over; i++) world.step(DT);
+		if (world.mercy) return world;
 	}
-	expect(losses).toBe(MOST_BEHIND + 1);
-	// The ones that beat it are kept
-	expect(roster.load()).toHaveLength(losses);
+
+	return null;
+};
+
+test('a beaten gladiator yields and waits on the crowd: thumbs up, he lives', () => {
+	const world = toYield();
+	const m = world.mercy;
+
+	expect(m.loser.yielded).toBe(true);
+	expect(m.loser.dead).toBe(false);
+	m.chance = 1;
+	for (let i = 0; i < 60 * (MERCY_WAIT + 1) && !world.over; i++) world.step(DT);
+	expect(world.over).toEqual({ winner: m.winner.team, spared: true });
+	expect(m.loser.dead).toBe(false);
+	expect(world.snapshot().mercy.up).toBe(true);
+});
+
+test('thumbs down: the beaten gladiator is drawn and quartered, his arms and legs torn off', () => {
+	const world = toYield();
+	const m = world.mercy;
+
+	Object.assign(m, { decided: true, up: false, next: 0 });
+	for (let i = 0; i < 60 * 3 && !world.over; i++) world.step(DT);
+	expect(world.over).toEqual({ winner: m.winner.team, spared: false });
+	expect(m.loser.dead).toBe(true);
+	expect([2, 4, 6, 8].map(b => m.loser.body.owned[b])).toEqual([false, false, false, false]);
 });
 
 test('a gladiator does what he is shouted at for a few seconds: charge in, back off, or guard', () => {

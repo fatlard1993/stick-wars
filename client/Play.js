@@ -14,6 +14,7 @@ import deploy from './sounds/deploy.mp3';
 import drawing from './sounds/drawing.mp3';
 import hit from './sounds/hit.mp3';
 import keep from './sounds/keep.mp3';
+import kill from './sounds/kill.mp3';
 import launch from './sounds/launch.mp3';
 import lose from './sounds/lose.mp3';
 import nope from './sounds/nope.mp3';
@@ -59,7 +60,7 @@ export default class Play extends View {
 	constructor(options, ...children) {
 		const status = new Status();
 		const sound = createSound({
-			effects: { hit, sever, squish, swing, launch, crash, thud, deploy, keep, nope, win, lose, roar, ooh, boo },
+			effects: { hit, sever, squish, swing, launch, crash, thud, deploy, keep, nope, win, lose, roar, ooh, boo, kill },
 			music: { drawing, battle },
 		});
 

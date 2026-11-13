@@ -74,9 +74,9 @@ You cheer yours on with three doodles under the arena, each shout holding for th
 
 The computer cheers its own gladiator on the same way.
 
-A gladiator is tough: a duel is many blows. A head comes off only to a finishing blow, and a gladiator down on the ground (a leg gone) isn't beaten until he's finished off or bleeds out. A bar over each shows how much it has left.
+A gladiator is tough: a duel is many blows, and no blow kills outright. A bar over each shows how much it has left. Beaten down (badly hurt, or a leg gone), a gladiator yields: on his knees, the fight stopped, the winner standing over him, while the crowd decides. A big thumb wavers over him... then it's **thumbs up**, and he's spared, or **thumbs down**, and he's drawn and quartered, his arms and legs torn off one by one. The crowd is kinder to a gladiator with a good record and to one who made the winner work for it, and now and then spares one anyway.
 
-Every gladiator that wins is kept in the hall of gladiators, with its record, and the computer sends them back into the arena against whoever plays it next (the better its record, the likelier); one of them shows its wins by its flag. A kept gladiator that loses is given a few more fights, and retired once it has lost three more than it has won. With nobody in the hall yet, the computer draws its own.
+Every gladiator that wins is kept in the hall of gladiators, with its record, and the computer sends them back into the arena against whoever plays it next (the better its record, the likelier); one of them shows its wins by its flag. A loser the crowd spares keeps its place in the hall, or earns one; one it gives the thumbs down is struck from it. With nobody in the hall yet, the computer draws its own.
 
 ## Running it
 

@@ -262,6 +262,13 @@ class Body {
 
 // ---------------------------------------------------------------- stick men
 
+/** A gladiator beaten this badly yields, and the crowd decides his fate: as a part of his health */
+export const YIELD_AT = 0.22;
+/** How long the crowd keeps him waiting, then how long between each limb torn off if it's thumbs down, in seconds */
+export const MERCY_WAIT = 1.8, QUARTER_EVERY = 0.3;
+/** The small chance the crowd spares him whatever else */
+export const MERCY_LUCK = 0.1;
+
 /** What a gladiator's player can shout at him, and how long a shout holds, in seconds */
 export const STANCES = ['charge', 'back', 'guard'], STANCE_FOR = 3;
 // How each sits in a snapshot
@@ -507,7 +514,7 @@ class Stickman {
 		let best = null, bd = Infinity;
 
 		for (const s of this.w.stickmen) {
-			// In the arena, a foe down on the ground is still one to finish
+			// In the arena, a foe down on the ground is still the one he stands over
 			if (s.team === this.team || s.dead || (!s.alive() && !this.w.arena)) continue;
 
 			const d = this.far(s);
@@ -545,7 +552,9 @@ class Stickman {
 
 		const w = this.w;
 
-		this.hp -= (this.bleed + this.body.stumps.length * 5) * dt;
+		// A gladiator beaten down yields, to wait on the crowd: he doesn't bleed while he does
+		if (this.style && !this.yielded && !w.mercy && !w.over && (this.incap || this.hp < GLADIATOR_HP * YIELD_AT)) w.yieldBy(this);
+		if (!this.yielded) this.hp -= (this.bleed + this.body.stumps.length * 5) * dt;
 		if (this.hp <= 0) {
 			this.die(0, 0);
 
@@ -598,6 +607,11 @@ class Stickman {
 			if (adx > R) move = this.face;
 			else if (adx < 9) move = -this.face;
 			if (adx <= R + 4 && lined) want = { type: 'sm' };
+			// A yielded foe isn't struck: he stands over him, and the crowd decides
+			if (tg.yielded) {
+				want = null;
+				move = adx > R ? this.face : 0;
+			}
 
 			// A gladiator fights his own way: out again after a strike, a long reach kept at its length, a shield held
 			// steady while he's swung at
@@ -944,12 +958,17 @@ class Stickman {
 	}
 
 	takeHit(b, st, dir, hx, hy) {
+		// Yielded, he's left alone: his life is the crowd's now
+		if (this.yielded) return;
+
 		const w = this.w, kind = BONE_KIND[b];
 		// Armor over where he's hit takes some of it, the more of that part it covers
 		const prot = (this.cover?.[kind] ?? 0) * 0.6, steady = this.style?.steady ?? 0;
 		const dmg = st.dmg * { head: 1.9, torso: 1, arm: 0.5, leg: 0.6 }[kind] * rand(0.8, 1.25) * (1 - prot);
 
 		this.hp -= dmg;
+		// No blow kills a gladiator outright: beaten, he yields, and his life is the crowd's to give or take
+		if (this.style && !this.yielded) this.hp = Math.max(this.hp, 1);
 		this.bleed = Math.min(25, this.bleed + st.bleed * 0.6 * (1 - prot));
 		w.spray(hx, hy, (6 + dmg * 0.5 + st.bleed * 3) * (1 - prot), dir, -0.35, 0.35, 160 + dmg * 3, this.z);
 		if (prot > 0.2) w.dust(hx, hy, 4, 'stone', this.z);
@@ -968,8 +987,8 @@ class Stickman {
 		if (kind === 'torso') cutP = dmg > 40 && Math.random() < st.cut * 0.3 ? 1 : 0;
 		if (kind === 'head') cutP *= 0.7;
 		cutP *= Math.max(0, 1 - prot * 1.3) * (this.tough ?? 1);
-		// A gladiator loses his head only to a finishing blow, and a limb to no more than a lucky one
-		if (this.style) cutP = kind === 'head' && this.hp > GLADIATOR_HP * 0.4 ? 0 : Math.min(cutP, 0.3);
+		// A gladiator never loses his head in the fight (that's for the crowd to say), and a limb to no more than a lucky blow
+		if (this.style) cutP = kind === 'head' || kind === 'torso' ? 0 : Math.min(cutP, 0.3);
 		if (Math.random() < cutP) this.sever(b, dir * (1 + st.knock));
 		if (!this.dead && this.hp <= 0) this.die(dir * (2 + st.knock * 2), 1.5);
 	}
@@ -1452,9 +1471,12 @@ export class World {
 	 * @param {Array<object>} [options.walls] - How big each side's wall is, { cols, rows }
 	 * @param {Array<string>} [options.plans] - How the computer plays each side it plays (a key of PLANS), else picked
 	 * @param {boolean} [options.arena] - A gladiators' fight: one man a side, his gear on him, in the open
+	 * @param {Array<object>} [options.records] - Each gladiator's { wins, losses } in the hall, if it's one of them
 	 */
-	constructor({ arts, artOf = [0, 1], auto = [false, true], armies = [ARMY, ARMY], walls = [WALL, WALL], plans, arena = false }) {
+	constructor({ arts, artOf = [0, 1], auto = [false, true], armies = [ARMY, ARMY], walls = [WALL, WALL], plans, arena = false, records = [] }) {
 		this.arts = arts;
+		// Each gladiator's record in the hall, if it's one of them: the crowd remembers
+		this.records = records;
 		// Two gladiators in the open, no walls, no catapults, or a war
 		this.arena = arena;
 		this.army = arena ? [1, 1] : armies;
@@ -1750,6 +1772,63 @@ export class World {
 		this.spray(x, GROUND - 5, 60, 0, -1, 0.45, 380, z);
 	}
 
+	/** A gladiator beaten down: on his knees, the fight stopped, the crowd to give its thumbs up or down soon */
+	yieldBy(man) {
+		const winner = this.stickmen.find(s => s.team !== man.team);
+		const record = this.records?.[man.team];
+		// The crowd's mercy: for a good record so far, and for having made the winner work for it
+		const earned = record ? clamp((record.wins - record.losses) * 0.12, -0.3, 0.35) : 0;
+		const fought = 1 - clamp((winner?.hp ?? GLADIATOR_HP) / GLADIATOR_HP, 0, 1);
+
+		man.yielded = true;
+		if (!man.incap) man.goIncap();
+		man.bleed = 0;
+		man.atk = null;
+		this.mercy = { loser: man, winner, at: this.time, chance: clamp(0.2 + earned + fought * 0.5, 0.05, 0.9), decided: false, torn: 0 };
+		this.crowd('ooh');
+		this.slowmo(0.6);
+	}
+
+	// The crowd's verdict, when it's kept him waiting long enough: spared, or drawn and quartered, a limb at a time
+	judgeYielded() {
+		const m = this.mercy;
+
+		if (!m || m.loser.dead) return;
+		if (!m.decided && this.time - m.at > MERCY_WAIT) {
+			m.decided = true;
+			m.up = Math.random() < m.chance || Math.random() < MERCY_LUCK;
+			m.next = this.time + 0.8;
+			this.emit({ e: 'verdict', up: m.up, x: Math.round(m.loser.x), z: Math.round(m.loser.z) });
+			this.crowd(m.up ? 'roar' : 'kill');
+		}
+		if (!m.decided || m.up || this.time < m.next) return;
+
+		// Thumbs down: his arms and legs torn off, each flung its own way, and then he's done
+		const body = m.loser.body, b = [2, 4, 6, 8][m.torn];
+		const pulls = { 2: [-9, -6], 4: [9, -6], 6: [-8, 3], 8: [8, 3] };
+
+		m.next = this.time + QUARTER_EVERY;
+		if (b === undefined) {
+			m.loser.die(0, 0);
+			this.bigSplat(m.loser.x, m.loser.z);
+
+			return;
+		}
+		m.torn++;
+
+		const limb = this.cut(body, b, 0);
+
+		if (limb) {
+			for (const p of limb.j) {
+				p.px -= pulls[b][0] * m.loser.face * rand(0.8, 1.2);
+				p.py -= pulls[b][1] * rand(0.8, 1.2);
+			}
+			this.spray(body.j[BONES[b][0]].x, body.j[BONES[b][0]].y, 40, pulls[b][0] / 9, pulls[b][1] / 9, 0.5, 300, body.z);
+			this.shake(5);
+		}
+		this.crowd('roar');
+	}
+
 	/** The arena's crowd roaring, gasping or booing (in a war there's nobody watching): heard, and seen in the stands */
 	crowd(kind) {
 		if (this.arena && !this.events.some(event => event.e === 'crowd')) this.emit({ e: 'crowd', n: kind });
@@ -1832,7 +1911,7 @@ export class World {
 			for (let t = 0; t < 2; t++) {
 				const me = this.stickmen.find(s => s.team === t), foe = this.stickmen.find(s => s.team !== t);
 
-				if (!this.auto[t] || this.over || !me?.alive() || me.stance() || Math.random() > dt * 0.5) continue;
+				if (!this.auto[t] || this.over || !me?.alive() || !foe || me.stance() || Math.random() > dt * 0.5) continue;
 
 				const ahead = me.hp - foe.hp;
 
@@ -1983,7 +2062,18 @@ export class World {
 			return;
 		}
 
-		// A duel isn't over while a downed gladiator still breathes: he's to be finished
+		// A duel with one yielded ends on the crowd's verdict: spared, or once he's been torn apart
+		const m = this.mercy;
+
+		if (this.arena && m) {
+			this.judgeYielded();
+			// Over once he's spared or torn apart (or, somehow, dead before the crowd had its say)
+			if ((m.decided && m.up) || m.loser.dead) this.over = { winner: m.winner.team, spared: Boolean(m.decided && m.up) };
+
+			return;
+		}
+
+		// In the arena one down hasn't lost yet: he yields first, and the crowd decides
 		const left = t => (this.arena ? this.stickmen.filter(s => s.team === t && !s.dead).length : this.aliveCount(t));
 		const a = left(0), b = left(1);
 
@@ -1998,6 +2088,8 @@ export class World {
 		return {
 			time: Math.round(this.time * 100) / 100,
 			...(this.arena && { arena: true }),
+			// A yielded gladiator: where he kneels, and once it's given, the crowd's thumbs up or down
+			...(this.mercy && { mercy: { x: Math.round(this.mercy.loser.x), z: Math.round(this.mercy.loser.z), ...(this.mercy.decided && { up: this.mercy.up }) } }),
 			bodies: this.bodies.map(b => b.snapshot()),
 			props: this.props.map(p => p.snapshot()),
 			projs: this.projs.map(p => p.snapshot()),

@@ -266,7 +266,9 @@ export default class Game extends BaseGame {
 		}
 		if (gladiator) {
 			// The computer cheers its own gladiator on, as a player does theirs
-			this.world = new World({ arts: state.art, artOf: artOf(state), auto: [false, state.mode === 'cpu'], arena: true });
+			const records = state.fame.map(id => this.roster.get(id) ?? null);
+
+			this.world = new World({ arts: state.art, artOf: artOf(state), auto: [false, state.mode === 'cpu'], arena: true, records });
 			this.snap = null;
 			state.phase = 'battle';
 			state.result = null;
@@ -339,9 +341,10 @@ export default class Game extends BaseGame {
 		world.slow -= seconds;
 		for (let i = 0; i < steps; i++) world.step(DT);
 		if (state.phase === 'battle' && world.over && world.overT > END_AFTER) {
-			state.result = { winner: world.over.winner, stats: structuredClone(world.stats) };
+			// A duel's loser was spared by the crowd, or not (one killed outright has no say)
+			state.result = { winner: world.over.winner, stats: structuredClone(world.stats), ...(world.arena && { spared: Boolean(world.over.spared) }) };
 			state.phase = 'over';
-			this.honour(world.over.winner);
+			this.honour(world.over.winner, Boolean(world.over.spared));
 		}
 		this.outEvents = world.takeEvents();
 		this.snap = world.snapshot();
@@ -349,12 +352,18 @@ export default class Game extends BaseGame {
 		this.outEvents = [];
 	}
 
-	// A gladiators' fight won: the winner into the hall (or its record up there), the loser's record down
-	honour(winner) {
+	// A gladiators' fight won: the winner into the hall (or its record up there); the loser, spared by the crowd, keeps
+	// its place there or earns one, and if not, is struck from it
+	honour(winner, spared) {
 		const { state } = this;
 
 		if (state.style !== 'gladiator' || (winner !== 0 && winner !== 1)) return;
-		state.fame[winner] = this.roster.record({ id: state.fame[winner], art: state.art[winner] }, { id: state.fame[1 - winner] });
+
+		const loser = 1 - winner;
+		const ids = this.roster.record({ id: state.fame[winner], art: state.art[winner] }, { id: state.fame[loser], art: state.art[loser], spared });
+
+		state.fame[winner] = ids.winner;
+		state.fame[loser] = ids.loser;
 	}
 
 	// What each page is sent: the game's state (the art itself goes once, on a page's first view and when it changes,

@@ -542,7 +542,7 @@ export default class BattleScreen extends Screen {
 		}
 		if (state.phase !== 'over' || !state.result) return;
 
-		const { winner, stats } = state.result;
+		const { winner, stats, spared } = state.result;
 		const mine = this.team >= 0;
 		const won = winner === this.team;
 		let big;
@@ -559,6 +559,8 @@ export default class BattleScreen extends Screen {
 		this.card.elem.append(
 			big,
 			Object.assign(document.createElement('div'), { textContent: words }),
+			// A duel's loser: spared by the crowd, or not
+			...(spared === undefined ? [] : [icon(spared ? 'thumbUp' : 'thumbDown', { size: '2.6em', color: spared ? '#2f7a3a' : RED_PENCIL })]),
 			row(count('sword', stats.kills[0], TEAMS[0].ink), count('sword', stats.kills[1], TEAMS[1].ink)),
 			row(count('bone', stats.limbs), count('skull', stats.heads), count('blood', `${(stats.blood * 0.004).toFixed(1)} L`, GORE)),
 		);
@@ -959,6 +961,7 @@ export default class BattleScreen extends Screen {
 		g.lineCap = g.lineJoin = 'round';
 		for (const thing of scene) thing.draw();
 		this.drawParts(g);
+		if (this.arena) this.drawMercy(g);
 		g.restore();
 	}
 
@@ -967,6 +970,8 @@ export default class BattleScreen extends Screen {
 	drawCrowd(g) {
 		const k = depthScale(DEPTH), backY = GROUND - DEPTH * SKEW_Y, wallTop = backY - ARENA_WALL * k;
 		const t = performance.now() / 1000, since = this.cheer ? t - this.cheer.at / 1000 : 9;
+		// The verdict on a yielded gladiator, given: every hand up with its thumb, up or down
+		const verdict = this.cur?.mercy?.up;
 		const heat = clamp(1 - since / 2.5, 0, 1), booing = this.cheer?.kind === 'boo' && heat > 0;
 		// Over at the end: everyone on their feet
 		const roused = this.cur?.over || this.view?.state.phase === 'over' ? 1 : booing ? 0 : heat;
@@ -1010,7 +1015,15 @@ export default class BattleScreen extends Screen {
 				g.moveTo(x + sway, neck + s * 0.15);
 				g.lineTo(x + sway - s * 0.6, neck + s * 0.6 * up + Math.sin(t * 15 + fan.phase) * roused * 2);
 				g.moveTo(x + sway, neck + s * 0.15);
-				g.lineTo(x + sway + s * 0.6, neck + s * 0.6 * up + Math.cos(t * 15 + fan.phase) * roused * 2);
+				if (verdict === undefined) g.lineTo(x + sway + s * 0.6, neck + s * 0.6 * up + Math.cos(t * 15 + fan.phase) * roused * 2);
+				else {
+					// An arm thrust up, its thumb pointing the crowd's way
+					const hx = x + sway + s * 0.35, hy = neck - s * 0.75;
+
+					g.lineTo(hx, hy);
+					g.moveTo(hx, hy);
+					g.lineTo(hx + s * 0.12, hy + (verdict ? -s * 0.35 : s * 0.35));
+				}
 			}
 			if (ink) g.stroke();
 		});
@@ -1189,6 +1202,20 @@ export default class BattleScreen extends Screen {
 		g.globalAlpha *= 0.82;
 		placeShape(g, shield.shape, { x: j[8], y, sx: size * body.f, sy: size }, mixColor(FILLS.wood, '#4a3826', 1 - body.sh[2]), WOOD_INK, 1.8);
 		g.globalAlpha /= 0.82;
+	}
+
+	// A yielded gladiator waiting on the crowd: a big thumb over him, wavering up and down while it decides, then held
+	drawMercy(g) {
+		const mercy = this.cur?.mercy;
+
+		if (!mercy) return;
+
+		const [x, y] = project(mercy.x, GROUND - 120, mercy.z);
+		const deciding = mercy.up === undefined;
+		const up = deciding ? Math.sin(performance.now() / 160) > 0 : mercy.up;
+		const size = deciding ? 44 : 64;
+
+		drawIcon(g, up ? 'thumbUp' : 'thumbDown', x, y, size, deciding ? PENCIL : up ? '#2f7a3a' : RED_PENCIL);
 	}
 
 	// How much a gladiator has left: a pencilled bar over his head
