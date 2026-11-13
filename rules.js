@@ -14,10 +14,10 @@ export const STEPS = [
 
 /** A gladiator's pages: one warrior, its weapon, and armor and a shield if wanted (left empty, it fights without) */
 export const GLADIATOR_STEPS = [
-	{ kind: 'stickmen', seconds: 40, title: 'Draw your gladiator' },
-	{ kind: 'swords', seconds: 35, title: 'Draw its weapon in the box' },
-	{ kind: 'armor', seconds: 40, title: 'Armor? Draw it on', optional: true },
-	{ kind: 'shield', seconds: 30, title: 'A shield?', optional: true },
+	{ kind: 'stickmen', seconds: 60, title: 'Draw your gladiator' },
+	{ kind: 'swords', seconds: 50, title: 'Draw its weapon in the box' },
+	{ kind: 'armor', seconds: 60, title: 'Armor? Draw it on', optional: true },
+	{ kind: 'shield', seconds: 45, title: 'A shield?', optional: true },
 ];
 
 /** The two ways to play: a war of armies, or one gladiator against another; each with its pages */
