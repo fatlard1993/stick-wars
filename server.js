@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 
 import { stockWeapons } from './art.js';
 
@@ -35,6 +35,15 @@ const SHELVES = { armory: ARMORY, crowd: CROWD };
 // A vote is a few words: anything bigger isn't one
 const MOST_BODY = 2048;
 
+// The page's build, as when it was last built: its page's file time (it's rebuilt whole)
+const buildOf = () => {
+	try {
+		return String(statSync('client/build/index.html').mtimeMs);
+	} catch {
+		return '';
+	}
+};
+
 // The game's own pages' data, beside the games': the hall of gladiators, and the armory's and the crowd's shelves with
 // their votes
 const extras = request => {
@@ -42,6 +51,8 @@ const extras = request => {
 
 	if (request.method === 'GET' && url.pathname === '/hall') return Response.json(HALL.standings());
 	if (request.method === 'GET' && url.pathname === '/fallen') return Response.json(HALL.fallen());
+	// Which build of the page is out: an open page older than it reloads itself when it's safe to
+	if (request.method === 'GET' && url.pathname === '/build') return Response.json({ build: buildOf() });
 
 	const list = request.method === 'GET' && url.pathname.match(/^\/(armory|crowd)$/);
 

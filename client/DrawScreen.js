@@ -5,6 +5,7 @@ import { act, createInput } from '@fatlard1993/web-game-framework/client';
 import { DEFAULT_RAW, PAD, WEAPON_AREA, clamp, freshOf, pick } from '../art.js';
 import { STYLES, TEAMS, stepsOf } from '../rules.js';
 import BorrowPicker from './BorrowPicker.js';
+import { holdReload } from './freshPage.js';
 import HallPicker from './HallPicker.js';
 import { icon } from './icons.js';
 import { PEN, Pad, SHEET, drawRing, inkStrokes, isDot, offPad, tooSmallRing } from './Pad.js';
@@ -283,6 +284,8 @@ export default class DrawScreen extends Screen {
 		this.sketches = {};
 		this.sentSketch = '';
 		this.sketchTimer = setInterval(() => this.sendSketch(), SKETCH_EVERY);
+		// No reloading for a newer build mid-line, or with a drawing on the pad not yet kept
+		this.addCleanup('holdReload', holdReload(() => this.strokes.length > 0 || Object.keys(this.pad.pointers ?? {}).length > 0));
 		this.addCleanup('sketch', () => clearInterval(this.sketchTimer));
 
 		this.input = createInput({

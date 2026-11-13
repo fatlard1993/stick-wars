@@ -3,6 +3,7 @@ import { act } from '@fatlard1993/web-game-framework/client';
 
 import { DEFAULT_RAW, PAD, clamp } from '../art.js';
 import { icon } from './icons.js';
+import { holdReload } from './freshPage.js';
 import { PEN, Pad, SHEET, drawRing, inkStrokes, isDot, offPad, tooSmallRing } from './Pad.js';
 import { PENCIL } from './theme.js';
 import { doodle } from './ui.js';
@@ -100,6 +101,8 @@ export default class RockPad extends Corner {
 		// What's drawn here is the pad's alone: the battlefield's own presses and drags don't hear it
 		this.panel.elem.addEventListener('pointerdown', event => event.stopPropagation());
 		requestAnimationFrame(() => this.redraw());
+		// No reloading for a newer build with a rock half drawn
+		this.addCleanup('holdReload', holdReload(() => this.open && this.strokes.length > 0));
 	}
 
 	/** How many rocks are still to draw this battle, whether the catapult is empty and waiting for one, and whose it is */

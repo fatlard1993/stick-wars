@@ -12,6 +12,7 @@ import { TvLobby, TvWatch } from './Tv.js';
 import JoinNow from './JoinNow.js';
 import Play from './Play.js';
 import Start from './Start.js';
+import { stayFresh } from './freshPage.js';
 
 // The start screen and the game are this game's own, in pictures. The framework's lobby stays at #/hub: every game,
 // joining one by name, and watching one.
@@ -41,3 +42,6 @@ const views = {
 };
 
 new Page({ appendTo: document.body, append: new Router({ views, defaultPath: '/' }) });
+
+// A newer build out: this page reloads itself, the first moment it loses nothing
+stayFresh();
