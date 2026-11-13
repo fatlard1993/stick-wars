@@ -38,7 +38,7 @@ A web game on `@fatlard1993/web-game-framework` and `@vanilla-bean/components`: 
 Shared by the server and the page:
 
 - `rules.js`: the drawing pages and their clocks per style (`STEPS`, `GLADIATOR_STEPS`, `stepsOf`), the sides and modes, a new game's `state`, the bonus for drawing more (`armySize`, `wallSize`) and the computer's sizes (`CPU_SIZE`).
-- `art.js`: geometry; the shape checks (`judge(kind, strokes, context)`, which cleans and caps what a page sent: `MOST_POINTS`, `MOST_INK`); a stick man's skeleton (`buildRig`, each point bound to a bone as `{ b, u, v }`, its page position in `rig.raw`); weapon stats from shape (`weaponStats`); gladiator gear (`checkArmor`, `checkShield`); telling drawings apart (`freshOf`, `samePose`, `unlike`); the defaults; the computer's art (`cpuArmy`, `cpuGladiator`, drawn by a shaky hand, `scrawl`).
+- `art.js`: geometry; the shape checks (`judge(kind, strokes, context)`, which cleans and caps what a page sent: `MOST_POINTS`, `MOST_INK`); a stick man's skeleton (`buildRig`, each point bound to a bone as `{ b, u, v }`, its page position in `rig.raw`); weapon stats from shape (`weaponStats`); gladiator gear (`checkArmor`, `checkShield`); telling drawings apart (`freshOf`, `samePose`, `sameWeapon`: a weapon by look and handling, `unlike`); the computer's war weapons for the armory (`cpuWeapons`); the defaults; the computer's art (`cpuArmy`, `cpuGladiator`, drawn by a shaky hand, `scrawl`).
 - `field.js`: the field's geometry: size, where things stand (`homeOf`, `CAT_X`, `WALL_X`, `ARENA_GATE`), depth and its drawing (`DEPTH`, `project`), the catapult's shape, a throw's path and limits (`flingPath`, `holdFling`, `flingFor`, `reachOf`, `rockThrow`).
 
 On the server:

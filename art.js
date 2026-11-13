@@ -503,13 +503,27 @@ const unlikePose = (a, b) =>
 /** How unalike two stick men must stand, and two other drawings look, to count as different (copies come well under) */
 export const NEW_POSE = 0.07, NEW_LOOK = 0.035;
 
+/** How far apart two weapons' stats must be, to be different though they look alike (a long spear and a long saw look
+ * alike, drawn so thin; they hit nothing alike) */
+export const NEW_HEFT = 0.4;
+
+// How differently two weapons handle: weight, reach, jaggedness and width
+const unlikeHeft = (a, b) => {
+  const s = a.stats ?? {}, t = b.stats ?? {};
+  return Math.abs(s.weight - t.weight) / 1.5 + Math.abs(s.lr - t.lr) + Math.abs(s.serr - t.serr) + Math.abs(s.wr - t.wr) * 2;
+};
+
+/** Whether two weapons are too alike to count as different: they look alike, and handle alike */
+export const sameWeapon = (a, b) => unlike(a.raw, b.raw) <= NEW_LOOK && !(unlikeHeft(a, b) > NEW_HEFT);
+
 /** Whether two stick men stand too alike to count as different */
 export const samePose = (a, b) => (a.rig && b.rig ? unlikePose(a, b) <= NEW_POSE : unlike(a.raw, b.raw) <= NEW_LOOK);
 
 /** Which of a kind's drawings are new: each one not like any new one kept before it */
 export const freshOf = (kind, items) => {
   const seen = [];
-  const apart = (a, b) => (kind === 'stickmen' && a.rig && b.rig ? unlikePose(a, b) > NEW_POSE : unlike(a.raw, b.raw) > NEW_LOOK);
+  const apart = (a, b) =>
+    kind === 'stickmen' && a.rig && b.rig ? unlikePose(a, b) > NEW_POSE : kind === 'swords' ? !sameWeapon(a, b) : unlike(a.raw, b.raw) > NEW_LOOK;
 
   return items.map(item => {
     const fresh = seen.every(other => apart(item, other));
@@ -766,6 +780,10 @@ const CPU_RAW = {
     [polyS([[232, 380], [218, 340], [232, 320], [218, 280], [232, 260], [218, 220], [232, 200], [218, 160], [232, 140], [240, 60], [252, 140], [252, 380]]), lineS(198, 384, 282, 384), closedPoly([[234, 388], [248, 388], [248, 448], [234, 448]])],
   ],
 };
+
+/** The computer's war weapons as it designed them (not redrawn shaky): a spear, a mace, a club, a double axe and a saw of a
+ * sword, each judged like a player's. For the armory, so a gladiator can borrow one. */
+export const cpuWeapons = () => CPU_RAW.swords().map(raw => judge('swords', raw)).filter(v => v.ok).map(v => v.item);
 
 /** The computer's army: drawings of its own of every kind, each passing the checks a player's do, tidied for keeping */
 export const cpuArmy = () =>

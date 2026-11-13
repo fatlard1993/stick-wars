@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import { DEFAULT_RAW, blobS, cpuArmy, cpuGladiator, judge, lineS, ringS, samePose, starS } from './art.js';
+import { DEFAULT_RAW, blobS, cpuArmy, cpuGladiator, judge, lineS, ringS, samePose, sameWeapon, starS } from './art.js';
 import { AMMO, DT, FADE, GLADIATOR_HP, GROUND, LINGER, MERCY_WAIT, PLANS, STANCE_FOR, World, rockThrow } from './battle.js';
 import Game from './Game.js';
 import Shelf from './shelf.js';
@@ -9,7 +9,7 @@ import { BASE_ARMY, CPU_SIZE, GLADIATOR_STEPS, STEPS, emptyArt } from './rules.j
 
 const quiet = { info() {}, debug() {}, warning() {}, error() {} };
 const server = () => ({ games: {}, publish() {}, socketBroadcast() {} });
-const newGame = (mode, style, roster = new Roster(), armory = new Shelf(), crowd = new Shelf(null, { alike: samePose, show: item => ({ raw: item.raw, rig: item.rig }) })) => {
+const newGame = (mode, style, roster = new Roster(), armory = new Shelf(null, { alike: sameWeapon }), crowd = new Shelf(null, { alike: samePose, show: item => ({ raw: item.raw, rig: item.rig }) })) => {
 	const game = new Game({ mode, style, roster, armory, crowd, server: server(), logger: quiet });
 
 	game.dispose();
@@ -1129,4 +1129,19 @@ test('a tournament fighter walking out loses the duel, and the bracket goes on w
 		game.tick();
 	}
 	expect(game.state.entrants[game.state.bracket.champion].id).toBe(game.state.seats[1]);
+});
+
+test('the computer\'s war weapons can go in the armory once each, for gladiators to borrow', async () => {
+	const { cpuWeapons } = await import('./art.js');
+	const armory = new Shelf(null, { alike: sameWeapon });
+
+	for (let boot = 0; boot < 3; boot++) for (const weapon of cpuWeapons()) armory.offer(weapon);
+	expect(cpuWeapons()).toHaveLength(5);
+	expect(armory.load()).toHaveLength(5);
+	// Borrowed on a gladiator's weapon page like any
+	const game = newGame('cpu', 'gladiator', new Roster(), armory);
+	const fox = game.addPlayer('🦊');
+
+	game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[0] });
+	expect(game.act(fox.id, 'borrow', { id: armory.load()[0].id }).ok).toBe(true);
 });
