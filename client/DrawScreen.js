@@ -3,13 +3,14 @@ import { JoinCard } from '@fatlard1993/web-game-framework/ui';
 import { act, createInput } from '@fatlard1993/web-game-framework/client';
 
 import { DEFAULT_RAW, PAD, WEAPON_AREA, clamp, freshOf, pick } from '../art.js';
-import { STYLES, TEAMS, stepsOf } from '../rules.js';
+import { CAT_REST, GROUND, beamScale, catGeometry } from '../field.js';
+import { STYLES, TEAMS, nextPart, stepsOf } from '../rules.js';
 import BorrowPicker from './BorrowPicker.js';
 import { holdReload } from './freshPage.js';
 import HallPicker from './HallPicker.js';
 import { icon } from './icons.js';
 import { PEN, Pad, SHEET, drawRing, inkStrokes, isDot, offPad, tooSmallRing } from './Pad.js';
-import { drawRawFit } from './paint.js';
+import { FILLS, WOOD_INK, drawRawFit, placeShape } from './paint.js';
 import { PENCIL } from './theme.js';
 import { doodle } from './ui.js';
 
@@ -339,13 +340,7 @@ export default class DrawScreen extends Screen {
 		if (!mine || mine.done) return this.showWaiting(view);
 		this.showPad();
 		if (mine.step !== this.step) this.setStep(mine.step);
-		// The time saved so far for the wheels page, shown on the pages before it
-		const banked = this.steps.find(step => step.banked);
-
-		if (this.bankBadge) {
-			this.bankBadge.style.display = banked && !this.steps[mine.step].banked ? 'inline-flex' : 'none';
-			if (banked) this.bankBadge.replaceChildren(icon('wheel', { size: '1.2em' }), `${Math.floor(Math.min(mine.bank ?? 0, banked.seconds))}`);
-		}
+		this.followPart();
 
 		const ends = performance.now() + mine.left * 1000;
 
@@ -368,9 +363,7 @@ export default class DrawScreen extends Screen {
 		dots.append(
 			...this.steps.map((_, at) => Object.assign(document.createElement('i'), { className: at < step ? 'done' : at === step ? 'now' : '' })),
 		);
-		this.bankBadge = Object.assign(document.createElement('span'), { title: 'Time saved for the wheels' });
-		this.bankBadge.style.cssText = 'display: none; align-items: center; gap: 3px; margin-left: auto; flex-shrink: 0; font-size: 0.9em; opacity: 0.8';
-		this.heading.elem.replaceChildren(Object.assign(document.createElement('span'), { textContent: title }), this.bankBadge, dots);
+		this.heading.elem.replaceChildren(Object.assign(document.createElement('span'), { textContent: title }), dots);
 		this.borrowButton.elem.style.display = kind === 'swords' ? '' : 'none';
 		this.enlistButton.elem.style.display = kind === 'stickmen' && this.steps === STYLES.gladiator ? '' : 'none';
 		// No skipping a gladiator: it's drawn, or enlisted from the hall
@@ -383,11 +376,87 @@ export default class DrawScreen extends Screen {
 
 	setArt(art) {
 		this.art = art;
+		this.followPart();
 		this.showKept();
 		this.redraw();
 	}
 
+	// A page built from parts (the catapult): drawing the part it wants next, its example that part's
+	followPart() {
+		const step = this.steps?.[this.step];
+
+		if (!step?.parts) return;
+
+		const part = nextPart(step, this.myArt()) ?? step.parts.at(-1);
+
+		if (part === this.kind) return;
+		this.kind = part;
+		this.ghost = DEFAULT_RAW[part]?.()[0] ?? null;
+		this.showKept();
+		this.redraw();
+	}
+
+	// The catapult as it's built: each part drawn in its place once kept, the rest dashed, the next one picked out
+	showAssembly(art) {
+		const canvas = (this.assembly ??= document.createElement('canvas'));
+		const size = { w: 200, h: 140 }, ratio = window.devicePixelRatio || 1, g = canvas.getContext('2d');
+
+		canvas.width = size.w * ratio;
+		canvas.height = size.h * ratio;
+		canvas.style.cssText = `width: ${size.w}px; height: ${size.h}px`;
+		g.setTransform(ratio, 0, 0, ratio, 0, 0);
+		g.clearRect(0, 0, size.w, size.h);
+		// The catapult's own size, fitted in: 1.5 of its units a pixel
+		const k = 1.5, geo = catGeometry(0, 1, CAT_REST);
+
+		g.translate(size.w / 2 + 22, size.h - 10);
+		g.scale(k, k);
+		g.translate(0, -GROUND);
+		g.lineCap = g.lineJoin = 'round';
+
+		const beams = art?.beams ?? [], wheels = art?.wheels ?? [];
+		const next = nextPart(this.steps[this.step], art);
+		const wanted = next === 'beams' ? beams.length : next === 'wheels' ? 4 + wheels.length : -1;
+		const dashed = (at, draw) => {
+			g.save();
+			g.setLineDash([4, 4]);
+			g.strokeStyle = at === wanted ? '#d9a400' : 'rgba(43,43,43,0.35)';
+			g.lineWidth = at === wanted ? 3 : 2;
+			g.beginPath();
+			draw();
+			g.stroke();
+			g.restore();
+		};
+
+		geo.wheels.forEach(([x, y], i) => {
+			const wheel = wheels[i];
+
+			if (wheel) placeShape(g, wheel.shape, { x, y, sx: 26, sy: 26 }, FILLS.wood, WOOD_INK, 1.6);
+			else dashed(4 + i, () => g.arc(x, y, 13, 0, Math.PI * 2));
+		});
+		geo.segs.forEach(([p, q], i) => {
+			const beam = beams[i], len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+
+			if (beam) placeShape(g, beam.shape, { x: (p[0] + q[0]) / 2, y: (p[1] + q[1]) / 2, a: Math.atan2(q[1] - p[1], q[0] - p[0]), sx: len, sy: beamScale(beam, len) }, FILLS.wood, WOOD_INK, 1.8);
+			else
+				dashed(i, () => {
+					g.moveTo(...p);
+					g.lineTo(...q);
+				});
+		});
+
+		return canvas;
+	}
+
 	showKept() {
+		// Building the catapult: the catapult itself, not a gallery of parts
+		if (this.steps?.[this.step]?.parts) {
+			this.count.elem.textContent = '';
+			this.gallery.elem.replaceChildren(this.showAssembly(this.myArt()));
+
+			return;
+		}
+
 		const items = this.myArt()?.[this.kind] ?? [];
 
 		this.count.elem.textContent = items.length ? `Kept: ${items.length}` : '';

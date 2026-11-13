@@ -1339,10 +1339,13 @@ class Catapult {
 		this.rebuilt = 0;
 		this.shk = 0;
 		this.arm = CAT_REST;
-		this.beams = [0, 1, 2, 3].map(() => w.pickArt(team, 'beams'));
-		// On its side's drawn wheels it rolls; with none drawn, it sits on two of its wall's stones and stays put
-		this.rolls = w.hasArt(team, 'wheels');
-		this.wheels = [0, 1].map(() => w.pickArt(team, this.rolls ? 'wheels' : 'stones'));
+		// Built from its side's beams, each in its own place, in the order they were drawn
+		const a = w.artOf[team];
+
+		this.beams = [0, 1, 2, 3].map(i => ({ k: 'beams', a, i }));
+		// On its side's two drawn wheels it rolls; short of them, it sits on two of its wall's stones and stays put
+		this.rolls = (w.arts[a].wheels?.length ?? 0) >= 2;
+		this.wheels = [0, 1].map(i => (this.rolls ? { k: 'wheels', a, i } : w.pickArt(team, 'stones')));
 		// The rock that's flying off it, between letting go and leaving the bucket
 		this.flying = null;
 		// The way a player has set it to fling, [vx, vy]: it fires that way by itself whenever it's ready
@@ -1563,7 +1566,8 @@ export class World {
 			onKnock: (x, y, impulse) => this.knocked(x, y, impulse),
 		});
 		this.knocks = 0;
-		this.cats = arena ? [] : CAT_X.flatMap((xs, team) => xs.map((x, at) => new Catapult(this, team, x, CAT_Z[at])));
+		// Each side's catapult, if it was built: short of its four beams, a side has none
+		this.cats = arena ? [] : CAT_X.flatMap((xs, team) => ((this.arts[artOf[team]].beams?.length ?? 0) >= 4 ? xs.map((x, at) => new Catapult(this, team, x, CAT_Z[at])) : []));
 		this.spawnX = [this.walls[0].x1 + 30, this.walls[1].x0 - 30];
 		this.stats = { kills: [0, 0], limbs: 0, heads: 0, blood: 0, weaponKills: {} };
 		this.time = 0;
@@ -1599,11 +1603,6 @@ export class World {
 	}
 
 	/** One of a side's drawings of a kind, at random, as a reference to it */
-	// Whether a side drew any of a kind
-	hasArt(team, kind) {
-		return Boolean(this.arts[this.artOf[team]][kind]?.length);
-	}
-
 	pickArt(team, kind) {
 		const a = this.artOf[team], items = this.arts[a][kind];
 

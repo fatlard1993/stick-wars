@@ -17,8 +17,13 @@ const newGame = (mode, style, roster = new Roster(), armory = new Shelf(null, { 
 	return game;
 };
 // Every step drawn with the first default drawing of its kind, kept, then moved on
+// Every page drawn: one of each kind, and the catapult built whole (its parts finish its page by themselves)
 const drawEverything = (game, id) => {
-	for (const { kind } of STEPS) {
+	for (const { kind, parts } of STEPS) {
+		if (parts) {
+			for (const part of parts) expect(game.act(id, 'keep', { strokes: DEFAULT_RAW[part]()[0] }).ok).toBe(true);
+			continue;
+		}
 		expect(game.act(id, 'keep', { strokes: DEFAULT_RAW[kind]()[0] }).ok).toBe(true);
 		expect(game.act(id, 'next').ok).toBe(true);
 	}
@@ -189,22 +194,27 @@ test('the rocks page keeps no more than a battle can throw, and left empty gives
 	const game = newGame('cpu');
 	const fox = game.addPlayer('🦊');
 
-	for (const { kind } of STEPS) {
-		if (kind !== 'ammo') {
+	// The catapult built (its page finishes itself), every other page but the rocks skipped
+	const build = (g, id) => {
+		for (const part of STEPS.find(step => step.parts).parts) g.act(id, 'keep', { strokes: DEFAULT_RAW[part]()[0] });
+	};
+
+	for (const { kind, parts } of STEPS) {
+		if (parts) build(game, fox.id);
+		else if (kind !== 'ammo') game.act(fox.id, 'next');
+		else {
+			for (let k = 0; k < AMMO; k++) expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.ammo()[0] }).ok).toBe(true);
+			expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.ammo()[0] }).ok).toBe(false);
 			game.act(fox.id, 'next');
-			continue;
 		}
-		for (let k = 0; k < AMMO; k++) expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.ammo()[0] }).ok).toBe(true);
-		expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.ammo()[0] }).ok).toBe(false);
-		game.act(fox.id, 'next');
 	}
-	expect(game.world.cats[0].ammo).toBe(AMMO);
+	expect(game.world.cats.find(c => c.team === 0).ammo).toBe(AMMO);
 
 	const lazy = newGame('cpu');
 	const frog = lazy.addPlayer('🐸');
 
-	for (const _ of STEPS) lazy.act(frog.id, 'next');
-	expect(lazy.world.cats[0].ammo).toBe(DEFAULT_RAW.ammo().length);
+	for (const { parts } of STEPS) (parts ? build(lazy, frog.id) : lazy.act(frog.id, 'next'));
+	expect(lazy.world.cats.find(c => c.team === 0).ammo).toBe(DEFAULT_RAW.ammo().length);
 });
 
 test('a catapult throws forward at a sensible angle, and never past the enemy wall', () => {
@@ -1318,42 +1328,47 @@ test('a catapult rolls forward when its side sends it, pushed by its crew, held 
 	expect(game.viewFor(fox.id).battle.cats.find(c => c.t === 0).g).toBe(home);
 });
 
-test('wheels are drawn last, in the time saved on the pages before: drawn, the catapult rolls; too slow, it sits on stones', () => {
-	// Quick: every page finished early, time saved for the wheels
-	const quick = newGame('cpu', 'war');
-	const fox = quick.addPlayer('🦊');
+test('the catapult is built part by part: four beams then two wheels; short of beams, no catapult; short of wheels, it stays put', () => {
+	const play = (beams, wheels) => {
+		const game = newGame('cpu', 'war');
+		const fox = game.addPlayer('🦊');
 
-	for (const { kind } of STEPS.filter(step => !step.banked)) {
-		quick.act(fox.id, 'keep', { strokes: DEFAULT_RAW[kind]()[0] });
-		quick.act(fox.id, 'next');
-	}
-	expect(STEPS[quick.state.drawing[0].step].kind).toBe('wheels');
-	expect(quick.state.drawing[0].left).toBe(30);
-	expect(quick.act(fox.id, 'keep', { strokes: DEFAULT_RAW.wheels()[0] }).ok).toBe(true);
-	quick.act(fox.id, 'next');
-	expect(quick.state.phase).toBe('battle');
-	expect(quick.world.cats.find(c => c.team === 0).rolls).toBe(true);
+		for (const { kind, parts } of STEPS) {
+			if (!parts) {
+				game.act(fox.id, 'keep', { strokes: DEFAULT_RAW[kind]()[0] });
+				game.act(fox.id, 'next');
+				continue;
+			}
+			for (let k = 0; k < beams; k++) expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.beams()[0] }).ok).toBe(true);
+			// A wheel before the beams are all there is taken as a beam's page: it must be a beam
+			if (beams < 4) expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.wheels()[0] }).ok).toBe(false);
+			else for (let k = 0; k < wheels; k++) expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.wheels()[0] }).ok).toBe(true);
+			// All six: the page is done by itself; fewer, the clock runs out (or the player moves on)
+			if (beams < 4 || wheels < 2) game.act(fox.id, 'next');
+		}
 
-	// Slow: every page's clock run out, nothing saved, no wheels page, a catapult that stays put
-	const slow = newGame('cpu', 'war');
-	const owl = slow.addPlayer('🦉');
+		return { game, fox, cat: game.world.cats.find(c => c.team === 0) };
+	};
+	const whole = play(4, 2);
 
-	for (const { kind } of STEPS.filter(step => !step.banked)) {
-		slow.act(owl.id, 'keep', { strokes: DEFAULT_RAW[kind]()[0] });
-		slow.state.drawing[0].left = 0.01;
-		slow.tick();
-	}
-	expect(slow.state.phase).toBe('battle');
-	expect(slow.state.art[0].wheels).toHaveLength(0);
-	expect(slow.world.cats.find(c => c.team === 0).rolls).toBe(false);
-	expect(slow.act(owl.id, 'roll', { x: 600 }).error).toBe('No wheels: it stays put');
+	expect(whole.cat.rolls).toBe(true);
+	expect(whole.game.state.art[0].beams).toHaveLength(4);
+	expect(play(4, 1).cat.rolls).toBe(false);
+	expect(play(4, 1).game.act(play(4, 1).fox.id, 'roll', { x: 600 }).ok).toBe(false);
+	expect(play(3, 0).cat).toBeUndefined();
+	// The computer always builds a whole one
+	expect(whole.game.world.cats.find(c => c.team === 1).rolls).toBe(true);
 });
 
-test('a war saved before wheels loads with none', () => {
-	const save = { version: 5, state: { style: 'war', art: [{ stickmen: [] }, { stickmen: [] }] } };
+test('a war saved before the catapult was built from parts keeps its catapult', () => {
+	const beam = judge('beams', DEFAULT_RAW.beams()[0]).item;
+	const save = { version: 5, state: { style: 'war', art: [{ stickmen: [], beams: [beam] }, { stickmen: [], beams: [beam, beam] }], drawing: [{ step: 5, done: false }, { step: 2, done: false }] } };
 
-	for (const v of [6]) Game.migrations[v](save);
+	for (const v of [6, 7]) Game.migrations[v](save);
+	expect(save.state.art[0].beams).toHaveLength(4);
 	expect(save.state.art[0].wheels).toEqual([]);
+	expect(save.state.drawing[0].done).toBe(true);
+	expect(save.state.drawing[1]).toEqual({ step: 2, done: false });
 });
 
 test('a champion given the thumbs down leaves the hall for the fallen: remembered, never fought or enlisted again', () => {

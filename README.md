@@ -16,13 +16,13 @@ Every drawing page works the same way. The check mark (or Enter) keeps a drawing
 
 ### Drawing your army
 
-Five pages, each against the clock. Draw as many as you like on each. A page left with nothing kept gets the defaults, drawn by a shaky hand. Then a sixth, the catapult's wheels, but only in the time you saved: every second left on a page when you move on (the arrow) goes to the wheels page, up to 30 seconds, counted by the wheel in the corner as you go. Use every second on your army and there's no wheels page: your catapult sits on two of your wall's stones and can't be rolled.
+Five pages, each against the clock. Draw as many as you like on each. A page left with nothing kept gets the defaults, drawn by a shaky hand, except the catapult: you build it yourself or go without. On its page you assemble it part by part against one 40-second clock: four beams, then two wheels, each going into its place on the catapult drawn beside the pad (dashed till it's built, the next part picked out). Run out of time short of four beams and your side has no catapult this battle; get the beams but not both wheels and it stands on two of your wall's stones and can't be rolled.
 
 | What | Time | The check |
 | --- | --- | --- |
 | Stick men | 45s | a head on top (any shape, or none: the top is its head), a body hanging from it, arms and legs sticking out both sides, not a scribble |
 | Stones | 25s | one closed, lumpy outline |
-| Beams | 25s | long and thin, at least three times as long as it is wide |
+| Catapult | 40s | four beams (long and thin, at least three times as long as wide), then two wheels (round) |
 | Rocks | 25s | a closed, round-ish lump: bigger hits harder and spikier tears more, but a heavy one flies shorter and takes longer to load. Each one kept is a rock on your catapult's pile (10 at most) |
 | Weapons | 40s | anything with some size to it, inside the box on the page, handle at the bottom |
 
@@ -47,7 +47,7 @@ The field runs back into the page: men, catapults and rubble stand nearer or fur
 
 The catapult throws only rocks you drew, each once. The ones drawn before the battle start on its pile, lying in front of it, each as you drew it. More can be drawn during the battle: the rock button in the corner of the field (D) opens a small pad, and a rock kept there goes on the pile. You get 10 rocks a battle all told; the button shows how many are left to draw, and wiggles when the catapult has nothing to throw. A rematch starts with the rocks drawn before the battle again. The computer draws its own as it goes.
 
-Tap your catapult (with no men picked) and an aiming pad opens in the middle of the screen. Pull back from its centre like a slingshot: the further, the farther, and the field shows where the next rock would land. It throws only forward, between a low and a steep angle (the shaded wedge on the pad), and at most into the enemy's wall, never over it: the edge of the pad is as far as it reaches, so men at home behind a wall are safe from rocks (one that rolls over the top drops dead behind it). Let go, and that's its aim: from then on it fires that way by itself as often as it can, its aim drawn as a dotted arc. Aim it again any time; the pause on the pad holds its fire. With wheels drawn, the two wheel arrows on the pad roll it back or forward a stretch per tap (as far as halfway across the field): its crew push it there, slowly, a dotted track showing where it's going, and it only rolls while crewed. Its reach goes forward with it, so a catapult rolled up can throw over the enemy's wall at the men behind it, and at their catapult, but out there it's in reach of their men too. Dragging straight from the catapult aims it too.
+Tap your catapult (with no men picked) and an aiming pad opens in the middle of the screen. Pull back from its centre like a slingshot: the further, the farther, and the field shows where the next rock would land. It throws only forward, between a low and a steep angle (the shaded wedge on the pad), and at most into the enemy's wall, never over it: the edge of the pad is as far as it reaches, so men at home behind a wall are safe from rocks (one that rolls over the top drops dead behind it). Let go, and that's its aim: from then on it fires that way by itself as often as it can, its aim drawn as a dotted arc. Aim it again any time; the pause on the pad holds its fire. With both wheels built, the two wheel arrows on the pad roll it back or forward (without them, they're faded, and a tap says why) a stretch per tap (as far as halfway across the field): its crew push it there, slowly, a dotted track showing where it's going, and it only rolls while crewed. Its reach goes forward with it, so a catapult rolled up can throw over the enemy's wall at the men behind it, and at their catapult, but out there it's in reach of their men too. Dragging straight from the catapult aims it too.
 
 ### Walls, blades and blood
 

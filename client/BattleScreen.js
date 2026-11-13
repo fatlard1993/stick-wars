@@ -390,7 +390,8 @@ export default class BattleScreen extends Screen {
 		const cat = this.myCats()[0]?.cat;
 
 		if (!cat) return;
-		act('roll', { x: (cat.g ?? cat.x) + way * (this.team === 0 ? 1 : -1) * ROLL_STEP }, { quiet: true });
+		// Without wheels the refusal is shown: it's why it won't move
+		act('roll', { x: (cat.g ?? cat.x) + way * (this.team === 0 ? 1 : -1) * ROLL_STEP }, { quiet: Boolean(cat.rw) });
 	}
 
 	// Our catapult aimed the way the pad (or a drag from it) was pulled: from now on it fires that way by itself whenever

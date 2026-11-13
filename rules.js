@@ -9,15 +9,26 @@ import { freshOf } from './art.js';
 export const STEPS = [
 	{ kind: 'stickmen', seconds: 45, title: 'Draw your stick men' },
 	{ kind: 'stones', seconds: 25, title: 'Draw stones for the wall' },
-	{ kind: 'beams', seconds: 25, title: 'Draw beams for the catapult' },
+	// The catapult built part by part against one clock: four beams, then two wheels. Short of its beams it isn't built;
+	// short of its wheels it can't roll
+	{ kind: 'beams', seconds: 40, title: 'Build your catapult', optional: true, parts: ['beams', 'beams', 'beams', 'beams', 'wheels', 'wheels'] },
 	{ kind: 'ammo', seconds: 25, title: 'Draw rocks for the catapult' },
 	{ kind: 'swords', seconds: 40, title: 'Draw weapons in the box' },
-	// Last, and only as long as the time saved on the pages before (up to its seconds): a catapult with wheels rolls
-	{ kind: 'wheels', seconds: 30, title: 'Wheels for the catapult, in the time you saved', optional: true, banked: true },
 ];
 
-/** The least time saved that still gets a banked page: any less and it's skipped */
-export const LEAST_BANKED = 2;
+/** The part a page built from parts wants next (its kind), with this art kept so far; null once all are there */
+export const nextPart = (step, art) => {
+	if (!step.parts) return step.kind;
+
+	const had = {};
+
+	for (const kind of step.parts) {
+		had[kind] = (had[kind] ?? 0) + 1;
+		if ((art?.[kind]?.length ?? 0) < had[kind]) return kind;
+	}
+
+	return null;
+};
 
 /** A gladiator's pages: one warrior, its weapon, and armor and a shield if wanted (left empty, it fights without) */
 export const GLADIATOR_STEPS = [
@@ -72,7 +83,7 @@ export const newState = (mode, style) => ({
 	battles: 0,
 });
 
-export const emptyArt = style => Object.fromEntries((STYLES[style] ?? STEPS).map(({ kind }) => [kind, []]));
+export const emptyArt = style => Object.fromEntries((STYLES[style] ?? STEPS).flatMap(({ kind, parts }) => parts ?? [kind]).map(kind => [kind, []]));
 
 /** How many men a side has with none of the bonus, and how many the bonus can add */
 export const BASE_ARMY = 10, MOST_BONUS = 6;

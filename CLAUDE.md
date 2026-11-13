@@ -22,7 +22,7 @@ A web game on `@fatlard1993/web-game-framework` and `@vanilla-bean/components`: 
 
 ## Words in the code
 
-- **Art kinds**: `stickmen`, `stones`, `beams`, `ammo` (rocks), `swords` (weapons, any shape), `wheels` (the catapult's: drawn in the time saved, `banked`; without them it doesn't roll), `armor`, `shield`. These names are in saved data: rename only with a migration.
+- **Art kinds**: `stickmen`, `stones`, `beams`, `ammo` (rocks), `swords` (weapons, any shape), `wheels` (the catapult's), both built on the catapult's page of parts (`parts`, `nextPart`: four beams, then two wheels; short of the beams no catapult, short of the wheels it doesn't roll), `armor`, `shield`. These names are in saved data: rename only with a migration.
 - **Art ref**: `{ k: kind, a: whose art, i: which }`, how the battle and snapshots point at a drawing.
 - **Style**: a game is a `war` or a `gladiator` fight (`state.style`). On a Stickman, `style` is a gladiator's fighting profile, and its presence is how the battle tells a gladiator.
 - **Orders**: `idle` (home, the tent doodle), `crew`, `repair`, `hold`, `charge`. **Stances** (a gladiator's shouts): `charge`, `back` (back off), `guard` (shield up).

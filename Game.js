@@ -6,7 +6,6 @@ import { AMMO, DT, ORDERS, World } from './battle.js';
 import {
 	BASE_ARMY,
 	CPU_SIZE,
-	LEAST_BANKED,
 	MOST_BONUS,
 	MOST_KEPT,
 	TICK_MS,
@@ -16,6 +15,7 @@ import {
 	humanTeams,
 	newDrawing,
 	newState,
+	nextPart,
 	stepsOf,
 	wallSize,
 } from './rules.js';
@@ -45,7 +45,7 @@ const SKETCH_EVERY = 150;
 // battle (battle.js), stepped here and sent to every page many times a second. Drawings are judged here too, so what
 // a page keeps is what passed.
 export default class Game extends BaseGame {
-	static version = 6;
+	static version = 7;
 	static migrations = {
 		// A save from version 2, which had no ammo page, part way past beams moves on a step (save.version is the version
 		// it was saved as, while migrating)
@@ -70,6 +70,20 @@ export default class Game extends BaseGame {
 		6: save => {
 			if (save.state?.style !== 'war') return;
 			for (const art of save.state.art ?? []) if (art) art.wheels ??= [];
+		},
+		// Version 7 built the catapult from parts on one page (four beams, then two wheels; short of its beams, none): a
+		// war saved before keeps its catapult (its beams and wheels made up to the count from those it had), and a page
+		// part way through the old wheels page (the last) is done
+		7: save => {
+			if (save.state?.style !== 'war') return;
+			const fill = (list, n) => (list?.length ? Array.from({ length: Math.max(n, list.length) }, (_, i) => list[i % list.length]) : list ?? []);
+
+			for (const art of save.state.art ?? []) {
+				if (!art) continue;
+				art.beams = fill(art.beams, 4);
+				art.wheels = fill(art.wheels, 2);
+			}
+			for (const drawing of save.state.drawing ?? []) if (drawing && !drawing.done && drawing.step >= 5) Object.assign(drawing, { step: 5, done: true });
 		},
 	};
 
@@ -103,8 +117,13 @@ export default class Game extends BaseGame {
 
 			if (this.state.phase !== 'draw' || !drawing || drawing.done) refuse('Not drawing now');
 
-			const { kind } = stepsOf(this.state)[drawing.step];
-			const kept = side.art[kind];
+			const step = stepsOf(this.state)[drawing.step];
+			// A page built from parts (the catapult) takes the part it wants next
+			const kind = nextPart(step, side.art);
+
+			if (!kind) refuse('All built');
+
+			const kept = (side.art[kind] ??= []);
 			const gladiator = this.state.style === 'gladiator';
 
 			// Rocks are the catapult's whole pile for a battle, so no more than it may throw
@@ -128,8 +147,8 @@ export default class Game extends BaseGame {
 			kept.push(item);
 			this.artChanged();
 			this.showSketch(player.id, side, []);
-			// A gladiator has one of each: kept, and on to the next page
-			if (gladiator) this.finishStep(side);
+			// A gladiator has one of each: kept, and on to the next page; a page of parts, once all its parts are there
+			if (gladiator || (step.parts && !nextPart(step, side.art))) this.finishStep(side);
 
 			// Whether it's a new one, or too like one kept already to earn another man (stick men and weapons, in a war)
 			const fresh = gladiator || !['stickmen', 'swords'].includes(kind) || freshOf(kind, kept.filter(item => item.drawn)).at(-1);
@@ -441,15 +460,11 @@ export default class Game extends BaseGame {
 			side.art[kind] = this.defaults(kind);
 			this.artChanged();
 		}
-		// Time left on a page finished early is saved, for the page drawn in the time saved (the catapult's wheels)
-		if (!steps[drawing.step].banked && steps.some(step => step.banked)) drawing.bank = (drawing.bank ?? 0) + Math.max(0, drawing.left);
 		drawing.step++;
 		// An enlisted gladiator comes with its gear: only its weapon's page is left
 		while (drawing.enlisted && drawing.step < steps.length && steps[drawing.step].kind !== 'swords') drawing.step++;
-		// Too little time saved for the last page: none
-		while (drawing.step < steps.length && steps[drawing.step].banked && (drawing.bank ?? 0) < LEAST_BANKED) drawing.step++;
 		if (drawing.step >= steps.length) drawing.done = true;
-		else drawing.left = steps[drawing.step].banked ? Math.min(drawing.bank, steps[drawing.step].seconds) : steps[drawing.step].seconds;
+		else drawing.left = steps[drawing.step].seconds;
 		this.startWhenReady();
 	}
 

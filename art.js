@@ -825,14 +825,15 @@ export const cpuStickman = (beefy = { arms: Math.random() < CPU_BEEFY.arms, legs
 const CPU_RAW = {
   stickmen: () => Array.from({ length: 5 }, cpuStickman),
   stones: () => Array.from({ length: 4 }, cpuStone),
+  // Its catapult's four beams: rough logs and knotted planks
   beams: () => [
-    // A rough log: two long sides and rings at its ends
     [lineS(60, 215, 420, 210), lineS(60, 255, 420, 250), ringS(60, 235, 10, 20), ringS(420, 230, 10, 20)],
-    // A plank with a knot in it
     [closedPoly([[55, 220], [425, 214], [428, 250], [52, 258]]), ringS(250, 236, 10, 7)],
+    [lineS(70, 218, 410, 214), lineS(70, 252, 410, 250), ringS(70, 235, 9, 17), ringS(410, 232, 9, 18)],
+    [closedPoly([[60, 222], [420, 216], [422, 248], [58, 254]]), ringS(180, 236, 8, 6)],
   ],
   ammo: () => [[ringS(240, 240, 95, 120, 0.04)], [starS(240, 240, 130, 85, 12)], [blobS(240, 240, 80, 80, 7)]],
-  wheels: () => [[ringS(240, 240, 100, 100, 0.04), lineS(170, 240, 310, 240), lineS(240, 170, 240, 310)]],
+  wheels: () => [[ringS(240, 240, 100, 100, 0.04), lineS(170, 240, 310, 240), lineS(240, 170, 240, 310)], [ringS(240, 240, 95, 95, 0.05), lineS(175, 190, 305, 290), lineS(175, 290, 305, 190)]],
   swords: () => [
     // A spear
     [lineS(240, 450, 240, 90), closedPoly([[222, 110], [240, 38], [258, 110]])],
