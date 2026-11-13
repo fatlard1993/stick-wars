@@ -3,7 +3,7 @@ import { act } from '@fatlard1993/web-game-framework/client';
 
 import { DEFAULT_RAW, PAD, clamp } from '../art.js';
 import { icon } from './icons.js';
-import { PEN, Pad, SHEET, drawRing, inkStrokes, offPad, tooSmallRing } from './Pad.js';
+import { PEN, Pad, SHEET, drawRing, inkStrokes, isDot, offPad, tooSmallRing } from './Pad.js';
 import { PENCIL } from './theme.js';
 import { doodle } from './ui.js';
 
@@ -134,7 +134,7 @@ export default class RockPad extends Corner {
 			this.redraw();
 		}
 		for (const piece of pieces) this.strokes.push(piece.map(({ x, y }) => ({ x: x * k, y: y * k })));
-		if ((first && this.strokes.length) || pieces.length !== 1 || pieces[0].length !== line.length) this.redraw();
+		if ((first && this.strokes.length) || pieces.length !== 1 || pieces[0].length !== line.length || pieces.some(isDot)) this.redraw();
 	}
 
 	undo() {
@@ -182,5 +182,6 @@ export default class RockPad extends Corner {
 		g.lineWidth = PEN * k;
 		inkStrokes(g, this.strokes, k);
 		drawRing(g, this.ring, k);
+		this.pad.inkLive(PEN * k);
 	}
 }

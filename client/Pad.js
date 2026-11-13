@@ -23,6 +23,23 @@ export class Pad extends Whiteboard {
 		if (this._gesture.active) return;
 		super.interactionInit(event);
 	}
+
+	// Wiped for drawing again: the picture only. The Whiteboard's own clear forgets the line being drawn too, and a page
+	// drawn again mid-line (art arriving, the other player keeping a drawing) would drop it from under the pen.
+	clearCanvas() {
+		this.canvas.clearRect(0, 0, this.elem.width, this.elem.height);
+	}
+
+	/** The lines being drawn right now, inked again over a page just drawn again (canvas pixels, the pen's width) */
+	inkLive(width) {
+		const g = this.canvas;
+
+		g.strokeStyle = '#222';
+		g.lineWidth = width;
+		g.lineCap = g.lineJoin = 'round';
+		g.setLineDash([]);
+		inkStrokes(g, Object.values(this.pointers ?? {}).map(pointer => pointer.line).filter(line => line?.length), 1);
+	}
 }
 
 /**
@@ -46,12 +63,18 @@ export const offPad = (line, { x0, y0, x1, y1 }) => {
 	return out.filter(stroke => stroke.length > 1);
 };
 
+/** Whether a stroke is a dot: a tap, every point where it landed. The Whiteboard's own drawing of one shows nothing in
+ * some browsers, so a page draws it again itself (inkStrokes) */
+export const isDot = stroke => stroke.every(p => p.x === stroke[0].x && p.y === stroke[0].y);
+
 /** Strokes (in pad units) inked on a pad's canvas, k canvas pixels to a pad unit */
 export const inkStrokes = (g, strokes, k) => {
 	g.beginPath();
 	for (const s of strokes) {
 		g.moveTo(s[0].x * k, s[0].y * k);
 		for (const p of s) g.lineTo(p.x * k, p.y * k);
+		// A dot (a tap): a hair of length, or some browsers draw nothing for it at all
+		if (isDot(s)) g.lineTo(s[0].x * k + 0.1, s[0].y * k);
 	}
 	g.stroke();
 };

@@ -7,7 +7,7 @@ import { STYLES, TEAMS, stepsOf } from '../rules.js';
 import BorrowPicker from './BorrowPicker.js';
 import HallPicker from './HallPicker.js';
 import { icon } from './icons.js';
-import { PEN, Pad, SHEET, drawRing, inkStrokes, offPad, tooSmallRing } from './Pad.js';
+import { PEN, Pad, SHEET, drawRing, inkStrokes, isDot, offPad, tooSmallRing } from './Pad.js';
 import { drawRawFit } from './paint.js';
 import { PENCIL } from './theme.js';
 import { doodle } from './ui.js';
@@ -421,8 +421,9 @@ export default class DrawScreen extends Screen {
 			this.redraw();
 		}
 		for (const piece of pieces) this.strokes.push(piece.map(({ x, y }) => ({ x: x * k, y: y * k })));
-		// The first line wipes the example away; a line that left the pad is drawn again without what was off it
-		if ((first && this.strokes.length) || pieces.length !== 1 || pieces[0].length !== line.length) this.redraw();
+		// The first line wipes the example away; a line that left the pad is drawn again without what was off it; a dot
+		// is drawn by the page itself
+		if ((first && this.strokes.length) || pieces.length !== 1 || pieces[0].length !== line.length || pieces.some(isDot)) this.redraw();
 	}
 
 	undo() {
@@ -508,6 +509,7 @@ export default class DrawScreen extends Screen {
 		g.lineWidth = PEN * k;
 		path(this.strokes);
 		drawRing(g, this.ring, k);
+		this.pad.inkLive(PEN * k);
 	}
 
 	showPad() {
