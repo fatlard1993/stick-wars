@@ -5,6 +5,7 @@ import { JoinCard, View } from '@fatlard1993/web-game-framework/ui';
 import { TEAMS } from '../rules.js';
 import BattleScreen from './BattleScreen.js';
 import DrawScreen from './DrawScreen.js';
+import LeavePrompt from './LeavePrompt.js';
 import { icon } from './icons.js';
 import { count, doodle, lined, soundSwitch } from './ui.js';
 import battle from './sounds/battle.mp3';
@@ -77,7 +78,7 @@ export default class Play extends View {
 					right: [
 						soundSwitch(sound),
 						doodle('invite', { title: 'Someone else joins', onPress: () => this.invite() }),
-						doodle('leave', { title: 'Leave this game', onPress: () => this.leaveGame() }),
+						doodle('leave', { title: 'Leave this game', onPress: () => this.askToLeave() }),
 					],
 				},
 			},
@@ -178,6 +179,18 @@ export default class Play extends View {
 			body: new JoinCard({ gameId: this.options.gameId }),
 			buttons: ['Done'],
 			onButtonPress: ({ closeDialog }) => closeDialog(),
+		});
+	}
+
+	// A seated player is asked first (their drawings go, and a duel in progress is lost); a watcher just goes
+	askToLeave() {
+		const state = this.view?.state;
+
+		if (this.options.watch || !this.playerId || !state?.seats.includes(this.playerId)) return this.leaveGame();
+		new LeavePrompt({
+			appendTo: document.body,
+			forfeits: state.style === 'gladiator' && state.phase === 'battle',
+			onLeave: () => this.leaveGame(),
 		});
 	}
 

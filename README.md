@@ -59,7 +59,7 @@ So the field stays readable, the dead, cut-off parts, rubble, dropped weapons an
 
 ### Winning
 
-The last side with anyone standing wins. Then fight again with the same armies (the circling arrows), or draw new ones (the pencil). If a player's page closes, their drawing clock and the battle wait for them. If they leave the game (the door), their side is free for the next person to join, who draws their own army.
+The last side with anyone standing wins. Then fight again with the same armies (the circling arrows), or draw new ones (the pencil). If a player's page closes, their drawing clock and the battle wait for them. If they leave the game (the door, which asks first: the curly arrow stays, the red door goes), their side is free for the next person to join, who draws their own army.
 
 ## Gladiators
 
@@ -93,7 +93,7 @@ The computer cheers its own gladiator on the same way.
 
 Beaten down (badly hurt, or a leg gone), a gladiator yields: on his knees, the fight stopped, the winner standing over him. Two stick medics run out of his gate: one slaps his face to bring him round, the other picks up every limb he lost from the sand, carries it back and slaps it on, so he's whole to be judged. Then they stand back, the crowd hushes, and a thumb over him tilts slowly back and forth, up, sideways, down, as it makes up its mind... then it slams down: **thumbs up**, and he's spared, or **thumbs down**, and he's drawn and quartered, his arms and legs torn off one by one while the medics run for the gate. The crowd judges mostly by the fight it just watched: how badly he hurt the winner, and how long he lasted. His record in the hall only nudges it, and now and then it spares one on a whim.
 
-Fight again (the circling arrows) with the same gladiators, unless one was quartered: the computer sends another, and a player who lost draws a new one. Walking out of a duel (the door) loses it.
+Fight again (the circling arrows) with the same gladiators, unless one was quartered: the computer sends another, and a player who lost draws a new one. Walking out of a duel (the door asks first, a skull showing what it costs) loses it.
 
 ### The hall
 

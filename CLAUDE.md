@@ -58,7 +58,7 @@ The page (`client/`):
 
 - `index.js`: routes: `Start`, `Play`, watch, `Hall`, `Armory`, `Crowd`, `JoinNow` (an invite's code: seated at once), and the framework's lobby at `#/hub`.
 - `Start.js`: war or gladiators (remembered), the hall, the armory and the crowd, then a mode: back into a game you're in, a two-player game with a free side, or a new one (`sitDown`).
-- `Play.js`: `enterGame`, the bar, sound and music, and which screen shows for the phase.
+- `Play.js`: `enterGame`, the bar, sound and music, and which screen shows for the phase; leaving asks first (`LeavePrompt.js`).
 - `DrawScreen.js`: a drawing page on a `Pad` (`Pad.js`: measures the pen against itself, lifts it off the page or a weapon's box, `WEAPON_AREA`), the dashed example (or the warrior under armor and shield), the clock, keeping, the gallery (copies faded), and `BorrowPicker.js` on a weapon page.
 - `BattleScreen.js`: the battle on a `Stage`, drawn back to front through the depth (`atDepth`, `scene`), snapshots eased between ticks. War: picking and ordering men, the catapult (`AimPad.js` to aim it, its arc `drawArcs`, its pile `drawPile`), `RockPad.js` for rocks mid-battle. Arena: `arenaBackground` (in `paint.js`) with its crowd drawn live (`seatCrowd`, `drawCrowd`), medics (`drawMedic`), the verdict (`drawMercy`), the shouts (`armShouts`). The camera (`fitting`, `cam`): zoomed so men stay `READABLE`, panned and pinched, an overview strip on an upright phone, following the fighters in the arena. The end card.
 - `Hall.js`, `Armory.js` (and `Crowd.js`, the same page for the crowd): the hall's and the shelves' pages; `armoryPicks.js` fetches the shelves and votes.
