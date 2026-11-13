@@ -1217,3 +1217,39 @@ test('two servers sharing a store\'s file each see what the other wrote, and nei
 	await Bun.sleep(20);
 	expect(preview.load()[0]).toMatchObject({ up: 1, kills: 2 });
 });
+
+test('a gladiator from the hall can be enlisted: its warrior and gear, a new weapon, its record carried on', () => {
+	const roster = new Roster();
+	const champion = roster.record({ art: cpuGladiator() }, { art: null, spared: false }).winner;
+	const game = newGame('duo', 'gladiator', roster);
+	const fox = game.addPlayer('🦊'), owl = game.addPlayer('🦉');
+
+	// Only on the warrior's page
+	expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[0] }).ok).toBe(true);
+	expect(game.act(fox.id, 'enlist', { id: champion }).ok).toBe(false);
+
+	expect(game.act(owl.id, 'enlist', { id: 'nobody' }).ok).toBe(false);
+	expect(game.act(owl.id, 'enlist', { id: champion }).ok).toBe(true);
+	expect(game.state.fame[1]).toBe(champion);
+	expect(game.state.art[1].stickmen[0].raw).toEqual(roster.get(champion).art.stickmen[0].raw);
+	// On to its weapon, and once that's chosen, done: its gear came with it
+	expect(game.state.drawing[1].step).toBe(1);
+	expect(game.act(owl.id, 'keep', { strokes: DEFAULT_RAW.swords()[1] }).ok).toBe(true);
+	expect(game.state.drawing[1].done).toBe(true);
+	// The same one can't fight itself
+	game.act(fox.id, 'next');
+	game.act(fox.id, 'next');
+	game.act(fox.id, 'next');
+	expect(game.state.phase).toBe('battle');
+
+	const other = newGame('duo', 'gladiator', roster);
+	const [a, b] = [other.addPlayer('🐸'), other.addPlayer('🐙')];
+
+	expect(other.act(a.id, 'enlist', { id: champion }).ok).toBe(true);
+	expect(other.act(b.id, 'enlist', { id: champion }).ok).toBe(false);
+
+	// Won with its new weapon: its record up, kept with that weapon
+	game.honour(1, true);
+	expect(roster.get(champion)).toMatchObject({ wins: 2 });
+	expect(roster.get(champion).art.swords[0].raw).toEqual(game.state.art[1].swords[0].raw);
+});

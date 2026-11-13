@@ -8,8 +8,8 @@ import { sitDown } from './Start.js';
 import { PENCIL } from './theme.js';
 import { Doodle, count } from './ui.js';
 
-// A gladiator in the hall: its drawing, armor and shield on, its weapon beside it, its place and its record. Tapped, it's
-// the one you'll fight.
+// A gladiator in the hall: its drawing, armor and shield on (its weapon is whatever it's handed next), its place and its
+// record. Tapped, it's the one you'll fight.
 const Card = styled(
 	Doodle,
 	({ space }) => `
@@ -18,7 +18,7 @@ const Card = styled(
 		padding: ${space.sm};
 		font-size: 1.2em;
 
-		& canvas { width: 180px; height: 150px; }
+		& canvas { width: 130px; height: 160px; }
 		& .record { display: flex; gap: ${space.md}; align-items: center; }
 		& .place { position: absolute; top: 6px; left: 10px; font-size: 1.1em; opacity: 0.7; }
 		& .name { font-size: 1em; max-width: 170px; text-align: center; white-space: normal; line-height: 1.1; }
@@ -49,12 +49,12 @@ const fitInto = (g, pieces, { x, y, w, h }) => {
 	}
 };
 
-// A gladiator drawn for its card: the warrior with its armor and shield (drawn over it, so they line up), its weapon by it
-const drawGladiator = (canvas, gladiator) => {
+/** A gladiator drawn for a card: the warrior with its armor and shield on (drawn over it, so they line up), no weapon */
+export const drawGladiator = (canvas, gladiator, w = 130, h = 160) => {
 	const ratio = window.devicePixelRatio || 1, g = canvas.getContext('2d');
 
-	canvas.width = 180 * ratio;
-	canvas.height = 150 * ratio;
+	canvas.width = w * ratio;
+	canvas.height = h * ratio;
 	g.scale(ratio, ratio);
 	fitInto(
 		g,
@@ -63,9 +63,8 @@ const drawGladiator = (canvas, gladiator) => {
 			{ strokes: gladiator.warrior, ink: TEAMS[1].ink },
 			gladiator.armor && { strokes: gladiator.armor, ink: '#59656e', width: 3.2 },
 		].filter(Boolean),
-		{ x: 4, y: 4, w: 120, h: 142 },
+		{ x: 4, y: 4, w: w - 8, h: h - 8 },
 	);
-	if (gladiator.weapon) fitInto(g, [{ strokes: gladiator.weapon, ink: PENCIL, width: 2 }], { x: 122, y: 10, w: 54, h: 130 });
 };
 
 /** The hall's tab: every gladiator kept in it, best record first; tap one to fight it */

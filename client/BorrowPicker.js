@@ -54,7 +54,7 @@ export default class BorrowPicker extends Overlay {
 		const bar = document.createElement('div');
 
 		bar.className = 'bar';
-		bar.append(icon('rack', { size: '2em' }), doodle('empty', { title: 'Close', addClass: 'close', onPress: () => this.close() }).elem);
+		bar.append(icon(this.constructor.mark, { size: '2em' }), doodle('empty', { title: 'Close', addClass: 'close', onPress: () => this.close() }).elem);
 		this.list = document.createElement('div');
 		this.list.className = 'weapons';
 		this.panel.append(bar, this.list);
@@ -63,34 +63,46 @@ export default class BorrowPicker extends Overlay {
 		this.elem.addEventListener('pointerdown', event => event.target === this.elem && this.close());
 	}
 
+	// What it offers, its doodle, and what taking one is: the armory's weapons, borrowed
+	static mark = 'rack';
+	items() {
+		return weapons('loved');
+	}
+
 	async open() {
 		this.elem.classList.remove('hidden');
 		this.list.replaceChildren();
 
-		const list = await weapons('loved');
+		const list = await this.items();
+		const { mark } = this.constructor;
 
-		if (!list.length) return this.list.replaceChildren(icon('rack', { size: '4em', color: 'rgba(43,43,43,0.4)' }));
-		this.list.replaceChildren(
-			...list.map(weapon => {
-				const button = new Doodle({ title: 'Borrow this one', onPointerPress: () => this.borrow(weapon) });
-				const canvas = document.createElement('canvas');
-				const row = document.createElement('span');
-
-				canvas.width = 140;
-				canvas.height = 192;
-				drawRawFit(canvas, weapon.raw);
-				row.style.display = 'inline-flex';
-				row.style.gap = '6px';
-				row.append(count('thumbUp', weapon.up, '#2f7a3a'), count('thumbDown', weapon.down, RED_PENCIL), count('skull', weapon.kills));
-				button.elem.append(canvas, ...(weapon.name ? [Object.assign(document.createElement('span'), { textContent: weapon.name, style: 'font-size: 0.8em; max-width: 110px' })] : []), row);
-
-				return button.elem;
-			}),
-		);
+		if (!list.length) return this.list.replaceChildren(icon(mark, { size: '4em', color: 'rgba(43,43,43,0.4)' }));
+		this.list.replaceChildren(...list.map(item => this.card(item)));
 	}
 
-	async borrow(weapon) {
-		const said = await act('borrow', { id: weapon.id });
+	// One weapon to borrow: its drawing, its name once earned, its thumbs and kills
+	card(weapon) {
+		const button = new Doodle({ title: 'Borrow this one', onPointerPress: () => this.borrow(weapon) });
+		const canvas = document.createElement('canvas');
+		const row = document.createElement('span');
+
+		canvas.width = 140;
+		canvas.height = 192;
+		drawRawFit(canvas, weapon.raw);
+		row.style.display = 'inline-flex';
+		row.style.gap = '6px';
+		row.append(count('thumbUp', weapon.up, '#2f7a3a'), count('thumbDown', weapon.down, RED_PENCIL), count('skull', weapon.kills));
+		button.elem.append(canvas, ...(weapon.name ? [Object.assign(document.createElement('span'), { textContent: weapon.name, style: 'font-size: 0.8em; max-width: 110px' })] : []), row);
+
+		return button.elem;
+	}
+
+	borrow(weapon) {
+		return this.take('borrow', weapon);
+	}
+
+	async take(action, item) {
+		const said = await act(action, { id: item.id });
 
 		if (said.ok) {
 			this.options.sound?.play?.('keep');

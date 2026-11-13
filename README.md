@@ -109,7 +109,9 @@ Every gladiator that wins is kept in the hall of gladiators, with its record, an
 
 A gladiator that wins three times earns a name, made from what it is: heavy armor makes it a Tin Can, a big shield a Shield-Wall, long limbs Stick-Legs, a crushing weapon a Bonecruncher. Its name shows on its card, over it in the arena, and on the end card.
 
-The **hall** tab shows everyone in it, best record first: each drawn with its armor and shield on and its weapon beside it, with its wins and losses. Tap one to fight it: draw your gladiator, and that one walks out of the other gate.
+The **hall** tab shows everyone in it, best record first: each drawn with its armor and shield on, with its wins and losses, but no weapon, because a gladiator can be handed any weapon. Tap one to fight it: draw your gladiator, and that one walks out of the other gate.
+
+Or fight *as* one: on the warrior's page the trophy button opens the hall, and the gladiator you tap is yours, its armor and shield with it. Then choose its weapon, drawn or borrowed from the armory. Its record carries on: a win is its win, and if the crowd gives it the thumbs down, it's struck from the hall. The computer sometimes hands its hall gladiators a different weapon from the armory too.
 
 ## Shared by every game
 

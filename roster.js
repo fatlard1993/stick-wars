@@ -29,9 +29,9 @@ export default class Roster extends Store {
 			}));
 	}
 
-	/** One to fight, the better its record the likelier; null with none kept */
-	pick() {
-		const list = this.load();
+	/** One to fight, the better its record the likelier (none of those `taken`); null with none kept */
+	pick(taken = []) {
+		const list = this.load().filter(entry => !taken.includes(entry.id));
 		const weight = entry => 1 + Math.max(0, entry.wins - entry.losses);
 		let roll = Math.random() * list.reduce((sum, entry) => sum + weight(entry), 0);
 
@@ -57,6 +57,8 @@ export default class Roster extends Store {
 		const won = this.get(winner.id) ?? enter(winner.art);
 
 		won.wins++;
+		// Kept as it won: enlisted again, its weapon may be another
+		if (winner.art) won.art = winner.art;
 
 		let lost = this.get(loser.id);
 

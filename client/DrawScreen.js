@@ -5,6 +5,7 @@ import { act, createInput } from '@fatlard1993/web-game-framework/client';
 import { DEFAULT_RAW, PAD, WEAPON_AREA, clamp, freshOf, pick } from '../art.js';
 import { STYLES, TEAMS, stepsOf } from '../rules.js';
 import BorrowPicker from './BorrowPicker.js';
+import HallPicker from './HallPicker.js';
 import { icon } from './icons.js';
 import { PEN, Pad, SHEET, inkStrokes, offPad } from './Pad.js';
 import { drawRawFit } from './paint.js';
@@ -233,7 +234,11 @@ export default class DrawScreen extends Screen {
 		this.picker = new BorrowPicker({ appendTo: document.body });
 		this.addCleanup('picker', () => this.picker.elem.remove());
 		this.borrowButton = doodle('rack', { title: 'Borrow one from the armory', size: '2em', onPress: () => this.picker.open() });
-		this.side.elem.append(this.borrowButton.elem);
+		// On a gladiator's first page: enlist one from the hall instead of drawing one
+		this.hallPicker = new HallPicker({ appendTo: document.body });
+		this.addCleanup('hallPicker', () => this.hallPicker.elem.remove());
+		this.enlistButton = doodle('trophy', { title: 'Enlist one from the hall', size: '2em', onPress: () => this.hallPicker.open() });
+		this.side.elem.append(this.borrowButton.elem, this.enlistButton.elem);
 		this.count = new Component({ appendTo: this.side });
 		this.gallery = new Gallery({ appendTo: this.side });
 
@@ -312,7 +317,9 @@ export default class DrawScreen extends Screen {
 		);
 		this.heading.elem.replaceChildren(Object.assign(document.createElement('span'), { textContent: title }), dots);
 		this.borrowButton.elem.style.display = kind === 'swords' ? '' : 'none';
+		this.enlistButton.elem.style.display = kind === 'stickmen' && this.steps === STYLES.gladiator ? '' : 'none';
 		this.picker.close();
+		this.hallPicker.close();
 		this.redraw();
 		this.showKept();
 	}

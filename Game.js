@@ -173,6 +173,31 @@ export default class Game extends BaseGame {
 			return { kept: kept.length };
 		},
 
+		// A gladiator from the hall instead of one drawn: its warrior, armor and shield, its record carried on (a win is its
+		// win, a thumbs down strikes it out); the weapon's still to choose
+		enlist(player, { id } = {}) {
+			const side = this.sideOf(player.id);
+			const { drawing } = side;
+
+			if (this.state.style !== 'gladiator') refuse('Only gladiators are enlisted');
+			if (this.state.phase !== 'draw' || !drawing || drawing.done || stepsOf(this.state)[drawing.step].kind !== 'stickmen') refuse('Not now');
+
+			const entry = this.roster.get(id);
+
+			if (!entry) refuse('That one is gone');
+			if (this.famesInGame().includes(id)) refuse('Already fighting here');
+			Object.assign(side.art, {
+				stickmen: structuredClone(entry.art.stickmen),
+				armor: structuredClone(entry.art.armor ?? []),
+				shield: structuredClone(entry.art.shield ?? []),
+			});
+			drawing.enlisted = true;
+			if (this.state.mode === 'tournament') side.fame = id;
+			else this.state.fame[this.teamOf(player.id)] = id;
+			this.artChanged();
+			this.finishStep(side);
+		},
+
 		// Done with this step before the clock runs out
 		next(player) {
 			const side = this.sideOf(player.id);
@@ -380,9 +405,16 @@ export default class Game extends BaseGame {
 			this.artChanged();
 		}
 		drawing.step++;
+		// An enlisted gladiator comes with its gear: only its weapon's page is left
+		while (drawing.enlisted && drawing.step < steps.length && steps[drawing.step].kind !== 'swords') drawing.step++;
 		if (drawing.step >= steps.length) drawing.done = true;
 		else drawing.left = steps[drawing.step].seconds;
 		this.startWhenReady();
+	}
+
+	// The hall's gladiators in this game already: seated, entered, or the computer's
+	famesInGame() {
+		return [...this.state.fame, ...(this.state.entrants ?? []).filter(entrant => !entrant.gone).map(entrant => entrant.fame)].filter(Boolean);
 	}
 
 	// A kind's defaults, for a page left empty: all of them for an army, the first for a gladiator, who has one of each
@@ -410,13 +442,16 @@ export default class Game extends BaseGame {
 		// the hall of them if there are any, or one it draws
 		if (state.mode === 'cpu' && steps.some(({ kind, optional }) => !optional && !state.art[1][kind]?.length)) {
 			// The one picked from the hall to fight, if it's still there; or one the hall sends
-			const champion = gladiator ? (this.roster.get(this.options.rival) ?? this.roster.pick()) : null;
+			const taken = this.famesInGame().filter(id => id !== state.fame[1]);
+			const rival = this.roster.get(this.options.rival);
+			const champion = gladiator ? ((rival && !taken.includes(rival.id) ? rival : null) ?? this.roster.pick(taken)) : null;
 
 			state.art[1] = champion ? structuredClone(champion.art) : gladiator ? cpuGladiator() : cpuArmy();
 			state.fame[1] = champion?.id ?? null;
-			// The computer arms itself partly from the armory: a couple of an army's weapons, now and then a gladiator's
-			if (!champion) {
-				const borrowed = this.armory.lend(gladiator ? (Math.random() < 0.4 ? 1 : 0) : 2).map(entry => ({ ...structuredClone(entry.item), armory: entry.id }));
+			// The computer arms itself partly from the armory: a couple of an army's weapons, now and then a gladiator's (one
+			// from the hall too, now and then, with a weapon it hasn't fought with)
+			if (!champion || Math.random() < 0.4) {
+				const borrowed = this.armory.lend(champion ? 1 : gladiator ? (Math.random() < 0.4 ? 1 : 0) : 2).map(entry => ({ ...structuredClone(entry.item), armory: entry.id }));
 
 				state.art[1].swords.splice(0, borrowed.length, ...borrowed);
 			}
