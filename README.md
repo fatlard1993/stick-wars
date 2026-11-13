@@ -34,6 +34,7 @@ Every man has a job, and choosing them is the game:
 
 - **Fight**: the running man (Space) sends them charging; the shield (H) has them hold just outside your wall; the tent (B) brings them home.
 - **Shoot**: crew the catapult with the catapult button (C) then a tap on it, or with men picked, just tap it. It only fires with crew at it, loads faster with up to three, and sends its crew home once its last rock is thrown. Over it: whether it's aimed (the target, red until it is), its rocks, its crew (red when nobody's at it), and a hammer while it's being repaired.
+- **Aim** (T, or tap anywhere on your catapult, even past its crew): see Aiming below.
 - **Repair**: the hammer button (R), then tap a catapult or your wall; or with men picked, tap your wall. Repairers patch cracked stones and set new ones into the wall's gaps, mend a damaged catapult, and even rebuild a smashed one from its wreck, slowly, to fight on with whatever rocks it had.
 
 **Looking around**: on a small screen (a phone) the battle is zoomed in so the men stay readable, starting over your own side: two fingers pan along the field and pinch to zoom. On a computer, the scroll wheel zooms and the arrow keys pan. Held upright, a phone shows the whole battlefield in a strip across the top, with what the main view shows boxed on it: tap or drag along the strip to look there.
@@ -59,6 +60,10 @@ If a player's page closes, their drawing clock and the battle wait for them. If 
 Every weapon a player draws goes into the armory (one too like a weapon already there doesn't go in twice), counted each battle it fights in and each man it kills. On a weapon page, the rack button opens it: tap one to borrow it instead of drawing your own (a borrowed weapon fights the same, but earns no extra man). The computer arms itself from it too, better-loved and deadlier weapons more often.
 
 The **armory** button on the start screen shows every weapon in it, with its thumbs and kills: give each a thumbs up or down (one thumb each, tap again to take it back), and sort them by the most loved, the most hated, the most controversial (many votes, split down the middle) or the deadliest.
+
+## The crowd
+
+Every stick man a player draws (one standing too like one already there doesn't go in twice) joins the crowd, and the crowd fills the arena's stands: the gladiators fight in front of your own drawings, standing, hopping, throwing their arms up. The **crowd** button on the start screen shows them all: thumbs up or down on each, sorted by the most loved, the most hated or the most controversial; the better loved, the more seats they fill.
 
 ## Gladiators
 

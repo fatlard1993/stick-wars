@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import { DEFAULT_RAW, blobS, cpuArmy, cpuGladiator, judge, lineS, ringS, starS } from './art.js';
+import { DEFAULT_RAW, blobS, cpuArmy, cpuGladiator, judge, lineS, ringS, samePose, starS } from './art.js';
 import { AMMO, DT, FADE, GLADIATOR_HP, GROUND, LINGER, MERCY_WAIT, PLANS, STANCE_FOR, World, rockThrow } from './battle.js';
 import Game from './Game.js';
 import Armory from './armory.js';
@@ -9,8 +9,8 @@ import { BASE_ARMY, CPU_SIZE, GLADIATOR_STEPS, STEPS, emptyArt } from './rules.j
 
 const quiet = { info() {}, debug() {}, warning() {}, error() {} };
 const server = () => ({ games: {}, publish() {}, socketBroadcast() {} });
-const newGame = (mode, style, roster = new Roster(), armory = new Armory()) => {
-	const game = new Game({ mode, style, roster, armory, server: server(), logger: quiet });
+const newGame = (mode, style, roster = new Roster(), armory = new Armory(), crowd = new Armory(null, { alike: samePose, show: item => ({ raw: item.raw, rig: item.rig }) })) => {
+	const game = new Game({ mode, style, roster, armory, crowd, server: server(), logger: quiet });
 
 	game.dispose();
 
@@ -853,4 +853,21 @@ test('players vote on weapons, one thumb each, and the armory sorts them loved, 
 	expect(armory.listing('controversial')[0].id).toBe(c);
 	expect(armory.listing('deadliest')[0].id).toBe(b);
 	expect(armory.listing('loved', 'v2').find(entry => entry.id === c).mine).toBe(-1);
+});
+
+test('every new stick man players draw joins the crowd in the arena\'s stands (not a copy by pose), voted on like the armory', () => {
+	const game = newGame('cpu');
+	const fox = game.addPlayer('🦊');
+
+	game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[0] });
+	game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[0].map(st => st.map(p => ({ x: p.x + 5, y: p.y }))) });
+	game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[1] });
+	expect(game.crowd.load()).toHaveLength(2);
+
+	const [first] = game.crowd.listing('loved');
+
+	// Its skeleton goes with it, for the stands to draw it cheering
+	expect(first.rig.joints).toHaveLength(11);
+	game.crowd.vote(first.id, 'v1', -1);
+	expect(game.crowd.listing('hated', 'v1')[0]).toMatchObject({ id: first.id, down: 1, mine: -1 });
 });

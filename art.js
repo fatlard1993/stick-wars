@@ -505,6 +505,9 @@ const unlikePose = (a, b) =>
 /** How unalike two stick men must stand, and two other drawings look, to count as different (copies come well under) */
 export const NEW_POSE = 0.07, NEW_LOOK = 0.035;
 
+/** Whether two stick men stand too alike to count as different */
+export const samePose = (a, b) => (a.rig && b.rig ? unlikePose(a, b) <= NEW_POSE : unlike(a.raw, b.raw) <= NEW_LOOK);
+
 /** Which of a kind's drawings are new: each one not like any new one kept before it */
 export const freshOf = (kind, items) => {
   const seen = [];

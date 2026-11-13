@@ -18,8 +18,13 @@ export const voter = () => {
 	}
 };
 
-/** The armory's weapons, sorted one of its ways (loved, hated, controversial, deadliest) */
-export const weapons = async sort => (await GET('/armory', { apiId: ['armory', sort], invalidateAfter: 0, searchParameters: { sort, voter: voter() } })).body ?? [];
+/** A shelf's drawings (the armory's weapons, or the crowd's stick men), sorted one of its ways */
+export const shelf = async (name, sort) =>
+	(await GET(`/${name}`, { apiId: [name, sort], invalidateAfter: 0, searchParameters: { sort, voter: voter() } })).body ?? [];
 
-/** A thumb given (1 up, -1 down), or taken back (0): the weapon's thumbs now */
-export const vote = async (id, thumb) => (await POST('/armory/:id/vote', { urlParameters: { id }, body: { voter: voter(), thumb } })).body;
+/** The armory's weapons, sorted one of its ways (loved, hated, controversial, deadliest) */
+export const weapons = sort => shelf('armory', sort);
+
+/** A thumb given (1 up, -1 down), or taken back (0), on one of a shelf's drawings: its thumbs now */
+export const vote = async (id, thumb, name = 'armory') =>
+	(await POST(`/${name}/:id/vote`, { urlParameters: { id }, body: { voter: voter(), thumb } })).body;

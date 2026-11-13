@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 
 import { Server, basicGameRoutes } from '@fatlard1993/web-game-framework';
 
-import Game, { ARMORY, HALL } from './Game.js';
+import Game, { ARMORY, CROWD, HALL } from './Game.js';
 
 const routes = basicGameRoutes();
 
@@ -15,19 +15,29 @@ const savedGames = () => {
 	}
 };
 
-ARMORY.stockOnce([
-	...HALL.load().flatMap(entry => entry.art.swords ?? []),
-	...savedGames().flatMap(game => (game?.state?.art ?? []).flatMap(art => (art?.swords ?? []).filter(item => item.drawn))),
-]);
+const drawnBefore = kind => [
+	...HALL.load().flatMap(entry => entry.art[kind] ?? []),
+	...savedGames().flatMap(game => (game?.state?.art ?? []).flatMap(art => (art?.[kind] ?? []).filter(item => item.drawn))),
+];
+
+ARMORY.stockOnce(drawnBefore('swords'));
+// And the crowd with the stick men drawn before it
+CROWD.stockOnce(drawnBefore('stickmen'));
+
+// Each shelf players vote on, by its address
+const SHELVES = { armory: ARMORY, crowd: CROWD };
 
 // The game's own pages' data, beside the games': the hall of gladiators, and the armory with its votes
 const extras = request => {
 	const url = new URL(request.url);
 
 	if (request.method === 'GET' && url.pathname === '/hall') return Response.json(HALL.standings());
-	if (request.method === 'GET' && url.pathname === '/armory') return Response.json(ARMORY.listing(url.searchParams.get('sort'), url.searchParams.get('voter')));
 
-	const vote = request.method === 'POST' && url.pathname.match(/^\/armory\/(\w+)\/vote$/);
+	const list = request.method === 'GET' && url.pathname.match(/^\/(armory|crowd)$/);
+
+	if (list) return Response.json(SHELVES[list[1]].listing(url.searchParams.get('sort'), url.searchParams.get('voter')));
+
+	const vote = request.method === 'POST' && url.pathname.match(/^\/(armory|crowd)\/(\w+)\/vote$/);
 
 	if (!vote) return null;
 
@@ -35,7 +45,7 @@ const extras = request => {
 		.json()
 		.catch(() => ({}))
 		.then(({ voter, thumb } = {}) => {
-			const entry = ARMORY.vote(vote[1], voter, thumb);
+			const entry = SHELVES[vote[1]].vote(vote[2], voter, thumb);
 
 			return entry ? Response.json({ up: entry.up, down: entry.down }) : Response.json({ message: 'No such vote' }, { status: 400 });
 		});

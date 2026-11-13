@@ -1,7 +1,7 @@
 import { Component, styled } from '@vanilla-bean/components';
 import { View } from '@fatlard1993/web-game-framework/ui';
 
-import { weapons, vote } from './armoryPicks.js';
+import { shelf, vote } from './armoryPicks.js';
 import { icon } from './icons.js';
 import { drawRawFit } from './paint.js';
 import { PENCIL, RED_PENCIL } from './theme.js';
@@ -49,9 +49,16 @@ const Card = styled(
 );
 
 /** The armory: every weapon players have drawn, with its thumbs and kills; sorted loved, hated, controversial or deadliest,
- * and voted on here, one thumb each */
+ * and voted on here, one thumb each. The crowd's page is the same, for the stick men in the arena's stands. */
 export default class Armory extends View {
+	// Which shelf, its doodle, its sorts, and whether its drawings have kills to show
+	static shelf = 'armory';
+	static mark = 'rack';
+	static sorts = ['loved', 'hated', 'controversial', 'deadliest'];
+	static kills = true;
+
 	build() {
+		const { mark, sorts: kept } = this.constructor;
 		const screen = new Screen({ appendTo: this });
 		const top = document.createElement('div');
 		const sorts = document.createElement('div');
@@ -64,10 +71,12 @@ export default class Armory extends View {
 				['hated', 'thumbDown', 'Hated'],
 				['controversial', 'split', 'Loved and hated'],
 				['deadliest', 'skull', 'Deadliest'],
-			].map(([sort, name, title]) => [sort, doodle(name, { title, size: '1.8em', onPress: () => this.show(sort) })]),
+			]
+				.filter(([sort]) => kept.includes(sort))
+				.map(([sort, name, title]) => [sort, doodle(name, { title, size: '1.8em', onPress: () => this.show(sort) })]),
 		);
 		sorts.append(...Object.values(this.sortButtons).map(button => button.elem));
-		top.append(doodle('home', { title: 'Back', size: '1.8em', onPress: () => (window.location.href = '#/') }).elem, icon('rack', { size: '2.4em' }), sorts);
+		top.append(doodle('home', { title: 'Back', size: '1.8em', onPress: () => (window.location.href = '#/') }).elem, icon(mark, { size: '2.4em' }), sorts);
 		screen.elem.append(top);
 		this.cards = new Component({ appendTo: screen, addClass: 'cards' });
 		this.show('loved');
@@ -77,11 +86,11 @@ export default class Armory extends View {
 		this.sort = sort;
 		for (const [name, button] of Object.entries(this.sortButtons)) button.elem.setAttribute('aria-pressed', String(name === sort));
 
-		const list = await weapons(sort);
+		const list = await shelf(this.constructor.shelf, sort);
 
 		if (sort !== this.sort) return;
 		if (!list.length) {
-			const empty = icon('rack', { size: '5em' });
+			const empty = icon(this.constructor.mark, { size: '5em' });
 
 			empty.classList.add('empty');
 			this.cards.elem.replaceChildren(empty);
@@ -110,7 +119,7 @@ export default class Armory extends View {
 			down.elem.append(count('thumbDown', weapon.down, RED_PENCIL));
 			up.elem.setAttribute('aria-pressed', String(weapon.mine === 1));
 			down.elem.setAttribute('aria-pressed', String(weapon.mine === -1));
-			row.replaceChildren(up.elem, down.elem, count('skull', weapon.kills));
+			row.replaceChildren(up.elem, down.elem, ...(this.constructor.kills ? [count('skull', weapon.kills)] : []));
 		};
 
 		thumbs();
@@ -120,7 +129,7 @@ export default class Armory extends View {
 	}
 
 	async vote(weapon, thumb, redraw) {
-		const said = await vote(weapon.id, thumb);
+		const said = await vote(weapon.id, thumb, this.constructor.shelf);
 
 		if (!said) return;
 		Object.assign(weapon, said, { mine: thumb });

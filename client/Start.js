@@ -73,6 +73,7 @@ export default class Start extends View {
 			...Object.values(this.styleButtons),
 			this.hallButton,
 			doodle('rack', { size: '2.4em', label: 'armory', onPress: () => (window.location.href = '#/armory') }),
+			doodle('crowd', { size: '2.4em', label: 'crowd', onPress: () => (window.location.href = '#/crowd') }),
 		);
 		screen.append(styles, modes);
 		let saved = 'war';

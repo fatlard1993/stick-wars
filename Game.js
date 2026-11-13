@@ -1,6 +1,6 @@
 import { Game as BaseGame, refuse } from '@fatlard1993/web-game-framework';
 
-import { cpuArmy, cpuGladiator, defaultsFor, freshOf, judge } from './art.js';
+import { cpuArmy, cpuGladiator, defaultsFor, freshOf, judge, samePose } from './art.js';
 import { AMMO, ARMY, DT, ORDERS, World } from './battle.js';
 import {
 	CPU_SIZE,
@@ -23,6 +23,12 @@ export const HALL = new Roster(process.env.NODE_ENV === 'test' ? null : 'data/gl
 
 // The armory every game shares: weapons players drew, borrowed, voted on and counted (only in memory while testing)
 export const ARMORY = new Armory(process.env.NODE_ENV === 'test' ? null : 'data/weapons.json');
+
+// The crowd every game shares: the stick men players drew, who fill the arena's stands (only in memory while testing)
+export const CROWD = new Armory(process.env.NODE_ENV === 'test' ? null : 'data/crowd.json', {
+	alike: samePose,
+	show: item => ({ raw: item.raw, rig: item.rig }),
+});
 
 // How long a won battle plays on before its end is called, in battle seconds
 const END_AFTER = 2.2;
@@ -54,6 +60,7 @@ export default class Game extends BaseGame {
 		this.state = options.saveState?.state ?? newState(this.options.mode, this.options.style);
 		this.roster = options.roster ?? HALL;
 		this.armory = options.armory ?? ARMORY;
+		this.crowd = options.crowd ?? CROWD;
 		this.outEvents = [];
 		this.world = null;
 		this.shown = '';
@@ -90,6 +97,9 @@ export default class Game extends BaseGame {
 			// the armory, for anyone to borrow
 			const item = { ...verdict.item, drawn: true };
 			const shelved = kind === 'swords' && this.armory.offer(item);
+
+			// And a new stick man joins the crowd that watches from the arena's stands
+			if (kind === 'stickmen') this.crowd.offer(item);
 
 			if (shelved) item.armory = shelved;
 			kept.push(item);

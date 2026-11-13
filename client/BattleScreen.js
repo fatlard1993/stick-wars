@@ -24,6 +24,7 @@ import {
 } from '../field.js';
 import { TEAMS, TICK_MS } from '../rules.js';
 import AimPad from './AimPad.js';
+import { shelf } from './armoryPicks.js';
 import RockPad from './RockPad.js';
 import { drawIcon, icon } from './icons.js';
 import {
@@ -274,9 +275,11 @@ export default class BattleScreen extends Screen {
 				none: ['Escape'],
 				rock: ['d', 'D'],
 				keep: ['Enter'],
+				aim: ['t', 'T'],
 			},
 			onPress: name => {
-				if (name === 'rock') this.rockPad.toggle();
+				if (name === 'aim') this.pickCat(0);
+				else if (name === 'rock') this.rockPad.toggle();
 				else if (name === 'keep') this.rockPad.keep();
 				else if (name === 'all') this.selectAll();
 				else if (name === 'none') this.letGo();
@@ -413,8 +416,12 @@ export default class BattleScreen extends Screen {
 		this.sound = sound;
 		this.art = art;
 		this.view = view;
-		// A gladiators' fight: only watched, nothing to order
+		// A gladiators' fight: only watched, nothing to order; the stands filled with the stick men players have drawn
 		this.arena = view.state.style === 'gladiator';
+		if (this.arena && !this.crowdAsked) {
+			this.crowdAsked = true;
+			shelf('crowd', 'loved').then(list => this.seatCrowd(list)).catch(() => {});
+		}
 		this.arm(team);
 
 		const { state, battle } = view;
@@ -705,12 +712,16 @@ export default class BattleScreen extends Screen {
 	}
 
 	// One of our catapults under a point of the page (a smashed one too: it can be repaired)
+	// Our catapult under a point of the page: anywhere on it, its pile of rocks in front, or the marks over it, and never
+	// less than a thumb's width across however far out the view is
 	catAt({ x, y }) {
+		const thumb = 30 / (this.fitting()?.scale ?? 1);
+
 		return (
 			this.myCats().find(({ cat }) => {
-				const [cx, cy] = project(cat.x, GROUND - 40, cat.z);
+				const [cx, cy] = project(cat.x + cat.d * 20, GROUND - 80, cat.z);
 
-				return Math.abs(cx - x) < 70 && Math.abs(cy - y) < 70;
+				return Math.abs(cx - x) < Math.max(90, thumb) && y > cy - Math.max(110, thumb) && y < cy + Math.max(90, thumb);
 			}) ?? null
 		);
 	}
@@ -760,10 +771,11 @@ export default class BattleScreen extends Screen {
 		if (point.event?.target?.closest?.('.aim-pad')) return;
 
 		const at = this.toPage(point);
-		// A man under the press is picked over the catapult he crews
-		const unit = this.unitAt(at);
+		// A man under the press is picked, unless he's one crewing the catapult there: that's the catapult being tapped
+		const cat = this.catAt(at), man = this.unitAt(at);
+		const unit = man && !(cat && man.u === 'w') ? man : null;
 
-		this.press = { from: point, at, moved: false, unit, cat: unit ? null : this.catAt(at) };
+		this.press = { from: point, at, moved: false, unit, cat: unit ? null : cat };
 	}
 
 	move(point) {
@@ -966,6 +978,47 @@ export default class BattleScreen extends Screen {
 		g.restore();
 	}
 
+	// The stick men players have drawn, seated in the stands: each drawn once, small, from its own skeleton, standing and
+	// with its arms thrown up, in an ink of its own. The better loved, the more seats they fill.
+	seatCrowd(list) {
+		const ratio = window.devicePixelRatio || 1, inks = [PENCIL, PENCIL, '#1f3f9e', '#1c6e35', '#8a3b2a', '#6b5a8e', '#a0702a'];
+		const sprite = (rig, cheer, ink) => {
+			const canvas = document.createElement('canvas'), g = canvas.getContext('2d');
+			const J = rig.joints.map(p => ({ ...p }));
+
+			if (cheer) {
+				// Hands up over the shoulders, elbows half way
+				const n = J[1];
+
+				J[4] = { x: n.x - 0.22, y: n.y - 0.3 };
+				J[6] = { x: n.x + 0.22, y: n.y - 0.3 };
+				J[3] = { x: n.x - 0.16, y: n.y - 0.1 };
+				J[5] = { x: n.x + 0.16, y: n.y - 0.1 };
+			}
+
+			const top = Math.min(J[0].y - rig.headR, ...J.map(p => p.y)), bottom = Math.max(...J.map(p => p.y));
+			const k = 46 / Math.max(0.2, bottom - top);
+
+			canvas.width = 40 * ratio;
+			canvas.height = 56 * ratio;
+			g.scale(ratio, ratio);
+			g.lineCap = g.lineJoin = 'round';
+			drawBody(g, rig, { j: J.flatMap(p => [20 + p.x * k, 5 + (p.y - top) * k]), o: 1023, f: 1, q: 1 }, ink, 2.2);
+
+			return canvas;
+		};
+
+		this.crowdSprites = list
+			.filter(member => member.rig)
+			.slice(0, 40)
+			.map(({ rig }) => {
+				const ink = pick(inks);
+
+				return { rest: sprite(rig, false, ink), cheer: sprite(rig, true, ink) };
+			});
+		this.fans = null;
+	}
+
 	// The arena's crowd in its stands: little stick people in rows, bobbing; on their feet with their arms up when the crowd
 	// roars or gasps, arms down and swaying when it boos, settling again over a couple of seconds
 	drawCrowd(g) {
@@ -978,12 +1031,16 @@ export default class BattleScreen extends Screen {
 		const roused = this.cur?.over || this.view?.state.phase === 'over' ? 1 : booing ? 0 : heat;
 
 		// Each row's people in order of their ink, so a row is drawn in a few strokes, not hundreds
+		// Most seats are players' own stick men, when there are any (the loved first in line), the rest the crowd's regulars
+		const drawn = this.crowdSprites ?? [];
+
 		this.fans ??= Array.from({ length: ARENA_ROWS }, () =>
 			Array.from({ length: Math.ceil(W / 22) + 4 }, (_, i) => ({
 				x: i * 22 - 30 + rand(-6, 6),
 				phase: rand(0, TAU),
 				ink: Math.random() < 0.7 ? PENCIL : pick(['#1f3f9e', '#1c6e35', '#8a3b2a', '#6b5a8e', '#a0702a']),
 				s: rand(0.85, 1.1),
+				member: drawn.length && Math.random() < 0.7 ? drawn[Math.floor(Math.random() ** 2 * drawn.length)] : null,
 			})).sort((a, b) => (a.ink < b.ink ? -1 : 1)),
 		);
 		g.save();
@@ -993,6 +1050,15 @@ export default class BattleScreen extends Screen {
 			let ink = null;
 
 			for (const fan of row) {
+				// One of the players' stick men: its picture, standing or cheering, hopping and swaying with the rest
+				if (fan.member) {
+					const hop = roused * Math.max(0, Math.sin(t * 13 + fan.phase)) * 6 + Math.sin(t * 2 + fan.phase) * 0.8;
+					const sway = booing ? Math.sin(t * 6 + fan.phase) * 2.5 : 0;
+					const tall = size * fan.s * 2.7, wide = (tall * 40) / 56;
+
+					g.drawImage(roused > 0.15 || verdict !== undefined ? fan.member.cheer : fan.member.rest, fan.x + DEPTH * SKEW_X + sway - wide / 2, base - hop - tall, wide, tall);
+					continue;
+				}
 				if (fan.ink !== ink) {
 					if (ink) g.stroke();
 					ink = fan.ink;
@@ -1426,9 +1492,9 @@ export default class BattleScreen extends Screen {
 
 			g.fillStyle = ink;
 			// Where the next rock on its pile would land: a heavy one flies shorter
-			const k = this.throwOf(cat);
+			const heft = this.throwOf(cat);
 
-			flingPath(from, aim[0] * k, aim[1] * k, x => this.groundAt(x)).forEach(([x, y], at) => {
+			flingPath(from, aim[0] * heft, aim[1] * heft, x => this.groundAt(x)).forEach(([x, y], at) => {
 				if (at % 4) return;
 
 				const [px, py] = project(x, y, cat.z, x);

@@ -19,14 +19,23 @@ export const SORTS = {
 };
 
 /**
- * The armory: every weapon a player has drawn (one too like a weapon already in it isn't kept again), with how often it's
- * fought, how many it's killed, and the thumbs players have given it. Players can borrow one instead of drawing their own,
- * and the computer arms its side from it too. Kept in a file of its own (or only in memory, with none).
+ * A shelf of drawings players have made, voted on with thumbs. The armory is one: every weapon a player has drawn (one too
+ * like a weapon already in it isn't kept again), with how often it's fought, how many it's killed, and the thumbs players
+ * have given it; players can borrow one instead of drawing their own, and the computer arms its side from it too. The
+ * crowd is another: the stick men players have drawn, who watch from the arena's stands. Kept in a file of its own (or
+ * only in memory, with none).
  */
 export default class Armory {
-	constructor(file = null) {
+	/**
+	 * @param {string} [file] - Where it's kept
+	 * @param {object} [options] - { alike(a, b): whether two drawings are too alike to keep both, show(item): what its
+	 *   page is sent of each drawing }
+	 */
+	constructor(file = null, { alike = (a, b) => unlike(a.raw, b.raw) <= NEW_LOOK, show = item => ({ raw: item.raw, name: item.stats?.name }) } = {}) {
 		this.file = file;
 		this.list = null;
+		this.alike = alike;
+		this.show = show;
 	}
 
 	load() {
@@ -51,7 +60,7 @@ export default class Armory {
 	stockOnce(items) {
 		if (!this.file || existsSync(this.file)) return;
 		this.load();
-		for (const item of items) if (item?.raw && item.shape) this.offer(item);
+		for (const item of items) if (item?.raw) this.offer(item);
 		this.save();
 	}
 
@@ -67,7 +76,7 @@ export default class Armory {
 	offer(item) {
 		const list = this.load();
 
-		if (list.some(entry => unlike(entry.item.raw, item.raw) <= NEW_LOOK)) return null;
+		if (list.some(entry => this.alike(entry.item, item))) return null;
 
 		const { drawn: _drawn, armory: _armory, ...weapon } = item;
 		const entry = { id: Math.random().toString(36).slice(2, 10), item: weapon, up: 0, down: 0, votes: {}, uses: 0, kills: 0, born: Date.now() };
@@ -130,6 +139,6 @@ export default class Armory {
 	listing(sort, voter) {
 		return [...this.load()]
 			.sort(SORTS[sort] ?? SORTS.loved)
-			.map(({ id, item, up, down, votes, uses, kills }) => ({ id, raw: item.raw, name: item.stats?.name, up, down, uses, kills, mine: votes[voter] ?? 0 }));
+			.map(({ id, item, up, down, votes, uses, kills }) => ({ id, ...this.show(item), up, down, uses, kills, mine: votes[voter] ?? 0 }));
 	}
 }

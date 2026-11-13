@@ -8,6 +8,7 @@ import '@fatlard1993/web-game-framework/client/socket';
 import '@vanilla-bean/components/app/reloadOnBuild';
 
 import Armory from './Armory.js';
+import Crowd from './Crowd.js';
 import Hall from './Hall.js';
 import Play from './Play.js';
 import Start from './Start.js';
@@ -25,6 +26,7 @@ const views = {
 	'/': Start,
 	'/hall': Hall,
 	'/armory': Armory,
+	'/crowd': Crowd,
 	'/play/:gameId': Play,
 	'/watch/:gameId': Watch,
 	'/hub': Hub,
