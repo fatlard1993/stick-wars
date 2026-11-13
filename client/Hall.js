@@ -1,32 +1,12 @@
 import { Component, GET, Notify, styled } from '@vanilla-bean/components';
 import { createGame } from '@fatlard1993/web-game-framework/client';
-import { View } from '@fatlard1993/web-game-framework/ui';
 
 import { bboxOf } from '../art.js';
 import { TEAMS } from '../rules.js';
 import { icon } from './icons.js';
 import { sitDown } from './Start.js';
 import { PENCIL } from './theme.js';
-import { Doodle, count, doodle, lined } from './ui.js';
-
-const Screen = styled(
-	Component,
-	({ space }) => `
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: ${space.lg};
-		min-height: 100%;
-		padding: ${space.lg} ${space.md};
-		color: ${PENCIL};
-		${lined}
-
-		& .top { display: flex; align-items: center; gap: ${space.md}; width: 100%; max-width: 1100px; }
-		& .title { display: flex; align-items: center; gap: ${space.sm}; font-size: 2.4em; }
-		& .cards { display: flex; flex-wrap: wrap; justify-content: center; gap: ${space.md}; max-width: 1100px; }
-		& .empty { font-size: 3em; opacity: 0.5; margin-top: ${space.xl}; }
-	`,
-);
+import { Doodle, count } from './ui.js';
 
 // A gladiator in the hall: its drawing, armor and shield on, its weapon beside it, its place and its record. Tapped, it's
 // the one you'll fight.
@@ -88,19 +68,10 @@ const drawGladiator = (canvas, gladiator) => {
 	if (gladiator.weapon) fitInto(g, [{ strokes: gladiator.weapon, ink: PENCIL, width: 2 }], { x: 122, y: 10, w: 54, h: 130 });
 };
 
-/** The hall of gladiators: everyone kept in it, best record first; tap one to fight it */
-export default class Hall extends View {
-	build() {
-		const screen = new Screen({ appendTo: this });
-		const top = document.createElement('div');
-		const title = document.createElement('div');
-
-		top.className = 'top';
-		title.className = 'title';
-		title.append(icon('trophy', { size: '1.2em' }), icon('helmet', { size: '1.2em' }));
-		top.append(doodle('home', { title: 'Back', size: '1.8em', onPress: () => (window.location.href = '#/') }).elem, title);
-		screen.elem.append(top);
-		this.cards = new Component({ appendTo: screen, addClass: 'cards' });
+/** The hall's tab: every gladiator kept in it, best record first; tap one to fight it */
+export default class HallList {
+	constructor(host) {
+		this.cards = new Component({ appendTo: host, addClass: 'cards' });
 		this.load();
 	}
 
@@ -109,7 +80,7 @@ export default class Hall extends View {
 
 		if (!gladiators.length) {
 			// Nobody yet: an empty hall, waiting for a winner
-			const empty = icon('trophy', { size: '4em' });
+			const empty = icon('trophy', { size: '5em' });
 
 			empty.classList.add('empty');
 			this.cards.elem.replaceChildren(empty);

@@ -3,8 +3,9 @@ import { createGame, getGames, joinGame } from '@fatlard1993/web-game-framework/
 import { View } from '@fatlard1993/web-game-framework/ui';
 
 import { MODES } from '../rules.js';
-import icon from './favicon.svg';
-import { PENCIL } from './theme.js';
+import logo from './favicon.svg';
+import { icon } from './icons.js';
+import { PAPER, PENCIL } from './theme.js';
 import { Heading, doodle, lined } from './ui.js';
 
 // The first screen: fight the computer, or a friend. A game you're already in is where either button takes you back
@@ -16,20 +17,32 @@ const Screen = styled(
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		justify-content: center;
+		justify-content: safe center;
 		gap: ${space.xl};
-		min-height: 100%;
-		padding: ${space.xl};
+		height: 100%;
+		overflow-y: auto;
+		box-sizing: border-box;
+		padding: ${space.xl} ${space.md};
 		text-align: center;
 		${lined}
 
-		& img { width: 120px; height: 120px; transform: rotate(-6deg); }
-		& .title { font-size: 4.2em; transform: rotate(-2deg); color: ${PENCIL}; }
-		& .modes { display: flex; flex-wrap: wrap; justify-content: center; gap: ${space.xl}; }
-		& .modes button { flex-direction: column; min-width: 190px; }
-		/* War or gladiators: the one picked is inked in */
-		& .styles { display: flex; gap: ${space.lg}; flex-wrap: wrap; justify-content: center; }
-		& .styles button { flex-direction: column; min-width: 130px; font-size: 1.2em; }
+		& .head { display: flex; align-items: center; gap: ${space.md}; flex-wrap: wrap; justify-content: center; }
+		& img { width: 90px; height: 90px; transform: rotate(-6deg); }
+		& .title { font-size: 3.6em; transform: rotate(-2deg); color: ${PENCIL}; margin: 0; }
+		/* First, war or gladiators: the one picked is inked in */
+		& .styles { display: flex; gap: ${space.lg}; justify-content: center; }
+		& .styles button { flex-direction: column; min-width: 150px; font-size: 1.3em; }
+		& .styles button[aria-pressed='true'], & .styles button[aria-pressed='true']:hover { background: ${PENCIL}; color: ${PAPER}; }
+		/* Then how to play it */
+		& .modes { display: flex; flex-wrap: wrap; justify-content: center; gap: ${space.lg}; }
+		& .modes button { flex-direction: column; min-width: 170px; }
+		/* And looking around, quieter, under a pencil line */
+		& .around { display: flex; gap: ${space.md}; justify-content: center; padding-top: ${space.lg}; border-top: 2px dashed ${PENCIL}55; }
+		& .around button { gap: 6px; }
+		@media (max-width: 480px) {
+			& .styles button { min-width: 130px; }
+			& .modes button { min-width: 140px; }
+		}
 	`,
 );
 
@@ -47,8 +60,10 @@ export default class Start extends View {
 		const screen = new Screen({ appendTo: this });
 		const modes = new Component({ addClass: 'modes' });
 
-		screen.elem.append(Object.assign(document.createElement('img'), { src: icon, alt: '' }));
-		new Heading({ appendTo: screen, addClass: 'title', textContent: 'Stick Men Wars' });
+		const head = new Component({ addClass: 'head', appendTo: screen });
+
+		head.elem.append(Object.assign(document.createElement('img'), { src: logo, alt: '' }));
+		new Heading({ appendTo: head, addClass: 'title', textContent: 'Stick Men Wars' });
 		// A war of armies, or two gladiators: remembered for next time
 		const styles = new Component({ addClass: 'styles' });
 		const pick = style => {
@@ -59,26 +74,25 @@ export default class Start extends View {
 				// Remembering it is only a convenience
 			}
 			for (const [name, button] of Object.entries(this.styleButtons)) button.elem.setAttribute('aria-pressed', String(name === style));
-			// The hall of gladiators, and a tournament, for gladiators
-			this.hallButton.elem.style.display = style === 'gladiator' ? '' : 'none';
+			// A tournament, for gladiators
 			this.tournamentButton.elem.style.display = style === 'gladiator' ? '' : 'none';
 		};
 
 		this.tournamentButton = doodle('bracket', { big: true, size: '3em', label: 'tournament', onPress: () => this.play('tournament') });
-		this.hallButton = doodle('trophy', { size: '2.4em', label: 'hall', onPress: () => (window.location.href = '#/hall') });
 
 		this.styleButtons = {
 			war: doodle('catapult', { size: '2.4em', label: 'war', onPress: () => pick('war') }),
 			gladiator: doodle('helmet', { size: '2.4em', label: 'gladiators', onPress: () => pick('gladiator') }),
 		};
-		styles.append(
-			...Object.values(this.styleButtons),
-			this.hallButton,
-			doodle('rack', { size: '2.4em', label: 'armory', onPress: () => (window.location.href = '#/armory') }),
-			doodle('crowd', { size: '2.4em', label: 'crowd', onPress: () => (window.location.href = '#/crowd') }),
-			doodle('tv', { size: '2.4em', label: 'tv', onPress: () => (window.location.href = '#/tv') }),
-		);
-		screen.append(styles, modes);
+		styles.append(...Object.values(this.styleButtons));
+
+		// Looking around: what's been made (the hall, the armory and the crowd, one page of tabs), and the TV
+		const around = new Component({ addClass: 'around' });
+		const made = doodle('trophy', { title: 'The hall, the armory and the crowd', size: '1.8em', onPress: () => (window.location.href = '#/hall') });
+
+		made.elem.append(icon('rack', { size: '1.8em' }), icon('crowd', { size: '1.8em' }));
+		around.append(made, doodle('tv', { title: 'On the TV', size: '1.8em', onPress: () => (window.location.href = '#/tv') }));
+		screen.append(styles, modes, around);
 		let saved = 'war';
 
 		try {

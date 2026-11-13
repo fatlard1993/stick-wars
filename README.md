@@ -8,7 +8,7 @@ Draw your own army of stick men, stones, catapults and weapons, then watch them 
 
 ## Starting a game
 
-Pick **war** or **gladiators**, then **vs computer**, **two players** to fight a friend on their own device, or with gladiators a **tournament** for up to eight: the invite button in the bar shows a code, and their phone, pointed at it, is seated straight away. Beside the two styles, the **armory** and the **crowd** buttons open the weapons and stick men every player has drawn, and with gladiators picked, the **hall** opens the gladiators that have won.
+Pick **war** or **gladiators**, then **vs computer**, **two players** to fight a friend on their own device, or with gladiators a **tournament** for up to eight: the invite button in the bar shows a code, and their phone, pointed at it, is seated straight away. Under them, a smaller button (a trophy, a weapon rack and a crowd) opens one page with a tab for each: the **hall** of gladiators that have won, the **armory** of every weapon drawn, and the **crowd** of every stick man drawn. The TV button beside it is for a big screen (below).
 
 Every drawing page works the same way. The check mark (or Enter) keeps a drawing if it passes a quick shape check, and says what's missing if it doesn't. The curly arrow undoes a line (Z), the eraser clears the page (C), the arrow to the bar moves on (N). The dashed drawing shows what's wanted. A pen that slides off the page lifts there, and draws on again where it comes back.
 
@@ -109,17 +109,17 @@ Every gladiator that wins is kept in the hall of gladiators, with its record, an
 
 A gladiator that wins three times earns a name, made from what it is: heavy armor makes it a Tin Can, a big shield a Shield-Wall, long limbs Stick-Legs, a crushing weapon a Bonecruncher. Its name shows on its card, over it in the arena, and on the end card.
 
-The **hall** button shows everyone in it, best record first: each drawn with its armor and shield on and its weapon beside it, with its wins and losses. Tap one to fight it: draw your gladiator, and that one walks out of the other gate.
+The **hall** tab shows everyone in it, best record first: each drawn with its armor and shield on and its weapon beside it, with its wins and losses. Tap one to fight it: draw your gladiator, and that one walks out of the other gate.
 
 ## Shared by every game
 
 ### The armory
 
-Every weapon a player draws, in a war or for a gladiator, goes into the armory (one that looks and handles like a weapon already there doesn't go in twice), alongside the computer's own war weapons (its spear, mace, club, double axe and saw-toothed sword), counted in each battle it fights and for each man it kills. A weapon that kills five earns a name from its shape (a shiv is a Toothpick, a crusher a Mallet) and its strongest trait (of Crushing, of Far Poking, of Shredding). Players borrow from it on a weapon page, and the computer arms itself from it too, better-loved and deadlier weapons more often. The **armory** button shows every weapon in it with its thumbs and kills: give each a thumbs up or down (one thumb each, tap again to take it back), and sort them by the most loved, the most hated, the most controversial (many votes, split down the middle) or the deadliest.
+Every weapon a player draws, in a war or for a gladiator, goes into the armory (one that looks and handles like a weapon already there doesn't go in twice), alongside the computer's own war weapons (its spear, mace, club, double axe and saw-toothed sword), counted in each battle it fights and for each man it kills. A weapon that kills five earns a name from its shape (a shiv is a Toothpick, a crusher a Mallet) and its strongest trait (of Crushing, of Far Poking, of Shredding). Players borrow from it on a weapon page, and the computer arms itself from it too, better-loved and deadlier weapons more often. The **armory** tab shows every weapon in it with its thumbs and kills: give each a thumbs up or down (one thumb each, tap again to take it back), and sort them by the most loved, the most hated, the most controversial (many votes, split down the middle) or the deadliest.
 
 ### The crowd
 
-Every stick man a player draws (one standing too like one already there doesn't go in twice) joins the crowd, and the crowd fills the arena's stands: the gladiators fight in front of your own drawings, standing, hopping, throwing their arms up. The **crowd** button shows them all: thumbs up or down on each, sorted by the most loved, the most hated or the most controversial; the better loved, the more seats they fill.
+Every stick man a player draws (one standing too like one already there doesn't go in twice) joins the crowd, and the crowd fills the arena's stands: the gladiators fight in front of your own drawings, standing, hopping, throwing their arms up. The **crowd** tab shows them all: thumbs up or down on each, sorted by the most loved, the most hated or the most controversial; the better loved, the more seats they fill.
 
 ## Looking around
 
