@@ -49,6 +49,9 @@ appendStyles(
 		.side-kills { display: none !important; }
 	}
 
+	/* A TV across the room: everything half as big again */
+	html.tv body { font-size: 28px; }
+
 	/* A narrow phone held upright: the bar keeps to one row */
 	@media (max-width: 480px) {
 		.side-who { display: none !important; }

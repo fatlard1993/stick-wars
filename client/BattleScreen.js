@@ -416,9 +416,10 @@ export default class BattleScreen extends Screen {
 	 * @param {object} view - The game's view
 	 * @param {object} me - { team, sound, art }
 	 */
-	update(view, { team, sound, art, playerId }) {
+	update(view, { team, sound, art, playerId, tv }) {
 		this.team = team;
 		this.playerId = playerId;
+		this.tv = tv;
 		this.sound = sound;
 		this.art = art;
 		this.view = view;
@@ -472,6 +473,7 @@ export default class BattleScreen extends Screen {
 		}
 		for (const event of view.events ?? []) this.play(event);
 		this.showCard(view);
+		this.showTvBracket(view);
 	}
 
 	// Where the top of the stones is, along the field: for blood to land on, and a fling's path to stop at
@@ -530,6 +532,23 @@ export default class BattleScreen extends Screen {
 	}
 
 	// Over the field: who a paused battle waits for, or how a finished one went and what next
+	// On a TV, a tournament's bracket pinned in the corner the whole time, redrawn as it moves on
+	showTvBracket(view) {
+		const { state } = view;
+
+		if (!this.tv || state.mode !== 'tournament' || !state.bracket) return;
+
+		const key = JSON.stringify([state.bracket, state.phase, state.result?.winner]);
+
+		if (key === this.tvBracketKey) return;
+		this.tvBracketKey = key;
+		this.tvBracket ??= Object.assign(document.createElement('div'), {
+			style: 'position: absolute; top: 8px; right: 8px; padding: 10px; background: rgba(255,253,246,0.9); border: 2.5px solid #2b2b2b; border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px; transform: rotate(1deg); pointer-events: none;',
+		});
+		this.tvBracket.replaceChildren(bracket(state, this.art));
+		if (!this.tvBracket.isConnected) this.elem.append(this.tvBracket);
+	}
+
 	showCard(view) {
 		const { state } = view;
 		const key = `${state.phase}|${view.away.join()}|${state.battles}|${state.result?.champion ?? ''}`;

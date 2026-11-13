@@ -58,7 +58,7 @@ const Body = styled(
 // One player's screen, or a watcher's: drawing while the armies are drawn, then the battle. Everything shown comes
 // from the server: the view it sends each tick, and the art, sent once and again whenever it changes.
 export default class Play extends View {
-	static schema = { gameId: {}, watch: { default: false } };
+	static schema = { gameId: {}, watch: { default: false }, tv: { default: false } };
 
 	constructor(options, ...children) {
 		const status = new Status();
@@ -75,11 +75,14 @@ export default class Play extends View {
 					// One row, even on a narrow phone: the game below gets the room
 					wrap: false,
 					left: [doodle('home', { title: 'Home', onPress: () => (window.location.href = '#/') }), status],
-					right: [
-						soundSwitch(sound),
-						doodle('invite', { title: 'Someone else joins', onPress: () => this.invite() }),
-						doodle('leave', { title: 'Leave this game', onPress: () => this.askToLeave() }),
-					],
+					// A TV only watches: its sound, and nothing to leave
+					right: options.tv
+						? [soundSwitch(sound)]
+						: [
+								soundSwitch(sound),
+								doodle('invite', { title: 'Someone else joins', onPress: () => this.invite() }),
+								doodle('leave', { title: 'Leave this game', onPress: () => this.askToLeave() }),
+							],
 				},
 			},
 			...children,
@@ -102,8 +105,9 @@ export default class Play extends View {
 			watch,
 			onState: view => this.update(view),
 			onUpdate: message => message.update === 'art' && this.setArt(message),
-			notMember: () => (window.location.href = '#/'),
-			gone: () => (window.location.href = '#/'),
+			// A game gone (or never there): home, or for a TV, on to whatever else is on
+			notMember: () => (window.location.href = this.options.tv ? '#/tv' : '#/'),
+			gone: () => (window.location.href = this.options.tv ? '#/tv' : '#/'),
 		});
 
 		this.playerId = playerId;
@@ -137,7 +141,7 @@ export default class Play extends View {
 			if (this.art) this.screen.setArt?.(this.art);
 			this.sound.music(kind === 'draw' ? 'drawing' : 'battle');
 		}
-		this.screen.update(view, { team, sound: this.sound, art: this.art, playerId: this.playerId });
+		this.screen.update(view, { team, sound: this.sound, art: this.art, playerId: this.playerId, tv: this.options.tv, gameId: this.options.gameId });
 		this.showStatus(view, team);
 	}
 

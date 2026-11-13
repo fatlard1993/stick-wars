@@ -99,6 +99,10 @@ Fight again (the circling arrows) with the same gladiators, unless one was quart
 
 Up to eight players, each on their own phone: the first opens a tournament, the others join it from the invite code (or the tournament button, while one's gathering). Each draws a gladiator on their own pages, at their own pace, and sees who else is still drawing; once two or more are drawn and nobody's still at it, the first player starts it (the bracket doodle). The gladiators are drawn into pairs at random (an odd one out has a bye), and the duels are fought one at a time in the arena, everyone watching, the two fighters' players cheering theirs on. The crowd judges every loser as ever, but a loser's out either way, and the winners go through to the next round, until one is left: the champion. Between duels a card shows the bracket, each gladiator drawn, the winners ringed and the beaten crossed out. Then a new bracket with the same gladiators (the circling arrows), or everyone draws a new one (the pencil). A player who leaves loses the duel they're in, and the next one they'd have fought is a walkover.
 
+### On the TV
+
+For game night, open the game on a TV or a laptop everyone can see and tap the TV doodle on the start page (or go to `#/tv`). It waits for a game to start in the house, then watches it, everything drawn bigger: while people are still drawing it shows the code their phones scan to join, a tournament's bracket stays pinned in the corner through the duels, and when one game is over and everyone's left it moves on to whatever's on next. A tournament, when one starts, always takes the screen.
+
 ### The hall
 
 Every gladiator that wins is kept in the hall of gladiators, with its record, and the computer sends them back into the arena against whoever plays it next (the better its record, the likelier); one of them shows its wins by its flag. A loser the crowd spares keeps its place in the hall, or earns one; one it gives the thumbs down is struck from it. With nobody in the hall yet, the computer draws its own.

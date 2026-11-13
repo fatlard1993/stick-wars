@@ -10,6 +10,7 @@ import '@vanilla-bean/components/app/reloadOnBuild';
 import Armory from './Armory.js';
 import Crowd from './Crowd.js';
 import Hall from './Hall.js';
+import { TvLobby, TvWatch } from './Tv.js';
 import JoinNow from './JoinNow.js';
 import Play from './Play.js';
 import Start from './Start.js';
@@ -26,6 +27,9 @@ class Watch extends Play {
 const views = {
 	'/': Start,
 	'/hall': Hall,
+	// A TV for game night: it finds what's on and watches it
+	'/tv': TvLobby,
+	'/tv/:gameId': TvWatch,
 	'/armory': Armory,
 	'/crowd': Crowd,
 	'/play/:gameId': Play,

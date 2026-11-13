@@ -1,4 +1,5 @@
 import { Component, Notify, styled } from '@vanilla-bean/components';
+import { JoinCard } from '@fatlard1993/web-game-framework/ui';
 import { act, createInput } from '@fatlard1993/web-game-framework/client';
 
 import { DEFAULT_RAW, PAD, WEAPON_AREA, clamp, freshOf, pick } from '../art.js';
@@ -273,10 +274,12 @@ export default class DrawScreen extends Screen {
 	 * @param {object} view - The game's view
 	 * @param {object} me - { team, sound }
 	 */
-	update(view, { team, sound, playerId }) {
+	update(view, { team, sound, playerId, tv, gameId }) {
 		this.team = team;
 		this.sound = sound;
 		this.playerId = playerId;
+		this.tv = tv;
+		this.gameId = gameId;
 		this.steps = stepsOf(view.state);
 
 		// A tournament's player draws on their own pages; anyone else on their seat's
@@ -453,6 +456,17 @@ export default class DrawScreen extends Screen {
 	}
 
 	// Done drawing (or only watching): who the battle waits on, each side's flag and how far along it is
+	// On a TV, while there's room to join: the code a phone scans to sit down (made once, kept)
+	joinCode(view) {
+		const { mode, seats, bracket, entrants = [] } = view.state;
+		const room = mode === 'tournament' ? !bracket && entrants.filter(e => !e.gone).length < 8 : mode === 'duo' && seats.includes(null);
+
+		if (!this.tv || !room) return [];
+		this.joinCard ??= new JoinCard({ gameId: this.gameId });
+
+		return [this.joinCard.elem];
+	}
+
 	// This page's own art: its tournament entrant's, or its seat's
 	myArt() {
 		return this.art?.entrants?.[this.playerId] ?? this.art?.art?.[this.team];
@@ -482,7 +496,7 @@ export default class DrawScreen extends Screen {
 				: null;
 
 		if (go && !ready) go.elem.style.opacity = '0.4';
-		this.waiting.elem.replaceChildren(icon(ready ? 'bracket' : 'hourglass', { size: '3em' }), people, ...(go ? [go.elem] : []));
+		this.waiting.elem.replaceChildren(icon(ready ? 'bracket' : 'hourglass', { size: '3em' }), people, ...(go ? [go.elem] : []), ...this.joinCode(view));
 	}
 
 	showWaiting(view) {
@@ -506,6 +520,6 @@ export default class DrawScreen extends Screen {
 			return row;
 		});
 
-		this.waiting.elem.replaceChildren(icon('hourglass', { size: '3em' }), ...rows);
+		this.waiting.elem.replaceChildren(icon('hourglass', { size: '3em' }), ...rows, ...this.joinCode(view));
 	}
 }
