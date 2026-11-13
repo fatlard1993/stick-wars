@@ -47,7 +47,7 @@ test('a drawing that is not the thing asked for is turned down, saying why', () 
 	const said = game.act(fox.id, 'keep', { strokes: [lineS(240, 50, 240, 400)] });
 
 	expect(said.ok).toBe(false);
-	expect(said.error).toContain('head');
+	expect(said.error).toContain('arms and legs');
 	expect(game.act(fox.id, 'keep', { strokes: 'nonsense' }).ok).toBe(false);
 	expect(game.state.art[0].stickmen).toHaveLength(0);
 });
@@ -1425,4 +1425,15 @@ test('a page being drawn is passed on for the others to watch, and blank again o
 	expect(sent.at(-1)).toMatchObject({ who: 1, strokes: [] });
 	expect(game.state.art[1].sketch).toBeUndefined();
 	expect(fox).toBeDefined();
+});
+
+test('a stick man needs no round head: a square one, a spiky one, or none at all will do', () => {
+	const body = [lineS(240, 130, 240, 290), lineS(240, 170, 170, 240), lineS(240, 170, 310, 240), lineS(240, 290, 190, 420), lineS(240, 290, 290, 420)];
+	const square = [[{ x: 210, y: 70 }, { x: 270, y: 70 }, { x: 270, y: 130 }, { x: 210, y: 130 }, { x: 210, y: 71 }]];
+
+	expect(judge('stickmen', [...square, ...body]).ok).toBe(true);
+	expect(judge('stickmen', [starS(240, 100, 40, 22, 6), ...body]).ok).toBe(true);
+	expect(judge('stickmen', [lineS(240, 80, 240, 130), ...body]).ok).toBe(true);
+	// Still a stick man, though: a blob isn't one
+	expect(judge('stickmen', [blobS(240, 240, 120, 160, 9)]).ok).toBe(false);
 });

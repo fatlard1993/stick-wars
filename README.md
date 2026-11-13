@@ -20,7 +20,7 @@ Five pages, each against the clock. Draw as many as you like on each. A page lef
 
 | What | Time | The check |
 | --- | --- | --- |
-| Stick men | 45s | a roundish closed head on top, a body hanging from it, arms and legs sticking out both sides, not a scribble |
+| Stick men | 45s | a head on top (any shape, or none: the top is its head), a body hanging from it, arms and legs sticking out both sides, not a scribble |
 | Stones | 25s | one closed, lumpy outline |
 | Beams | 25s | long and thin, at least three times as long as it is wide |
 | Rocks | 25s | a closed, round-ish lump: bigger hits harder and spikier tears more, but a heavy one flies shorter and takes longer to load. Each one kept is a rock on your catapult's pile (10 at most) |

@@ -180,16 +180,24 @@ export function checkStickman(strokes) {
   // width both, so arms drawn beefy (outlined, muscled) on a short man still pass
   const ink = strokes.reduce((t, s) => t + strokeLen(s), 0);
   if (ink > (bb.h + bb.w) * 6) return fail("That's a scribble. Stick men are just a few lines.");
-  let head = null;
+  // The head: a roundish loop near the top if there is one; else any closed shape up there (square, spiky, a blob);
+  // else just the top of the drawing. It hardly matters what it looks like: it's where the neck hangs from
+  let head = null, anyLoop = null;
   for (const s of strokes) {
     for (const l of findLoops(s)) {
       const lb = bboxOf(l), size = Math.max(lb.w, lb.h);
-      if (size > bb.h * 0.45 || size < bb.h * 0.08 || lb.cy > bb.y + bb.h * 0.45) continue;
-      if (!roundish(l)) continue;
-      if (!head || lb.cy < head.cy) head = { cx: lb.cx, cy: lb.cy, r: (lb.w + lb.h) / 4 };
+      if (size > bb.h * 0.6 || size < bb.h * 0.05 || lb.cy > bb.y + bb.h * 0.5) continue;
+      const found = { cx: lb.cx, cy: lb.cy, r: (lb.w + lb.h) / 4 };
+      if (!anyLoop || found.cy < anyLoop.cy) anyLoop = found;
+      if (size > bb.h * 0.45 || size < bb.h * 0.08 || lb.cy > bb.y + bb.h * 0.45 || !roundish(l)) continue;
+      if (!head || lb.cy < head.cy) head = found;
     }
   }
-  if (!head) return fail('Needs a head: a roundish closed loop near the top.');
+  if (!head) head = anyLoop;
+  if (!head) {
+    const r = bb.h * 0.08, top = pts.filter(p => p.y < bb.y + r * 2);
+    head = { cx: top.reduce((t, p) => t + p.x, 0) / top.length, cy: bb.y + r, r };
+  }
   const below = pts.filter(p => p.y > head.cy + head.r * 1.05);
   if (below.length < 6) return fail('A head alone? Give it a body and legs.');
   const bl = bboxOf(below);
