@@ -5,6 +5,7 @@ import { View } from '@fatlard1993/web-game-framework/ui';
 import { MODES } from '../rules.js';
 import logo from './favicon.svg';
 import { icon } from './icons.js';
+import GamesOn from './GamesOn.js';
 import { PAPER, PENCIL } from './theme.js';
 import { Heading, doodle, lined } from './ui.js';
 
@@ -92,7 +93,8 @@ export default class Start extends View {
 
 		made.elem.append(icon('rack', { size: '1.8em' }), icon('crowd', { size: '1.8em' }));
 		around.append(made, doodle('tv', { title: 'On the TV', size: '1.8em', onPress: () => (window.location.href = '#/tv') }));
-		screen.append(styles, modes, around);
+		// The games on now: one with a free side to join (a friend's), one to go back to, or to watch
+		screen.append(styles, modes, new GamesOn(), around);
 		let saved = 'war';
 
 		try {

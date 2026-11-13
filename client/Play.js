@@ -63,6 +63,7 @@ export default class Play extends View {
 
 	constructor(options, ...children) {
 		const status = new Status();
+		let inviteButton = null;
 		const sound = createSound({
 			effects: { hit, sever, squish, swing, launch, crash, thud, deploy, keep, nope, win, lose, roar, ooh, boo, kill, erupt, slap },
 			music: { drawing, battle },
@@ -81,7 +82,7 @@ export default class Play extends View {
 						? [soundSwitch(sound)]
 						: [
 								soundSwitch(sound),
-								doodle('invite', { title: 'Someone else joins', onPress: () => this.invite() }),
+								(inviteButton = doodle('invite', { title: 'Someone else joins', onPress: () => this.invite() })),
 								doodle('leave', { title: 'Leave this game', onPress: () => this.askToLeave() }),
 							],
 				},
@@ -90,6 +91,7 @@ export default class Play extends View {
 		);
 		this.status = status;
 		this.sound = sound;
+		this.inviteButton = inviteButton;
 	}
 
 	build() {
@@ -155,6 +157,9 @@ export default class Play extends View {
 	showStatus(view, team) {
 		const { state, battle } = view;
 
+		// Waiting for a friend: the invite button lit up until they're here
+		this.inviteButton?.elem.setAttribute('aria-pressed', String(state.mode === 'duo' && state.seats.includes(null)));
+
 		this.status.elem.replaceChildren(
 			...[0, 1].map(t => {
 				const side = document.createElement('span');
@@ -165,7 +170,8 @@ export default class Play extends View {
 				side.style.color = ink;
 				const whoIcon = icon(who, { color: ink });
 
-				whoIcon.classList.add('side-who');
+				// Hidden on a narrow phone, except an empty seat: being alone at a game for two must show
+				if (who !== 'hourglass') whoIcon.classList.add('side-who');
 				side.append(icon('flag', { color: ink }), whoIcon);
 				// A gladiator from the hall: its wins
 				if (view.fame?.[t]) side.append(count('trophy', view.fame[t].wins, ink));

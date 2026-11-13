@@ -679,7 +679,7 @@ export default class Game extends BaseGame {
 		// A tournament still taking entrants
 		const open = mode === 'tournament' && !bracket && entrants.filter(entrant => !entrant.gone).length < MOST_ENTRANTS;
 
-		return { ...super.toClient(), state: { mode, style, phase, seats, open } };
+		return { ...super.toClient(), state: { mode, style, phase, seats, open, entrants: entrants.filter(entrant => !entrant.gone).length } };
 	}
 
 	toSaveState() {
