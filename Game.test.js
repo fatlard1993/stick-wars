@@ -691,7 +691,7 @@ test('a beaten gladiator yields and waits on the crowd: thumbs up, he lives', ()
 	expect(m.loser.dead).toBe(false);
 	m.chance = 1;
 	// Medics run out and slap him back together first, every limb back on, then the crowd's hush and its thumb
-	for (let i = 0; i < 60 * (m.reach + 1.4) && !world.over; i++) world.step(DT);
+	for (let i = 0; i < 60 * (m.done + 0.3) && !world.over; i++) world.step(DT);
 	expect(m.loser.body.owned.every(Boolean)).toBe(true);
 	expect(world.over).toBeNull();
 	for (let i = 0; i < 60 * (MERCY_WAIT + 1) && !world.over; i++) world.step(DT);
@@ -888,4 +888,23 @@ test('the arena\'s crowd erupts when a limb flies off, drowning out the gasp at 
 	world.crowd('erupt');
 	world.crowd('boo');
 	expect(world.takeEvents().filter(event => event.e === 'crowd')).toEqual([{ e: 'crowd', n: 'erupt' }]);
+});
+
+test('the medics fetch a limb he lost, carry it back and slap it on before the verdict', () => {
+	const world = new World({ arts: [cpuGladiator(), cpuGladiator()], auto: [false, false], arena: true });
+	const [loser] = world.stickmen;
+
+	// His leg off: down he goes, and yields
+	loser.sever(6, 2);
+	for (let i = 0; i < 60 && !world.mercy; i++) world.step(DT);
+
+	const m = world.mercy;
+	const piece = world.bodies.find(body => body.from === loser.body);
+
+	expect(m.plans[0].map(leg => leg.what)).toEqual(expect.arrayContaining(['p', 'a']));
+	expect(piece.owned[6]).toBe(true);
+	// Brought back and slapped on: his again, and gone from the sand
+	for (let i = 0; i < 60 * (m.done + 0.3) && !world.over; i++) world.step(DT);
+	expect(loser.body.owned.every(Boolean)).toBe(true);
+	expect(world.bodies).not.toContain(piece);
 });
