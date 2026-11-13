@@ -573,6 +573,8 @@ export default class BattleScreen extends Screen {
 		this.card.elem.append(
 			big,
 			Object.assign(document.createElement('div'), { textContent: words }),
+			// A gladiator who's won enough: its name
+			...(view.fame?.[winner]?.name ? [Object.assign(document.createElement('div'), { textContent: view.fame[winner].name, style: `color: ${TEAMS[winner].ink}` })] : []),
 			// A duel's loser: spared by the crowd, or not
 			...(spared === undefined ? [] : [icon(spared ? 'thumbUp' : 'thumbDown', { size: '2.6em', color: spared ? '#2f7a3a' : RED_PENCIL })]),
 			row(count('sword', stats.kills[0], TEAMS[0].ink), count('sword', stats.kills[1], TEAMS[1].ink)),
@@ -1385,7 +1387,17 @@ export default class BattleScreen extends Screen {
 		// What he's been shouted at, over his bar while it holds
 		const shout = { c: 'charge', b: 'back', g: 'hold' }[body.cs];
 
-		if (shout) drawIcon(g, shout, x, y - 18, 22, teamInk(body.t));
+		// Its name, if it's earned one in the hall, over its bar; its shout over that
+		const name = this.view?.fame?.[body.t]?.name;
+
+		if (name) {
+			g.font = `13px ${HAND}`;
+			g.textAlign = 'center';
+			g.textBaseline = 'alphabetic';
+			g.fillStyle = teamInk(body.t);
+			g.fillText(name, x, y - 7);
+		}
+		if (shout) drawIcon(g, shout, x, y - (name ? 32 : 18), 22, teamInk(body.t));
 	}
 
 	drawProp(g, prop) {

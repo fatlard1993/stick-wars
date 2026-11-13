@@ -51,6 +51,7 @@ On the server:
   - Fading: the dead, props and loose stones lie `LINGER`, fade over `FADE`, then go.
   - Arena (`arena`): one gladiator a side (`gladiate`: gear, speed from legs, reach from arms, paid in `maxHp`, `limbFrailty` and a slower swing); blows slipped or blocked (`fends`), armor's share (`takeHit`); shouts (`shout`, `STANCES`, `fury`); the crowd (`crowd`). No blow kills: beaten past `YIELD_AT` he yields (`yieldBy`), the medics fetch his limbs and slap them on (`medicPlans`, `medicsWork`, `attach`, `mend`), and after `MERCY_WAIT` the crowd judges (`judgeYielded`): spared, or drawn and quartered.
 - `masonry.js`: the walls as stones in a planck rigid-body world, each outline pushed most of the way to its box so walls stack, settled then asleep; boulders among them; harm from contact impulses, toughness from a stone's shape; rubble; a height map (men stand on the enemy's stones and walk through their own); hacking and repair.
+- `names.js`: earned names, made from what a gladiator or weapon is (`gladiatorName`, `weaponName`), after `NAMED_AT_WINS` wins or `NAMED_AT_KILLS` kills; nothing stored, the same drawing always the same name. The hall's listing, the armory's (`named`) and a game's view of its sides (`fame`) carry them.
 - `store.js`: a list kept in a JSON file. `roster.js` (the hall: records, `pick`, `record`, `standings`) and `shelf.js` (`offer`, `lend`, `vote`, `fought`, `listing`, sorted by `SORTS`) are stores.
 - `Game.test.js`: the suite.
 

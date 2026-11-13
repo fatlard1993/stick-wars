@@ -41,6 +41,7 @@ const Card = styled(
 		& canvas { width: 180px; height: 150px; }
 		& .record { display: flex; gap: ${space.md}; align-items: center; }
 		& .place { position: absolute; top: 6px; left: 10px; font-size: 1.1em; opacity: 0.7; }
+		& .name { font-size: 1em; max-width: 170px; text-align: center; white-space: normal; line-height: 1.1; }
 	`,
 );
 
@@ -123,8 +124,10 @@ export default class Hall extends View {
 
 				record.className = 'record';
 				record.append(count('trophy', gladiator.wins), count('skull', gladiator.losses));
+				// Its name, once it's won enough to earn one
+				const name = gladiator.name && Object.assign(document.createElement('div'), { className: 'name', textContent: gladiator.name });
 				card.elem.style.position = 'relative';
-				card.elem.append(Object.assign(document.createElement('span'), { className: 'place', textContent: `${at + 1}` }), canvas, record);
+				card.elem.append(Object.assign(document.createElement('span'), { className: 'place', textContent: `${at + 1}` }), canvas, ...(name ? [name] : []), record);
 				drawGladiator(canvas, gladiator);
 
 				return card.elem;

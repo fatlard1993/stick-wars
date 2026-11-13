@@ -1040,3 +1040,26 @@ test('a new shelf is stocked once from drawings made before it, and the server s
 	expect(answer?.status).toBe(200);
 	expect(await answer.json()).toEqual([]);
 }, 20_000);
+
+test('a gladiator earns a name after a few wins, and a weapon after a few kills, each from what it is', async () => {
+	const { NAMED_AT_WINS, NAMED_AT_KILLS, gladiatorName, weaponName } = await import('./names.js');
+	const roster = new Roster();
+	const warrior = judge('stickmen', DEFAULT_RAW.stickmen()[0]).item;
+	const tin = { stickmen: [warrior], swords: [judge('swords', DEFAULT_RAW.swords()[0]).item], armor: [{ weight: 2, cover: {} }], shield: [] };
+	const champion = roster.record({ art: tin }, {}).winner;
+
+	expect(roster.standings()[0].name).toBeUndefined();
+	for (let k = 1; k < NAMED_AT_WINS; k++) roster.record({ id: champion, art: tin }, {});
+	// Heavily armored: a tin can, whatever it's first called; and always the same name for the same drawing
+	expect(roster.standings()[0].name).toMatch(/the Tin Can|Iron-Belly/);
+	expect(gladiatorName(tin)).toBe(roster.standings()[0].name);
+	expect(gladiatorName({ ...tin, armor: [] })).not.toMatch(/Tin Can|Iron-Belly/);
+
+	const armory = new Shelf(null, { named: entry => (entry.kills >= NAMED_AT_KILLS ? weaponName(entry.item) : null) });
+	const id = armory.offer(judge('swords', DEFAULT_RAW.swords()[1]).item);
+
+	armory.fought([id], { [id]: NAMED_AT_KILLS - 1 });
+	expect(armory.listing('loved')[0].name).toBeUndefined();
+	armory.fought([id], { [id]: 1 });
+	expect(armory.listing('loved')[0].name).toMatch(/^the /);
+});

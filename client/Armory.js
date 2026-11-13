@@ -43,6 +43,7 @@ const Card = styled(
 		font-size: 1.15em;
 
 		& canvas { width: 110px; height: 150px; }
+		& .name { max-width: 150px; text-align: center; font-size: 0.95em; white-space: normal; line-height: 1.1; }
 		& .row { display: flex; gap: ${space.sm}; align-items: center; }
 		& .row button { padding: 2px 8px; }
 	`,
@@ -123,7 +124,9 @@ export default class Armory extends View {
 		};
 
 		thumbs();
-		card.elem.append(canvas, row);
+		// Its name, once its kills have earned it one
+		if (weapon.name) card.elem.append(canvas, Object.assign(document.createElement('div'), { className: 'name', textContent: weapon.name }), row);
+		else card.elem.append(canvas, row);
 
 		return card;
 	}

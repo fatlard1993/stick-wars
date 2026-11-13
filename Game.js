@@ -1,6 +1,7 @@
 import { Game as BaseGame, refuse } from '@fatlard1993/web-game-framework';
 
 import { cpuArmy, cpuGladiator, defaultsFor, freshOf, judge, samePose } from './art.js';
+import { NAMED_AT_KILLS, NAMED_AT_WINS, gladiatorName, weaponName } from './names.js';
 import { AMMO, DT, ORDERS, World } from './battle.js';
 import {
 	BASE_ARMY,
@@ -25,7 +26,8 @@ import Roster from './roster.js';
 const kept = file => (process.env.NODE_ENV === 'test' ? null : `data/${file}`);
 
 export const HALL = new Roster(kept('gladiators.json'));
-export const ARMORY = new Shelf(kept('weapons.json'));
+// A weapon earns its name with its kills
+export const ARMORY = new Shelf(kept('weapons.json'), { named: entry => (entry.kills >= NAMED_AT_KILLS ? weaponName(entry.item) : null) });
 export const CROWD = new Shelf(kept('crowd.json'), {
 	alike: samePose,
 	show: item => ({ raw: item.raw, rig: item.rig }),
@@ -477,7 +479,7 @@ export default class Game extends BaseGame {
 			fame: (this.state.fame ?? []).map(id => {
 				const entry = this.roster.get(id);
 
-				return entry ? { wins: entry.wins, losses: entry.losses } : null;
+				return entry ? { wins: entry.wins, losses: entry.losses, ...(entry.wins >= NAMED_AT_WINS && { name: gladiatorName(entry.art) }) } : null;
 			}),
 			battle: this.world ? (this.snap ?? this.world.snapshot()) : null,
 			events: this.outEvents,

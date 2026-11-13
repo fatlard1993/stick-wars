@@ -99,13 +99,15 @@ Fight again (the circling arrows) with the same gladiators, unless one was quart
 
 Every gladiator that wins is kept in the hall of gladiators, with its record, and the computer sends them back into the arena against whoever plays it next (the better its record, the likelier); one of them shows its wins by its flag. A loser the crowd spares keeps its place in the hall, or earns one; one it gives the thumbs down is struck from it. With nobody in the hall yet, the computer draws its own.
 
+A gladiator that wins three times earns a name, made from what it is: heavy armor makes it a Tin Can, a big shield a Shield-Wall, long limbs Stick-Legs, a crushing weapon a Bonecruncher. Its name shows on its card, over it in the arena, and on the end card.
+
 The **hall** button shows everyone in it, best record first: each drawn with its armor and shield on and its weapon beside it, with its wins and losses. Tap one to fight it: draw your gladiator, and that one walks out of the other gate.
 
 ## Shared by every game
 
 ### The armory
 
-Every weapon a player draws goes into the armory (one too like a weapon already there doesn't go in twice), counted in each battle it fights and for each man it kills. Players borrow from it on a weapon page, and the computer arms itself from it too, better-loved and deadlier weapons more often. The **armory** button shows every weapon in it with its thumbs and kills: give each a thumbs up or down (one thumb each, tap again to take it back), and sort them by the most loved, the most hated, the most controversial (many votes, split down the middle) or the deadliest.
+Every weapon a player draws goes into the armory (one too like a weapon already there doesn't go in twice), counted in each battle it fights and for each man it kills. A weapon that kills five earns a name from its shape (a shiv is a Toothpick, a crusher a Mallet) and its strongest trait (of Crushing, of Far Poking, of Shredding). Players borrow from it on a weapon page, and the computer arms itself from it too, better-loved and deadlier weapons more often. The **armory** button shows every weapon in it with its thumbs and kills: give each a thumbs up or down (one thumb each, tap again to take it back), and sort them by the most loved, the most hated, the most controversial (many votes, split down the middle) or the deadliest.
 
 ### The crowd
 

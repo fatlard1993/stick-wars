@@ -1,3 +1,4 @@
+import { NAMED_AT_WINS, gladiatorName } from './names.js';
 import Store from './store.js';
 
 /** How many gladiators are kept at most: past it, the worst record goes */
@@ -15,7 +16,17 @@ export default class Roster extends Store {
 
 		return [...this.load()]
 			.sort((a, b) => b.wins - b.losses - (a.wins - a.losses) || b.wins - a.wins || a.born - b.born)
-			.map(({ id, wins, losses, art }) => ({ id, wins, losses, warrior: raw(art.stickmen), weapon: raw(art.swords), armor: raw(art.armor), shield: raw(art.shield) }));
+			.map(({ id, wins, losses, art }) => ({
+				id,
+				wins,
+				losses,
+				// A name, once it's won enough to earn one
+				...(wins >= NAMED_AT_WINS && { name: gladiatorName(art) }),
+				warrior: raw(art.stickmen),
+				weapon: raw(art.swords),
+				armor: raw(art.armor),
+				shield: raw(art.shield),
+			}));
 	}
 
 	/** One to fight, the better its record the likelier; null with none kept */

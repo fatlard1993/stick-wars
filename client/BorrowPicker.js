@@ -82,7 +82,7 @@ export default class BorrowPicker extends Overlay {
 				row.style.display = 'inline-flex';
 				row.style.gap = '6px';
 				row.append(count('thumbUp', weapon.up, '#2f7a3a'), count('thumbDown', weapon.down, RED_PENCIL), count('skull', weapon.kills));
-				button.elem.append(canvas, row);
+				button.elem.append(canvas, ...(weapon.name ? [Object.assign(document.createElement('span'), { textContent: weapon.name, style: 'font-size: 0.8em; max-width: 110px' })] : []), row);
 
 				return button.elem;
 			}),

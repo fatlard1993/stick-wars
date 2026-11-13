@@ -32,12 +32,13 @@ export default class Shelf extends Store {
 	/**
 	 * @param {string} [file] - Where it's kept
 	 * @param {object} [options] - { alike(a, b): whether two drawings are too alike to keep both, show(item): what its
-	 *   page is sent of each drawing }
+	 *   page is sent of each drawing, named(entry): the name it's earned, if any }
 	 */
-	constructor(file = null, { alike = (a, b) => unlike(a.raw, b.raw) <= NEW_LOOK, show = item => ({ raw: item.raw, name: item.stats?.name }) } = {}) {
+	constructor(file = null, { alike = (a, b) => unlike(a.raw, b.raw) <= NEW_LOOK, show = item => ({ raw: item.raw }), named = () => null } = {}) {
 		super(file);
 		this.alike = alike;
 		this.show = show;
+		this.named = named;
 	}
 
 	/** A new shelf stocked with drawings made before it was opened (each new one kept, as if just drawn): once, only */
@@ -121,6 +122,10 @@ export default class Shelf extends Store {
 		return [...this.load()]
 			.sort(SORTS[sort] ?? SORTS.loved)
 			.slice(0, Math.max(1, Math.min(MOST_ON_SHELF, Number(take) || MOST_ON_SHELF)))
-			.map(({ id, item, up, down, votes, uses, kills }) => ({ id, ...this.show(item), up, down, uses, kills, mine: votes[voter] ?? 0 }));
+			.map(entry => {
+				const { id, item, up, down, votes, uses, kills } = entry, name = this.named(entry);
+
+				return { id, ...this.show(item), ...(name && { name }), up, down, uses, kills, mine: votes[voter] ?? 0 };
+			});
 	}
 }
