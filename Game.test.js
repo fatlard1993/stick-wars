@@ -871,3 +871,17 @@ test('every new stick man players draw joins the crowd in the arena\'s stands (n
 	game.crowd.vote(first.id, 'v1', -1);
 	expect(game.crowd.listing('hated', 'v1')[0]).toMatchObject({ id: first.id, down: 1, mine: -1 });
 });
+
+test('the arena\'s crowd erupts when a limb flies off, drowning out the gasp at the blow', () => {
+	const world = new World({ arts: [cpuGladiator(), cpuGladiator()], auto: [false, false], arena: true });
+	const [man] = world.stickmen;
+
+	world.takeEvents();
+	world.crowd('ooh');
+	man.sever(6, 1);
+	expect(world.takeEvents().filter(event => event.e === 'crowd')).toEqual([{ e: 'crowd', n: 'erupt' }]);
+	// And a quieter reaction never drowns out a louder one
+	world.crowd('erupt');
+	world.crowd('boo');
+	expect(world.takeEvents().filter(event => event.e === 'crowd')).toEqual([{ e: 'crowd', n: 'erupt' }]);
+});

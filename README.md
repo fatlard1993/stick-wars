@@ -69,7 +69,7 @@ Every stick man a player draws (one standing too like one already there doesn't 
 
 Four pages: your gladiator (one stick man, a minute), its weapon (in the box, as for an army, 50 seconds), then armor (a minute) and a shield (45 seconds) if you want them: leave either page empty to fight without. Armor is drawn right over your gladiator, shown faintly on its page; a shield beside it, its size against your gladiator's being its size in the arena. Each page takes one drawing: keep it and it's on to the next page.
 
-Then the two walk out of their gates into the arena, sand underfoot and a packed crowd in the stands that roars at a limb lost or a kill, gasps at a big blow or a shield smashed, and boos whoever's told to back off; and they fight it out by themselves, each its own way, all of it from how it was drawn:
+Then the two walk out of their gates into the arena, sand underfoot and a packed crowd in the stands that erupts when a limb flies off, roars at a kill, gasps at a big blow or a shield smashed, and boos whoever's told to back off; and they fight it out by themselves, each its own way, all of it from how it was drawn:
 
 - **Its body**: long legs walk faster and long arms reach further, but a spindly gladiator is frailer (less in him, limbs that come off easier) and a long arm swings slower; a stubby one is sturdier.
 - **Its weapon**: as in a war, reach from length, weight from width and ink, shredding from jagged edges; a long, not too heavy one is fought from the end of its reach.

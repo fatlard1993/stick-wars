@@ -503,9 +503,10 @@ export default class BattleScreen extends Screen {
 			for (let i = 0; i < 30; i++) this.splat(event.x + rand(-40, 40), clamp(z + rand(-12, 12), 0, DEPTH), rand(2, 6));
 		} else if (event.e === 'sound') this.sound?.play(event.n);
 		else if (event.e === 'crowd') {
-			// The stands react: up on their feet for a roar or a gasp, arms down and swaying for a boo
+			// The stands react: up on their feet for a roar or a gasp, arms down and swaying for a boo; everyday reactions
+			// under the fight, a limb flying off as loud as it gets
 			this.cheer = { kind: event.n, at: performance.now() };
-			this.sound?.play(event.n);
+			this.sound?.play(event.n, { volume: event.n === 'erupt' ? 1 : event.n === 'ooh' || event.n === 'boo' ? 0.45 : 0.6 });
 		}
 		else if (event.e === 'shake') this.shake = Math.min(14, this.shake + event.v);
 		if (this.parts.length > 3000) this.parts.splice(0, this.parts.length - 3000);
@@ -1026,7 +1027,9 @@ export default class BattleScreen extends Screen {
 		const t = performance.now() / 1000, since = this.cheer ? t - this.cheer.at / 1000 : 9;
 		// The verdict on a yielded gladiator, given: every hand up with its thumb, up or down
 		const verdict = this.cur?.mercy?.up;
-		const heat = clamp(1 - since / 2.5, 0, 1), booing = this.cheer?.kind === 'boo' && heat > 0;
+		// An eruption runs hotter and longer than any other cheer
+		const erupting = this.cheer?.kind === 'erupt';
+		const heat = clamp((1 - since / (erupting ? 3.5 : 2.5)) * (erupting ? 1.8 : 1), 0, 1.8), booing = this.cheer?.kind === 'boo' && heat > 0;
 		// Over at the end: everyone on their feet; while the crowd decides a yielded gladiator's fate, hushed and still
 		const hushed = this.cur?.mercy && this.cur.mercy.up === undefined;
 		const roused = this.cur?.over || this.view?.state.phase === 'over' ? 1 : booing || hushed ? 0 : heat;

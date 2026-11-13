@@ -270,6 +270,9 @@ export const MERCY_WAIT = 3.6, QUARTER_EVERY = 0.35;
 /** The small chance the crowd spares him whatever else */
 export const MERCY_LUCK = 0.05;
 
+// The crowd's reactions, quietest to loudest
+const CROWD_LOUDNESS = ['ooh', 'boo', 'roar', 'kill', 'erupt'];
+
 /** What a gladiator's player can shout at him, and how long a shout holds, in seconds */
 export const STANCES = ['charge', 'back', 'guard'], STANCE_FOR = 3;
 // How each sits in a snapshot
@@ -1007,7 +1010,8 @@ class Stickman {
 	sever(b, ix) {
 		if (!this.body.owned[b]) return;
 		this.w.cut(this.body, b, ix);
-		this.w.crowd('roar');
+		// A limb flying off: the stands erupt
+		this.w.crowd('erupt');
 		if (b === 1) {
 			this.w.stats.heads++;
 			this.w.slowmo(0.35);
@@ -1855,12 +1859,20 @@ export class World {
 			this.spray(body.j[BONES[b][0]].x, body.j[BONES[b][0]].y, 40, pulls[b][0] / 9, pulls[b][1] / 9, 0.5, 300, body.z);
 			this.shake(5);
 		}
-		this.crowd('roar');
+		this.crowd('erupt');
 	}
 
-	/** The arena's crowd roaring, gasping or booing (in a war there's nobody watching): heard, and seen in the stands */
+	/**
+	 * The arena's crowd gasping, booing, roaring, baying for blood or erupting (in a war there's nobody watching): heard,
+	 * and seen in the stands. One reaction a moment, the biggest: a limb flying off drowns out a gasp at the blow.
+	 */
 	crowd(kind) {
-		if (this.arena && !this.events.some(event => event.e === 'crowd')) this.emit({ e: 'crowd', n: kind });
+		if (!this.arena) return;
+
+		const was = this.events.find(event => event.e === 'crowd');
+
+		if (!was) this.emit({ e: 'crowd', n: kind });
+		else if (CROWD_LOUDNESS.indexOf(kind) > CROWD_LOUDNESS.indexOf(was.n)) was.n = kind;
 	}
 
 	sound(name) {
