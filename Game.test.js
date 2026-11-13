@@ -3,13 +3,14 @@ import { expect, test } from 'bun:test';
 import { DEFAULT_RAW, blobS, cpuArmy, cpuGladiator, judge, lineS, ringS, starS } from './art.js';
 import { AMMO, DT, FADE, GLADIATOR_HP, GROUND, LINGER, MERCY_WAIT, PLANS, STANCE_FOR, World, rockThrow } from './battle.js';
 import Game from './Game.js';
+import Armory from './armory.js';
 import Roster from './roster.js';
 import { BASE_ARMY, CPU_SIZE, GLADIATOR_STEPS, STEPS, emptyArt } from './rules.js';
 
 const quiet = { info() {}, debug() {}, warning() {}, error() {} };
 const server = () => ({ games: {}, publish() {}, socketBroadcast() {} });
-const newGame = (mode, style, roster = new Roster()) => {
-	const game = new Game({ mode, style, roster, server: server(), logger: quiet });
+const newGame = (mode, style, roster = new Roster(), armory = new Armory()) => {
+	const game = new Game({ mode, style, roster, armory, server: server(), logger: quiet });
 
 	game.dispose();
 
@@ -762,7 +763,10 @@ test('size has a price: a heavy rock flies shorter and loads slower; a spindly g
 	const man = (legs, arms) => {
 		const warrior = judge('stickmen', [ringS(240, 70, 26, 26), lineS(240, 96, 240, 220), lineS(240, 130, 240 - arms, 160), lineS(240, 130, 240 + arms, 160), lineS(240, 220, 200, 220 + legs), lineS(240, 220, 280, 220 + legs)]).item;
 
-		return new World({ arts: [{ ...cpuGladiator(), stickmen: [warrior] }, cpuGladiator()], auto: [false, false], arena: true }).stickmen[0];
+		// The same weapon and no gear for both: only their bodies differ
+		const kit = { stickmen: [warrior], swords: [judge('swords', DEFAULT_RAW.swords()[0]).item], armor: [], shield: [] };
+
+		return new World({ arts: [kit, cpuGladiator()], auto: [false, false], arena: true }).stickmen[0];
 	};
 	const spindly = man(230, 120), stubby = man(90, 45);
 
@@ -784,4 +788,69 @@ test('only different stick men and weapons earn more men: a copy fights, but ear
 	// Three kept, two different: one extra man
 	expect(game.state.art[0].stickmen).toHaveLength(3);
 	expect(game.world.stickmen.filter(s => s.team === 0)).toHaveLength(BASE_ARMY + 1);
+});
+
+// ---------------------------------------------------------------- the armory
+
+test('every new weapon a player draws goes into the armory, a copy of one there doesn\'t, and it can be borrowed instead of drawn', () => {
+	const armory = new Armory();
+	const game = newGame('cpu', 'war', new Roster(), armory);
+	const fox = game.addPlayer('🦊');
+
+	for (let k = 0; k < 4; k++) game.act(fox.id, 'next');
+	game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.swords()[0] });
+	// The same sword again: not shelved twice
+	game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.swords()[0].map(st => st.map(p => ({ x: p.x + 4, y: p.y }))) });
+	expect(armory.load()).toHaveLength(1);
+	expect(game.state.art[0].swords[0].armory).toBe(armory.load()[0].id);
+
+	// Another player borrows it, and it fights for them, with the armory's mark on it
+	const other = newGame('cpu', 'gladiator', new Roster(), armory);
+	const frog = other.addPlayer('🐸');
+
+	other.act(frog.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[0] });
+	expect(other.act(frog.id, 'borrow', { id: 'nope' }).ok).toBe(false);
+	expect(other.act(frog.id, 'borrow', { id: armory.load()[0].id }).ok).toBe(true);
+	expect(other.state.art[0].swords[0].armory).toBe(armory.load()[0].id);
+	// A gladiator's page moves on once its one weapon's had
+	expect(other.state.drawing[0].step).toBe(2);
+});
+
+test('the computer arms itself partly from the armory, and a battle counts each weapon\'s uses and kills', () => {
+	const armory = new Armory();
+	const id = armory.offer(judge('swords', DEFAULT_RAW.swords()[1]).item);
+	const game = newGame('cpu', 'war', new Roster(), armory);
+	const fox = game.addPlayer('🦊');
+
+	drawEverything(game, fox.id);
+	expect(game.state.art[1].swords.some(item => item.armory === id)).toBe(true);
+	// The battle's kills by the computer's borrowed axe, as the world counted them
+	const at = game.state.art[1].swords.findIndex(item => item.armory === id);
+
+	game.world.stats.weaponKills = { [`1:${at}`]: 3 };
+	game.armoryAfter(game.world);
+	expect(armory.get(id)).toMatchObject({ uses: 1, kills: 3 });
+});
+
+test('players vote on weapons, one thumb each, and the armory sorts them loved, hated, controversial and deadliest', () => {
+	const armory = new Armory();
+	const [a, b, c] = [DEFAULT_RAW.swords()[0], DEFAULT_RAW.swords()[1], [lineS(240, 450, 240, 200), starS(240, 140, 70, 45, 8)]].map(raw => armory.offer(judge('swords', raw).item));
+
+	for (const voter of ['v1', 'v2', 'v3']) armory.vote(a, voter, 1);
+	for (const voter of ['v1', 'v2', 'v3']) armory.vote(b, voter, -1);
+	armory.vote(c, 'v1', 1);
+	armory.vote(c, 'v2', -1);
+	armory.vote(c, 'v3', 1);
+	armory.vote(c, 'v4', -1);
+	// Changing a vote, and a vote that isn't one
+	armory.vote(a, 'v1', -1);
+	armory.vote(a, 'v1', 1);
+	expect(armory.vote(a, 'v1', 7)).toBeNull();
+	expect(armory.get(a)).toMatchObject({ up: 3, down: 0 });
+	armory.get(b).kills = 5;
+	expect(armory.listing('loved')[0].id).toBe(a);
+	expect(armory.listing('hated')[0].id).toBe(b);
+	expect(armory.listing('controversial')[0].id).toBe(c);
+	expect(armory.listing('deadliest')[0].id).toBe(b);
+	expect(armory.listing('loved', 'v2').find(entry => entry.id === c).mine).toBe(-1);
 });

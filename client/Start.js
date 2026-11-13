@@ -28,7 +28,7 @@ const Screen = styled(
 		& .modes { display: flex; flex-wrap: wrap; justify-content: center; gap: ${space.xl}; }
 		& .modes button { flex-direction: column; min-width: 190px; }
 		/* War or gladiators: the one picked is inked in */
-		& .styles { display: flex; gap: ${space.lg}; }
+		& .styles { display: flex; gap: ${space.lg}; flex-wrap: wrap; justify-content: center; }
 		& .styles button { flex-direction: column; min-width: 130px; font-size: 1.2em; }
 	`,
 );
@@ -69,7 +69,11 @@ export default class Start extends View {
 			war: doodle('catapult', { size: '2.4em', label: 'war', onPress: () => pick('war') }),
 			gladiator: doodle('helmet', { size: '2.4em', label: 'gladiators', onPress: () => pick('gladiator') }),
 		};
-		styles.append(...Object.values(this.styleButtons), this.hallButton);
+		styles.append(
+			...Object.values(this.styleButtons),
+			this.hallButton,
+			doodle('rack', { size: '2.4em', label: 'armory', onPress: () => (window.location.href = '#/armory') }),
+		);
 		screen.append(styles, modes);
 		let saved = 'war';
 

@@ -26,8 +26,9 @@ export default class Roster {
 		return this.list;
 	}
 
+	// Written only once it's been read: a list never loaded is never written over the one in the file
 	save() {
-		if (!this.file) return;
+		if (!this.file || !this.list) return;
 		mkdirSync(dirname(this.file), { recursive: true });
 		writeFileSync(this.file, JSON.stringify(this.list));
 	}

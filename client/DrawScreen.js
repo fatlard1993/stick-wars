@@ -3,6 +3,7 @@ import { act, createInput } from '@fatlard1993/web-game-framework/client';
 
 import { DEFAULT_RAW, PAD, WEAPON_AREA, clamp, freshOf, pick } from '../art.js';
 import { STYLES, TEAMS, stepsOf } from '../rules.js';
+import BorrowPicker from './BorrowPicker.js';
 import { icon } from './icons.js';
 import { PEN, Pad, SHEET, inkStrokes, offPad } from './Pad.js';
 import { drawRawFit } from './paint.js';
@@ -227,6 +228,11 @@ export default class DrawScreen extends Screen {
 			doodle('clear', { title: 'Clear (C)', onPress: () => this.clear() }),
 			doodle('next', { title: 'Done, next (N)', onPress: () => act('next') }),
 		);
+		// On the weapon page: borrow one from the armory instead of drawing it
+		this.picker = new BorrowPicker({ appendTo: document.body });
+		this.addCleanup('picker', () => this.picker.elem.remove());
+		this.borrowButton = doodle('rack', { title: 'Borrow one from the armory', size: '2em', onPress: () => this.picker.open() });
+		this.side.elem.append(this.borrowButton.elem);
 		this.count = new Component({ appendTo: this.side });
 		this.gallery = new Gallery({ appendTo: this.side });
 
@@ -300,6 +306,8 @@ export default class DrawScreen extends Screen {
 			...this.steps.map((_, at) => Object.assign(document.createElement('i'), { className: at < step ? 'done' : at === step ? 'now' : '' })),
 		);
 		this.heading.elem.replaceChildren(Object.assign(document.createElement('span'), { textContent: title }), dots);
+		this.borrowButton.elem.style.display = kind === 'swords' ? '' : 'none';
+		this.picker.close();
 		this.redraw();
 		this.showKept();
 	}

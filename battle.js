@@ -959,6 +959,8 @@ class Stickman {
 
 				const hx = (A.x + B.x) / 2, hy = (A.y + B.y) / 2;
 
+				// The last blade to wound a man is the one credited if he dies of it
+				if (o && !o.dead && this.armed()) o.lastHit = this.body.weapon.ref;
 				if (o && !o.dead) o.takeHit(b, st, this.face, hx, hy);
 				else this.w.corpseHit(body, b, st, this.face, hx, hy);
 				if (this.armed()) this.body.weapon.blood = Math.min(1, this.body.weapon.blood + 0.12);
@@ -1050,6 +1052,12 @@ class Stickman {
 		}
 		b.deadAt = this.w.time;
 		this.w.stats.kills[1 - this.team]++;
+		// Each weapon's kills, by its drawing (whose art, which): for the armory's records
+		if (this.lastHit) {
+			const key = `${this.lastHit.a}:${this.lastHit.i}`;
+
+			this.w.stats.weaponKills[key] = (this.w.stats.weaponKills[key] ?? 0) + 1;
+		}
 		this.w.crowd('roar');
 		if (this.w.arena) this.w.dust(this.x, GROUND - 4, 14, 'sand', this.z);
 	}
@@ -1521,7 +1529,7 @@ export class World {
 		this.knocks = 0;
 		this.cats = arena ? [] : CAT_X.flatMap((xs, team) => xs.map((x, at) => new Catapult(this, team, x, CAT_Z[at])));
 		this.spawnX = [this.walls[0].x1 + 30, this.walls[1].x0 - 30];
-		this.stats = { kills: [0, 0], limbs: 0, heads: 0, blood: 0 };
+		this.stats = { kills: [0, 0], limbs: 0, heads: 0, blood: 0, weaponKills: {} };
 		this.time = 0;
 		this.slow = 0;
 		this.over = null;

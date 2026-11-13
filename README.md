@@ -54,6 +54,12 @@ The last side with anyone standing wins. A man with no arms left can't fight, an
 
 If a player's page closes, their drawing clock and the battle wait for them. If they leave the game (the door), their side is free for the next person to join, who draws their own army.
 
+## The armory
+
+Every weapon a player draws goes into the armory (one too like a weapon already there doesn't go in twice), counted each battle it fights in and each man it kills. On a weapon page, the rack button opens it: tap one to borrow it instead of drawing your own (a borrowed weapon fights the same, but earns no extra man). The computer arms itself from it too, better-loved and deadlier weapons more often.
+
+The **armory** button on the start screen shows every weapon in it, with its thumbs and kills: give each a thumbs up or down (one thumb each, tap again to take it back), and sort them by the most loved, the most hated, the most controversial (many votes, split down the middle) or the deadliest.
+
 ## Gladiators
 
 Four pages: your gladiator (one stick man, a minute), its weapon (in the box, as for an army, 50 seconds), then armor (a minute) and a shield (45 seconds) if you want them: leave either page empty to fight without. Armor is drawn right over your gladiator, shown faintly on its page; a shield beside it, its size against your gladiator's being its size in the arena. Each page takes one drawing: keep it and it's on to the next page.

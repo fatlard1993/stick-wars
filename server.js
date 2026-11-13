@@ -1,8 +1,45 @@
+import { existsSync, readFileSync } from 'node:fs';
+
 import { Server, basicGameRoutes } from '@fatlard1993/web-game-framework';
 
-import Game, { HALL } from './Game.js';
+import Game, { ARMORY, HALL } from './Game.js';
 
 const routes = basicGameRoutes();
+
+// The armory opens stocked with the weapons drawn before it existed: the hall's gladiators', and saved games' drawn ones
+const savedGames = () => {
+	try {
+		return existsSync('./data/games.json') ? Object.values(JSON.parse(readFileSync('./data/games.json', 'utf8')).games ?? {}) : [];
+	} catch {
+		return [];
+	}
+};
+
+ARMORY.stockOnce([
+	...HALL.load().flatMap(entry => entry.art.swords ?? []),
+	...savedGames().flatMap(game => (game?.state?.art ?? []).flatMap(art => (art?.swords ?? []).filter(item => item.drawn))),
+]);
+
+// The game's own pages' data, beside the games': the hall of gladiators, and the armory with its votes
+const extras = request => {
+	const url = new URL(request.url);
+
+	if (request.method === 'GET' && url.pathname === '/hall') return Response.json(HALL.standings());
+	if (request.method === 'GET' && url.pathname === '/armory') return Response.json(ARMORY.listing(url.searchParams.get('sort'), url.searchParams.get('voter')));
+
+	const vote = request.method === 'POST' && url.pathname.match(/^\/armory\/(\w+)\/vote$/);
+
+	if (!vote) return null;
+
+	return request
+		.json()
+		.catch(() => ({}))
+		.then(({ voter, thumb } = {}) => {
+			const entry = ARMORY.vote(vote[1], voter, thumb);
+
+			return entry ? Response.json({ up: entry.up, down: entry.down }) : Response.json({ message: 'No such vote' }, { status: 400 });
+		});
+};
 
 // One server for the page and every game: the games' routes (list, create, join, exit, delete), and the built page for
 // the rest. Players act and are sent their view of the game over the socket; the framework ties each to its player.
@@ -11,7 +48,6 @@ export const server = new Server({
 	port: 'auto',
 	Game,
 	database: './data/games.json',
-	// And the hall of gladiators, for its page
-	router: running => request => (new URL(request.url).pathname === '/hall' ? Response.json(HALL.standings()) : routes(request, running)),
+	router: running => request => extras(request) ?? routes(request, running),
 	static: true,
 });

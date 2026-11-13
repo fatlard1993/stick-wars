@@ -7,6 +7,7 @@ import { Create, Hub, Join } from '@fatlard1993/web-game-framework/ui';
 import '@fatlard1993/web-game-framework/client/socket';
 import '@vanilla-bean/components/app/reloadOnBuild';
 
+import Armory from './Armory.js';
 import Hall from './Hall.js';
 import Play from './Play.js';
 import Start from './Start.js';
@@ -23,6 +24,7 @@ class Watch extends Play {
 const views = {
 	'/': Start,
 	'/hall': Hall,
+	'/armory': Armory,
 	'/play/:gameId': Play,
 	'/watch/:gameId': Watch,
 	'/hub': Hub,

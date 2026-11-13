@@ -15,10 +15,14 @@ import {
 	stepsOf,
 	wallSize,
 } from './rules.js';
+import Armory from './armory.js';
 import Roster from './roster.js';
 
 // The hall of gladiators every game shares: winners kept and fought again (only in memory while testing)
 export const HALL = new Roster(process.env.NODE_ENV === 'test' ? null : 'data/gladiators.json');
+
+// The armory every game shares: weapons players drew, borrowed, voted on and counted (only in memory while testing)
+export const ARMORY = new Armory(process.env.NODE_ENV === 'test' ? null : 'data/weapons.json');
 
 // How long a won battle plays on before its end is called, in battle seconds
 const END_AFTER = 2.2;
@@ -49,6 +53,7 @@ export default class Game extends BaseGame {
 		// Back from the save file after a restart, or new
 		this.state = options.saveState?.state ?? newState(this.options.mode, this.options.style);
 		this.roster = options.roster ?? HALL;
+		this.armory = options.armory ?? ARMORY;
 		this.outEvents = [];
 		this.world = null;
 		this.shown = '';
@@ -81,8 +86,13 @@ export default class Game extends BaseGame {
 			const verdict = judge(kind, strokes, { warrior: this.state.art[team].stickmen?.[0] });
 
 			if (!verdict.ok) refuse(verdict.msg);
-			// Drawn by a person, so it counts toward a bigger army or wall (the defaults never do)
-			kept.push({ ...verdict.item, drawn: true });
+			// Drawn by a person, so it counts toward a bigger army or wall (the defaults never do); a new weapon goes into
+			// the armory, for anyone to borrow
+			const item = { ...verdict.item, drawn: true };
+			const shelved = kind === 'swords' && this.armory.offer(item);
+
+			if (shelved) item.armory = shelved;
+			kept.push(item);
 			this.artChanged();
 			// A gladiator has one of each: kept, and on to the next page
 			if (gladiator) this.finishStep(team);
@@ -113,6 +123,29 @@ export default class Game extends BaseGame {
 			this.artChanged();
 
 			return { left: AMMO - this.world.drawnRocks[team] };
+		},
+
+		// A weapon borrowed from the armory instead of drawn: it fights the same, but earns no extra man
+		borrow(player, { id } = {}) {
+			const team = this.teamOf(player.id);
+			const drawing = this.state.drawing[team];
+
+			if (this.state.phase !== 'draw' || !drawing || drawing.done) refuse('Not drawing now');
+			if (stepsOf(this.state)[drawing.step].kind !== 'swords') refuse('Only weapons are borrowed');
+
+			const entry = this.armory.get(id);
+
+			if (!entry) refuse('That one is gone');
+
+			const kept = this.state.art[team].swords;
+			const gladiator = this.state.style === 'gladiator';
+
+			if (!gladiator && kept.length >= MOST_KEPT) refuse(`That's plenty: ${MOST_KEPT} is the most.`);
+			kept.push({ ...structuredClone(entry.item), armory: entry.id });
+			this.artChanged();
+			if (gladiator) this.finishStep(team);
+
+			return { kept: kept.length };
 		},
 
 		// Done with this step before the clock runs out
@@ -260,6 +293,12 @@ export default class Game extends BaseGame {
 
 			state.art[1] = champion ? structuredClone(champion.art) : gladiator ? cpuGladiator() : cpuArmy();
 			state.fame[1] = champion?.id ?? null;
+			// The computer arms itself partly from the armory: a couple of an army's weapons, now and then a gladiator's
+			if (!champion) {
+				const borrowed = this.armory.lend(gladiator ? (Math.random() < 0.4 ? 1 : 0) : 2).map(entry => ({ ...structuredClone(entry.item), armory: entry.id }));
+
+				state.art[1].swords.splice(0, borrowed.length, ...borrowed);
+			}
 		}
 		// Every army fights with something: anything missing (an old save, a side left half drawn) is the defaults
 		for (const team of uses) {
@@ -349,6 +388,7 @@ export default class Game extends BaseGame {
 			state.result = { winner: world.over.winner, stats: structuredClone(world.stats), ...(world.arena && { spared: Boolean(world.over.spared) }) };
 			state.phase = 'over';
 			this.honour(world.over.winner, Boolean(world.over.spared));
+			this.armoryAfter(world);
 		}
 		this.outEvents = world.takeEvents();
 		this.snap = world.snapshot();
@@ -368,6 +408,20 @@ export default class Game extends BaseGame {
 
 		state.fame[winner] = ids.winner;
 		state.fame[loser] = ids.loser;
+	}
+
+	// A battle over: every armory weapon in it fought once more, and its kills counted
+	armoryAfter(world) {
+		const swordsOf = a => this.state.art[a]?.swords ?? [];
+		const uses = [...new Set(world.artOf)].flatMap(a => swordsOf(a).map(item => item.armory)).filter(Boolean);
+		const kills = {};
+
+		for (const [key, count] of Object.entries(world.stats.weaponKills ?? {})) {
+			const [a, i] = key.split(':').map(Number), id = swordsOf(a)[i]?.armory;
+
+			if (id) kills[id] = (kills[id] ?? 0) + count;
+		}
+		this.armory.fought(uses, kills);
 	}
 
 	// What each page is sent: the game's state (the art itself goes once, on a page's first view and when it changes,
