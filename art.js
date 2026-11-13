@@ -470,8 +470,8 @@ export const DEFAULT_RAW = {
   stones: () => [[blobS(240, 240, 150, 105, 9)], [blobS(240, 240, 125, 125, 7)], [blobS(240, 240, 165, 95, 11)]],
   beams: () => [[closedPoly([[50, 212], [430, 204], [433, 252], [47, 262]]), lineS(85, 236, 400, 229)]],
   ammo: () => [[blobS(240, 240, 115, 110, 12)], [starS(240, 240, 150, 95, 9)]],
-  // A kite shield: the example on its page (a shield is never filled in for you)
-  shield: () => [[closedPoly([[150, 120], [330, 120], [345, 230], [240, 400], [135, 230]])]],
+  // A kite shield at the warrior's hand, a fair size beside him: the example on its page (a shield is never filled in for you)
+  shield: () => [[closedPoly([[115, 195], [205, 195], [212, 250], [160, 330], [108, 250]])]],
   swords: () => [
     [polyS([[229, 385], [233, 112], [240, 58], [247, 112], [251, 385]]), lineS(192, 385, 288, 385), closedPoly([[233, 388], [247, 388], [247, 445], [233, 445]])],
     [lineS(215, 445, 215, 62), closedPoly([[215, 85], [290, 52], [322, 128], [290, 205], [215, 172]])],
@@ -776,7 +776,7 @@ export const cpuGladiator = () => {
   const armor = plates?.length ? firstPassing('armor', () => plates, { warrior }) : null;
   // A round shield or a kite, from a buckler to one nearly as tall as he is
   const size = (frame ? standing(frame) : 360) * rand(0.3, 0.62);
-  const kite = () => DEFAULT_RAW.shield()[0].map(st => st.map(p => ({ x: 240 + ((p.x - 240) * size) / 280, y: 260 + ((p.y - 260) * size) / 280 })));
+  const kite = () => [closedPoly([[150, 120], [330, 120], [345, 230], [240, 400], [135, 230]].map(([x, y]) => [240 + ((x - 240) * size) / 280, 260 + ((y - 260) * size) / 280]))];
   const round = () => [blobS(240, 240, size / 2, size / 2, 10)];
   const shield = Math.random() < 0.55 ? firstPassing('shield', Math.random() < 0.5 ? round : kite, { warrior }) : null;
   return { stickmen: [warrior], swords: [weapon], armor: armor ? [armor] : [], shield: shield ? [shield] : [] };

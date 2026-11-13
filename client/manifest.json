@@ -1,7 +1,7 @@
 {
 	"name": "Stick Men Wars",
 	"short_name": "Stick Men Wars",
-	"description": "Draw your own army of stick men, stones, catapults and weapons, then watch them hack each other to bits. Play the computer or a friend.",
+	"description": "Draw your own army of stick men, stones, catapults and weapons, then watch them hack each other to bits. Or draw one gladiator, armed and armored as you like, and send it into the arena. Play the computer or a friend.",
 	"display": "standalone",
 	"orientation": "any",
 	"start_url": ".",
