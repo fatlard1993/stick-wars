@@ -1027,8 +1027,9 @@ export default class BattleScreen extends Screen {
 		// The verdict on a yielded gladiator, given: every hand up with its thumb, up or down
 		const verdict = this.cur?.mercy?.up;
 		const heat = clamp(1 - since / 2.5, 0, 1), booing = this.cheer?.kind === 'boo' && heat > 0;
-		// Over at the end: everyone on their feet
-		const roused = this.cur?.over || this.view?.state.phase === 'over' ? 1 : booing ? 0 : heat;
+		// Over at the end: everyone on their feet; while the crowd decides a yielded gladiator's fate, hushed and still
+		const hushed = this.cur?.mercy && this.cur.mercy.up === undefined;
+		const roused = this.cur?.over || this.view?.state.phase === 'over' ? 1 : booing || hushed ? 0 : heat;
 
 		// Each row's people in order of their ink, so a row is drawn in a few strokes, not hundreds
 		// Most seats are players' own stick men, when there are any (the loved first in line), the rest the crowd's regulars
@@ -1271,18 +1272,42 @@ export default class BattleScreen extends Screen {
 		g.globalAlpha /= 0.82;
 	}
 
-	// A yielded gladiator waiting on the crowd: a big thumb over him, wavering up and down while it decides, then held
+	// A yielded gladiator waiting on the crowd: a thumb over him, tilting slowly from up through sideways to down and back
+	// like an emperor making up his mind, growing as the wait goes on; then it slams down on the verdict, huge, and holds
 	drawMercy(g) {
 		const mercy = this.cur?.mercy;
 
-		if (!mercy) return;
+		if (!mercy) {
+			this.mercySeen = this.verdictSeen = null;
 
-		const [x, y] = project(mercy.x, GROUND - 120, mercy.z);
-		const deciding = mercy.up === undefined;
-		const up = deciding ? Math.sin(performance.now() / 160) > 0 : mercy.up;
-		const size = deciding ? 44 : 64;
+			return;
+		}
 
-		drawIcon(g, up ? 'thumbUp' : 'thumbDown', x, y, size, deciding ? PENCIL : up ? '#2f7a3a' : RED_PENCIL);
+		const now = performance.now() / 1000;
+
+		this.mercySeen ??= now;
+		if (mercy.up !== undefined) this.verdictSeen ??= now;
+
+		const [x, y] = project(mercy.x, GROUND - 130, mercy.z);
+
+		g.save();
+		g.translate(x, y);
+		if (!this.verdictSeen) {
+			const waited = now - this.mercySeen;
+			// Tilting ever wider, ever slower to make up its mind: past sideways now and then, never quite settling
+			const tilt = Math.sin(waited * 1.7) * Math.min(1.9, 0.6 + waited * 0.45);
+
+			g.rotate(tilt);
+			drawIcon(g, 'thumbUp', 0, 0, 40 + Math.min(30, waited * 9), PENCIL);
+		} else {
+			const since = now - this.verdictSeen;
+			// Slammed into place: big, overshooting and settling
+			const punch = 1 + 0.45 * Math.exp(-since * 5) * Math.cos(since * 18);
+
+			g.rotate(Math.exp(-since * 6) * Math.sin(since * 22) * 0.3);
+			drawIcon(g, mercy.up ? 'thumbUp' : 'thumbDown', 0, 0, 92 * punch, mercy.up ? '#2f7a3a' : RED_PENCIL);
+		}
+		g.restore();
 	}
 
 	// How much a gladiator has left: a pencilled bar over his head

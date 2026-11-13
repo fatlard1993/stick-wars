@@ -266,7 +266,7 @@ class Body {
 /** A gladiator beaten this badly yields, and the crowd decides his fate: as a part of his health */
 export const YIELD_AT = 0.22;
 /** How long the crowd keeps him waiting, then how long between each limb torn off if it's thumbs down, in seconds */
-export const MERCY_WAIT = 1.8, QUARTER_EVERY = 0.3;
+export const MERCY_WAIT = 3.6, QUARTER_EVERY = 0.35;
 /** The small chance the crowd spares him whatever else */
 export const MERCY_LUCK = 0.05;
 
@@ -1824,9 +1824,11 @@ export class World {
 		if (!m.decided && this.time - m.at > MERCY_WAIT) {
 			m.decided = true;
 			m.up = Math.random() < m.chance || Math.random() < MERCY_LUCK;
-			m.next = this.time + 0.8;
+			// A beat held on the verdict before anything else happens
+			m.next = this.time + 1.8;
 			this.emit({ e: 'verdict', up: m.up, x: Math.round(m.loser.x), z: Math.round(m.loser.z) });
 			this.crowd(m.up ? 'roar' : 'kill');
+			this.shake(8);
 		}
 		if (!m.decided || m.up || this.time < m.next) return;
 
