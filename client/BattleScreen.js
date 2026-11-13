@@ -48,6 +48,8 @@ import { HAND, PENCIL, RED_PENCIL } from './theme.js';
 import { count, doodle } from './ui.js';
 
 const DUST = { stone: '#9b9488', wood: '#b98a55', sand: '#d2b77c' };
+// How far one tap of a roll arrow sends the catapult, in world units
+const ROLL_STEP = 120;
 // A full-strength fling is a drag this long on the screen, in CSS pixels, whatever the screen's size
 const FULL_PULL = 130;
 // How far a press may wander and still be a tap, in screen pixels
@@ -247,6 +249,7 @@ export default class BattleScreen extends Screen {
 			onFire: v => this.setAim(v),
 			onHold: () => act('aim', { hold: true }, { quiet: true }),
 			onClose: () => this.dropCats(),
+			onRoll: way => this.rollCat(way),
 		});
 		this.rockPad = new RockPad({ appendTo: this, onOpen: () => this.dropCats() });
 		// The rock pad sits in the field's corner, over the controls
@@ -379,7 +382,15 @@ export default class BattleScreen extends Screen {
 		const cats = this.myCats().filter(({ which, cat }) => this.catsPicked.has(which) && !cat.dead);
 
 		for (const which of [...this.catsPicked]) if (!cats.some(entry => entry.which === which)) this.catsPicked.delete(which);
-		this.pad.show(cats.length, Boolean(cats[0]?.cat.aim), teamInk(this.team), this.team);
+		this.pad.show(cats.length, Boolean(cats[0]?.cat.aim), teamInk(this.team), this.team, cats[0]?.cat);
+	}
+
+	// Our catapult rolled a stretch on toward the enemy (way 1) or back toward home (-1), from where it's heading now
+	rollCat(way) {
+		const cat = this.myCats()[0]?.cat;
+
+		if (!cat) return;
+		act('roll', { x: (cat.g ?? cat.x) + way * (this.team === 0 ? 1 : -1) * ROLL_STEP }, { quiet: true });
 	}
 
 	// Our catapult aimed the way the pad (or a drag from it) was pulled: from now on it fires that way by itself whenever
@@ -1509,8 +1520,26 @@ export default class BattleScreen extends Screen {
 		geo.wheels.forEach(([x, wy], at) => {
 			const wheel = this.item(cat.wh[at], 'stones');
 
-			if (wheel) placeShape(g, wheel.shape, { x, y: wy, sx: 26, sy: 26 }, FILLS.stone, INK, 1.6);
+			// Turning as far as it's rolled
+			if (wheel) placeShape(g, wheel.shape, { x, y: wy, a: ((cat.rd ?? 0) / 13) * cat.d, sx: 26, sy: 26 }, FILLS.stone, INK, 1.6);
 		});
+		// Rolling somewhere: a dotted track to where it's going, and a dotted wheel there
+		if (cat.g !== undefined) {
+			const wy = geo.wheels[0][1] + 13;
+
+			g.save();
+			g.setLineDash([6, 6]);
+			g.strokeStyle = teamInk(cat.t);
+			g.lineWidth = 2;
+			g.beginPath();
+			g.moveTo(cat.x, wy);
+			g.lineTo(cat.g, wy);
+			g.stroke();
+			g.beginPath();
+			g.arc(cat.g, wy - 13, 13, 0, Math.PI * 2);
+			g.stroke();
+			g.restore();
+		}
 		geo.segs.forEach(([p, q], at) => {
 			const beam = this.item(cat.b[at], 'beams');
 

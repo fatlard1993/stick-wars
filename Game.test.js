@@ -1290,3 +1290,30 @@ test('a small shield (a buckler) is a shield; one too small is told the smallest
 	expect(judge('shield', tower).ok).toBe(true);
 	expect(judge('ammo', tower).ok).toBe(false);
 });
+
+test('a catapult rolls forward when its side sends it, pushed by its crew, held between home and halfway, and reaches further', async () => {
+	const { CAT_X, catRange, reachOf } = await import('./field.js');
+	const game = newGame('cpu', 'war');
+	const fox = game.addPlayer('🦊');
+
+	drawEverything(game, fox.id);
+
+	const world = game.world, cat = world.cats.find(c => c.team === 0);
+	const [home, far] = catRange(0);
+
+	// Uncrewed it stays put; crewed it rolls, and no further than halfway
+	expect(game.act(fox.id, 'roll', { x: 99999 }).ok).toBe(true);
+	expect(cat.goal).toBe(far);
+	for (let i = 0; i < 60 * 2; i++) world.step(DT);
+	expect(cat.x).toBe(home);
+	world.command(0, world.stickmen.filter(s => s.team === 0).slice(0, 2).map(s => s.id), 'crew', 0);
+	for (let i = 0; i < 60 * 12; i++) world.step(DT);
+	expect(cat.x).toBeGreaterThan(home + 40);
+	expect(cat.x).toBeLessThanOrEqual(far);
+	// Its reach goes forward with it
+	expect(reachOf(0, cat.x) - reachOf(0)).toBeCloseTo(cat.x - CAT_X[0][0]);
+	// And back home if told; never behind it
+	game.act(fox.id, 'roll', { x: -500 });
+	expect(cat.goal).toBe(home);
+	expect(game.viewFor(fox.id).battle.cats.find(c => c.t === 0).g).toBe(home);
+});

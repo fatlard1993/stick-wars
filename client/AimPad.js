@@ -1,7 +1,7 @@
 import { Component, styled } from '@vanilla-bean/components';
 
 import { clamp } from '../art.js';
-import { FLING_ANGLES, flingAngle, flingFor } from '../field.js';
+import { FLING_ANGLES, catRange, flingAngle, flingFor } from '../field.js';
 import { icon } from './icons.js';
 import { HAND, PENCIL, RED_PENCIL } from './theme.js';
 import { doodle } from './ui.js';
@@ -48,7 +48,7 @@ const Pad = styled(
  * @param {object} options - { onAim(velocity or null) while pulling, onFire(velocity) on letting go, onHold(), onClose() }
  */
 export default class AimPad extends Pad {
-	static schema = { onAim: { data: true }, onFire: { data: true }, onClose: { data: true }, onHold: { data: true } };
+	static schema = { onAim: { data: true }, onFire: { data: true }, onClose: { data: true }, onHold: { data: true }, onRoll: { data: true } };
 
 	build() {
 		super.build();
@@ -64,7 +64,10 @@ export default class AimPad extends Pad {
 		const close = doodle('empty', { title: 'Done aiming (Esc)', addClass: 'close', onPress: () => this.options.onClose?.() });
 
 		this.holdButton = doodle('pause', { title: 'Hold its fire', onPress: () => this.options.onHold?.() });
-		bar.append(this.holdButton.elem, close.elem);
+		// Roll it back toward home, or on toward the enemy: its crew push it, and its reach goes with it
+		this.backButton = doodle('roll', { title: 'Roll it back', onPress: () => this.options.onRoll?.(-1) });
+		this.onButton = doodle('roll', { title: 'Roll it forward', onPress: () => this.options.onRoll?.(1) });
+		bar.append(this.backButton.elem, this.onButton.elem, this.holdButton.elem, close.elem);
 		this.canvas = document.createElement('canvas');
 		this.elem.append(bar, this.canvas);
 		this.context = this.canvas.getContext('2d');
@@ -103,8 +106,8 @@ export default class AimPad extends Pad {
 		this.canvas.addEventListener('pointercancel', release);
 	}
 
-	/** Shown for the catapult when it's picked (whether it's aimed, firing by itself), or put away */
-	show(picked, aimed, ink, team) {
+	/** Shown for the catapult when it's picked (whether it's aimed, firing by itself; where it is), or put away */
+	show(picked, aimed, ink, team, cat) {
 		this.team = team;
 		this.elem.classList.toggle('hidden', !picked);
 		if (!picked) {
@@ -115,6 +118,13 @@ export default class AimPad extends Pad {
 		this.ink = ink;
 		this.label.replaceChildren(icon('catapult', { size: '1.3em', color: ink }), icon('target', { size: '1.3em', color: aimed ? ink : RED_PENCIL }));
 		this.holdButton.elem.style.visibility = aimed ? 'visible' : 'hidden';
+		// Each roll arrow points the way it rolls on the screen, and is gone once it can't go further that way
+		const [home, far] = catRange(team), at = cat?.g ?? cat?.x ?? home, toward = Math.sign(far - home);
+
+		this.backButton.elem.style.transform = toward > 0 ? 'scaleX(-1)' : '';
+		this.onButton.elem.style.transform = toward > 0 ? '' : 'scaleX(-1)';
+		this.backButton.elem.style.visibility = Math.abs(at - home) > 1 ? 'visible' : 'hidden';
+		this.onButton.elem.style.visibility = Math.abs(far - at) > 1 ? 'visible' : 'hidden';
 		this.fit();
 		this.draw();
 	}

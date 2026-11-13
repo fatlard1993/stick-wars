@@ -32,7 +32,9 @@ import {
 	ARMY,
 	CAT_FIRE,
 	CAT_REST,
+	CAT_ROLL,
 	CAT_X,
+	catRange,
 	CAT_Z,
 	DEPTH,
 	DT,
@@ -1312,6 +1314,8 @@ class Catapult {
 	constructor(w, team, x, z) {
 		Object.assign(this, { w, team, x, z });
 		this.dir = team === 0 ? 1 : -1;
+		// Where it's been told to roll to: its crew push it there
+		this.goal = x;
 		this.hp = 100;
 		// Its pile of rocks, each one its side drew (before the battle, then during it), thrown in the order they were drawn
 		this.rocks = [];
@@ -1382,6 +1386,15 @@ class Catapult {
 		if (this.ammo <= 0 && !this.waiting() && this.fireT < 0) for (const s of this.crewing()) Object.assign(s, { order: 'idle', post: null });
 		this.cd -= dt;
 		this.shk = Math.max(0, this.shk - dt);
+		// Rolling where it's sent, pushed by its crew (each more a little faster), never while it throws
+		const crew = this.crew();
+
+		if (this.goal !== this.x && crew > 0 && this.fireT < 0) {
+			const step = CAT_ROLL * (1 + 0.4 * (crew - 1)) * dt;
+
+			this.x = Math.abs(this.goal - this.x) <= step ? this.goal : this.x + Math.sign(this.goal - this.x) * step;
+			this.rolled = (this.rolled ?? 0) + step;
+		}
 		// Aimed, it fires as often as it can: crewed, loaded and reloaded
 		if (this.aim && this.ready()) this.fire(...this.aim);
 		if (this.fireT >= 0) {
@@ -1437,10 +1450,13 @@ class Catapult {
 
 	snapshot() {
 		return {
-			x: this.x,
+			x: Math.round(this.x * 10) / 10,
 			z: this.z,
 			d: this.dir,
 			t: this.team,
+			// Where it's rolling to, while it's on its way, and how far it's rolled (its wheels turn with it)
+			...(this.goal !== this.x && { g: Math.round(this.goal) }),
+			...(this.rolled && { rd: Math.round(this.rolled) }),
 			hp: Math.round(this.hp),
 			n: this.ammo,
 			cd: Math.round(Math.max(0, this.cd) * 10) / 10,
@@ -1696,6 +1712,19 @@ export class World {
 		// The crowd has no time for one backing off
 		if (name === 'back' && man.stance() !== 'back') this.crowd('boo');
 		man.shout = { name, until: this.time + STANCE_FOR };
+
+		return true;
+	}
+
+	/** A side's catapult sent rolling to x (held to where it may stand: from home to halfway): its crew push it there */
+	rollCat(team, x) {
+		const cat = this.cats.find(c => c.team === team);
+
+		if (!cat || cat.dead || !Number.isFinite(x)) return false;
+
+		const [home, far] = catRange(team);
+
+		cat.goal = clamp(x, Math.min(home, far), Math.max(home, far));
 
 		return true;
 	}

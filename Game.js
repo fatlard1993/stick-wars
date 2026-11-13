@@ -251,6 +251,15 @@ export default class Game extends BaseGame {
 			this.world.setAim(team, [vx, vy]);
 		},
 
+		// Our catapult rolled forward or back (to x along the field), its crew pushing it
+		roll(player, { x } = {}) {
+			const team = this.teamOf(player.id);
+
+			if (this.state.phase !== 'battle' || !this.world) refuse('No battle on');
+			if (this.world.arena) refuse('No catapult in the arena');
+			if (!this.world.rollCat(team, Number(x))) refuse('Not now');
+		},
+
 		// Our gladiator told what to do for a few seconds: charge, back off, or guard
 		shout(player, { stance } = {}) {
 			const team = this.teamOf(player.id);

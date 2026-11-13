@@ -15,8 +15,14 @@ export const CAT_REST = PI - 0.3, CAT_FIRE = 1.5 * PI + 0.35, CAT_ARM = 74, CAT_
 export const WALL_X = [430, W - 430 - WALL.cols * WALL.cw];
 /** How far either side of the arena's middle its two gates stand, in its back wall: where gladiators walk out */
 export const ARENA_GATE = 330;
-/** Each side's catapult, behind its wall among its army's rows */
+/** Each side's catapult, behind its wall among its army's rows: where it starts */
 export const CAT_X = [[170], [W - 170]];
+/** How far forward a catapult can be rolled from there: to halfway, short of the middle */
+export const CAT_FORWARD = W / 2 - 150 - CAT_X[0][0];
+/** How fast a catapult rolls, in world units a second: its crew push it, each more a little faster */
+export const CAT_ROLL = 22;
+/** Where a side's catapult may stand, nearest home first: [home, furthest forward] */
+export const catRange = team => (team === 0 ? [CAT_X[0][0], CAT_X[0][0] + CAT_FORWARD] : [CAT_X[1][0], CAT_X[1][0] - CAT_FORWARD]);
 /** How long a side waits between sending stick men out one at a time, in seconds */
 export const SEND_EVERY = 0.4;
 /** How many can crew one catapult: one to fire it at all, each more loading it faster */
@@ -143,12 +149,16 @@ export const rockThrow = rock => {
 /** The lowest and steepest a catapult throws, in radians above level, and always forward */
 export const FLING_ANGLES = [0.35, 1.2];
 
-/** How far a side's catapult can throw: into the enemy's wall, never past it, so men at home behind it are out of reach */
-export const reachOf = team => (team === 0 ? WALL_X[1] + WALL.cols * WALL.cw - 60 : WALL_X[0] + 60);
+/**
+ * How far a side's catapult can throw, standing at x (at home if not given): from home, into the enemy's wall and never
+ * past it, so men at home behind it are out of reach; rolled forward, as much further as it was rolled
+ */
+export const reachOf = (team, x = CAT_X[team][0]) => (team === 0 ? WALL_X[1] + WALL.cols * WALL.cw - 60 : WALL_X[0] + 60) + (x - CAT_X[team][0]);
 
-// How far a throw from a side's catapult lands on open ground, at a speed and angle
+// How far a throw from a side's catapult lands on open ground, at a speed and angle (from home: the ground is level, so
+// the same from anywhere)
 const thrownTo = (team, speed, angle) => {
-	const [lx, ly] = catGeometry(CAT_X[team][0], team === 0 ? 1 : -1, CAT_FIRE).launch;
+	const [, ly] = catGeometry(CAT_X[team][0], team === 0 ? 1 : -1, CAT_FIRE).launch;
 	const up = speed * Math.sin(angle);
 
 	return (speed * Math.cos(angle) * (up + Math.sqrt(up * up + 2 * GRAV * (GROUND - ly)))) / GRAV;
@@ -156,6 +166,7 @@ const thrownTo = (team, speed, angle) => {
 
 /** The fastest a side's catapult throws at an angle: as fast as it can, or just enough to reach as far as it may */
 export const reachSpeed = (team, angle) => {
+	// The same distance from wherever it stands
 	const [lx] = catGeometry(CAT_X[team][0], team === 0 ? 1 : -1, CAT_FIRE).launch;
 	const far = Math.abs(reachOf(team) - lx);
 	let low = 0, high = MOST_FLING;
