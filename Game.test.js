@@ -1145,3 +1145,31 @@ test('the computer\'s war weapons can go in the armory once each, for gladiators
 	game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[0] });
 	expect(game.act(fox.id, 'borrow', { id: armory.load()[0].id }).ok).toBe(true);
 });
+
+test('every kill in a war is a weapon\'s in the armory: drawn copies, the computer\'s own and the defaults all count', async () => {
+	const { stockWeapons } = await import('./art.js');
+	const armory = new Shelf(null, { alike: sameWeapon });
+
+	for (const weapon of stockWeapons()) armory.offer(weapon);
+
+	const stocked = armory.load().length;
+	const game = newGame('cpu', 'war', new Roster(), armory);
+	const fox = game.addPlayer('🦊');
+
+	// The player draws the default sword: a copy, so it's the armory's sword, not a new entry
+	drawEverything(game, fox.id);
+	expect(game.state.art[0].swords[0].armory).toBe(armory.match(game.state.art[0].swords[0]));
+	expect(armory.load()).toHaveLength(stocked);
+
+	const world = game.world;
+
+	world.auto = [true, true];
+	for (let steps = 0; !world.over && steps < 60 * 240; steps++) world.step(DT);
+	game.armoryAfter(world);
+
+	const killed = Object.values(world.stats.weaponKills).reduce((sum, n) => sum + n, 0);
+	const counted = armory.load().reduce((sum, entry) => sum + entry.kills, 0);
+
+	expect(killed).toBeGreaterThan(0);
+	expect(counted).toBeGreaterThan(killed * 0.9);
+});

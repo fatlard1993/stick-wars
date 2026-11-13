@@ -785,6 +785,10 @@ const CPU_RAW = {
  * sword, each judged like a player's. For the armory, so a gladiator can borrow one. */
 export const cpuWeapons = () => CPU_RAW.swords().map(raw => judge('swords', raw)).filter(v => v.ok).map(v => v.item);
 
+/** The weapons the armory always has: the computer's war weapons and the defaults (an axe and a sword), so their kills,
+ * when the computer or a player who drew none fights with them, are counted there too */
+export const stockWeapons = () => [...cpuWeapons(), ...DEFAULT_RAW.swords().map(raw => judge('swords', raw).item)];
+
 /** The computer's army: drawings of its own of every kind, each passing the checks a player's do, tidied for keeping */
 export const cpuArmy = () =>
   Object.fromEntries(

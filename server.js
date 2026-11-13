@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 
-import { cpuWeapons } from './art.js';
+import { stockWeapons } from './art.js';
 
 import { Server, basicGameRoutes } from '@fatlard1993/web-game-framework';
 
@@ -23,8 +23,9 @@ const drawnBefore = kind => [
 ];
 
 ARMORY.stockOnce(drawnBefore('swords'));
-// And the computer's own war weapons, there for anyone to borrow (each only once: one like it already there isn't added)
-for (const weapon of cpuWeapons()) ARMORY.offer(weapon);
+// And the computer's own war weapons and the defaults, there for anyone to borrow and their kills counted (each only
+// once: one like it already there isn't added)
+for (const weapon of stockWeapons()) ARMORY.offer(weapon);
 // And the crowd with the stick men drawn before it
 CROWD.stockOnce(drawnBefore('stickmen'));
 

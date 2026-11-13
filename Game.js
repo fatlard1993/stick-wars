@@ -109,7 +109,7 @@ export default class Game extends BaseGame {
 
 			if (!verdict.ok) refuse(verdict.msg);
 			// Drawn by a person, so it counts toward a bigger army or wall (the defaults never do); a new weapon goes into
-			// the armory, for anyone to borrow
+			// the armory, for anyone to borrow, and one like a weapon there already is that one, its kills counted there
 			const item = { ...verdict.item, drawn: true };
 			const shelved = kind === 'swords' && this.armory.offer(item);
 
@@ -557,14 +557,16 @@ export default class Game extends BaseGame {
 		state.fame[loser] = ids.loser;
 	}
 
-	// A battle over: every armory weapon in it fought once more, and its kills counted
+	// A battle over: every armory weapon in it fought once more, and its kills counted. A weapon not borrowed from the
+	// armory is the armory's entry it's a copy of, if any: the computer's own, a default, one drawn like one there
 	armoryAfter(world) {
 		const swordsOf = a => this.state.art[a]?.swords ?? [];
-		const uses = [...new Set(world.artOf)].flatMap(a => swordsOf(a).map(item => item.armory)).filter(Boolean);
+		const idOf = item => item?.armory ?? (item && (item.armory = this.armory.match(item) ?? undefined));
+		const uses = [...new Set(world.artOf)].flatMap(a => swordsOf(a).map(idOf)).filter(Boolean);
 		const kills = {};
 
 		for (const [key, count] of Object.entries(world.stats.weaponKills ?? {})) {
-			const [a, i] = key.split(':').map(Number), id = swordsOf(a)[i]?.armory;
+			const [a, i] = key.split(':').map(Number), id = idOf(swordsOf(a)[i]);
 
 			if (id) kills[id] = (kills[id] ?? 0) + count;
 		}

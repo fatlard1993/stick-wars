@@ -54,10 +54,17 @@ export default class Shelf extends Store {
 	 * @param {object} item - The drawing as judged (art.js), its `raw` strokes among it
 	 * @returns {string|null} Its entry, or null if one like it is there already
 	 */
+	/** The entry a drawing is a copy of (its id), or null */
+	match(item) {
+		return (item?.raw && this.load().find(entry => this.alike(entry.item, item))?.id) ?? null;
+	}
+
+	/** A drawing put on the shelf: its new entry's id, or the id of the one it's too like to go on twice */
 	offer(item) {
 		const list = this.load();
+		const copyOf = this.match(item);
 
-		if (list.some(entry => this.alike(entry.item, item))) return null;
+		if (copyOf) return copyOf;
 
 		const { drawn: _drawn, armory: _armory, ...weapon } = item;
 		const entry = { id: Store.id(), item: weapon, up: 0, down: 0, votes: {}, uses: 0, kills: 0, born: Date.now() };
