@@ -81,11 +81,11 @@ export default class Game extends BaseGame {
 			const verdict = judge(kind, strokes, { warrior: this.state.art[team].stickmen?.[0] });
 
 			if (!verdict.ok) refuse(verdict.msg);
-			// A gladiator has one of each: a new one kept takes the place of the last
-			if (gladiator) kept.length = 0;
 			// Drawn by a person, so it counts toward a bigger army or wall (the defaults never do)
 			kept.push({ ...verdict.item, drawn: true });
 			this.artChanged();
+			// A gladiator has one of each: kept, and on to the next page
+			if (gladiator) this.finishStep(team);
 
 			return { kind, kept: kept.length, stats: verdict.item.stats ?? null };
 		},

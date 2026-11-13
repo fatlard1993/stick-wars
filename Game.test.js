@@ -544,32 +544,32 @@ const helmetOn = warrior => {
 	return [ringS(head.cx, head.cy, head.r * 1.25, head.r * 1.25), ringS(head.cx, head.cy + head.r * 3, head.r * 0.9, head.r * 1.6)];
 };
 const drawGladiator = (game, id, { armor = true, shield = true } = {}) => {
+	// Each page moves on by itself once its one drawing is kept; one left empty is moved on from
 	expect(game.act(id, 'keep', { strokes: DEFAULT_RAW.stickmen()[0] }).ok).toBe(true);
-	game.act(id, 'next');
 	expect(game.act(id, 'keep', { strokes: DEFAULT_RAW.swords()[0] }).ok).toBe(true);
-	game.act(id, 'next');
 	if (armor) expect(game.act(id, 'keep', { strokes: helmetOn(game.state.art[game.state.seats.indexOf(id)].stickmen[0]) }).ok).toBe(true);
-	game.act(id, 'next');
+	else game.act(id, 'next');
 	if (shield) expect(game.act(id, 'keep', { strokes: [blobS(240, 240, 90, 90, 10)] }).ok).toBe(true);
-	game.act(id, 'next');
+	else game.act(id, 'next');
 };
 
-test('a gladiator is one warrior and its weapon, with armor and a shield if drawn; each page keeps one, the last kept', () => {
+test('a gladiator is one warrior and its weapon, with armor and a shield if drawn; each page takes one and moves on', () => {
 	const game = newGame('cpu', 'gladiator');
 	const fox = game.addPlayer('🦊');
 
 	expect(game.state.style).toBe('gladiator');
 	expect(game.state.drawing[0].left).toBe(GLADIATOR_STEPS[0].seconds);
-	// Armor has to be drawn on the warrior
-	game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[0] });
-	expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[1] }).ok).toBe(true);
+	// One warrior kept, and it's on to the weapon page
+	expect(game.act(fox.id, 'keep', { strokes: DEFAULT_RAW.stickmen()[0] }).ok).toBe(true);
+	expect(game.state.drawing[0].step).toBe(1);
 	expect(game.state.art[0].stickmen).toHaveLength(1);
+	// The weapon page skipped: one default weapon
 	game.act(fox.id, 'next');
-	game.act(fox.id, 'next');
+	// Armor has to be drawn on the warrior
 	expect(game.act(fox.id, 'keep', { strokes: [lineS(10, 10, 60, 12)] }).error).toBe('Draw the armor on your warrior.');
 	expect(game.act(fox.id, 'keep', { strokes: helmetOn(game.state.art[0].stickmen[0]) }).ok).toBe(true);
+	expect(game.state.art[0].armor).toHaveLength(1);
 	expect(game.state.art[0].armor[0].cover.head).toBeGreaterThan(0.5);
-	game.act(fox.id, 'next');
 	// No shield drawn: none had, not a default
 	game.act(fox.id, 'next');
 	expect(game.state.phase).toBe('battle');

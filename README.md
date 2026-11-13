@@ -56,7 +56,7 @@ If a player's page closes, their drawing clock and the battle wait for them. If 
 
 ## Gladiators
 
-Four pages: your gladiator (one stick man), its weapon (in the box, as for an army), then armor and a shield if you want them: leave either page empty to fight without. Armor is drawn right over your gladiator, shown faintly on its page; a shield beside it, its size against your gladiator's being its size in the arena. Each page keeps one drawing: keep another and it takes the last one's place.
+Four pages: your gladiator (one stick man), its weapon (in the box, as for an army), then armor and a shield if you want them: leave either page empty to fight without. Armor is drawn right over your gladiator, shown faintly on its page; a shield beside it, its size against your gladiator's being its size in the arena. Each page takes one drawing: keep it and it's on to the next page.
 
 Then the two fight it out in the open, by themselves, each its own way, all of it from how it was drawn:
 
