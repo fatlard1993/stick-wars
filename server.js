@@ -1,6 +1,6 @@
 import { Server, basicGameRoutes } from '@fatlard1993/web-game-framework';
 
-import Game from './Game.js';
+import Game, { HALL } from './Game.js';
 
 const routes = basicGameRoutes();
 
@@ -11,6 +11,7 @@ export const server = new Server({
 	port: 'auto',
 	Game,
 	database: './data/games.json',
-	router: running => request => routes(request, running),
+	// And the hall of gladiators, for its page
+	router: running => request => (new URL(request.url).pathname === '/hall' ? Response.json(HALL.standings()) : routes(request, running)),
 	static: true,
 });

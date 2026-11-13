@@ -32,6 +32,15 @@ export default class Roster {
 		writeFileSync(this.file, JSON.stringify(this.list));
 	}
 
+	/** Everyone in the hall, best record first, as their drawings and records: for the hall's page */
+	standings() {
+		const raw = items => items?.[0]?.raw ?? null;
+
+		return [...this.load()]
+			.sort((a, b) => b.wins - b.losses - (a.wins - a.losses) || b.wins - a.wins || a.born - b.born)
+			.map(({ id, wins, losses, art }) => ({ id, wins, losses, warrior: raw(art.stickmen), weapon: raw(art.swords), armor: raw(art.armor), shield: raw(art.shield) }));
+	}
+
 	get(id) {
 		return id ? this.load().find(entry => entry.id === id) : undefined;
 	}

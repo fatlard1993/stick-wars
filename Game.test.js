@@ -728,3 +728,22 @@ test('a gladiator does what he is shouted at for a few seconds: charge in, back 
 	expect(mine.stance()).toBeNull();
 	expect(game.act(fox.id, 'shout', { stance: 'dance' }).ok).toBe(false);
 });
+
+test('the hall lists its gladiators best first, and one picked from it is the one fought', () => {
+	const roster = new Roster();
+	const first = roster.record({ art: cpuGladiator() }, {}).winner;
+	const second = roster.record({ art: cpuGladiator() }, {}).winner;
+
+	roster.record({ id: second, art: null }, {});
+	expect(roster.standings().map(entry => entry.id)).toEqual([second, first]);
+	expect(roster.standings()[0].warrior).toEqual(roster.get(second).art.stickmen[0].raw);
+
+	const game = new Game({ mode: 'cpu', style: 'gladiator', rival: first, roster, server: server(), logger: quiet });
+
+	game.dispose();
+
+	const fox = game.addPlayer('🦊');
+
+	drawGladiator(game, fox.id, { armor: false, shield: false });
+	expect(game.state.fame[1]).toBe(first);
+});

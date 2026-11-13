@@ -18,7 +18,7 @@ import {
 import Roster from './roster.js';
 
 // The hall of gladiators every game shares: winners kept and fought again (only in memory while testing)
-const HALL = new Roster(process.env.NODE_ENV === 'test' ? null : 'data/gladiators.json');
+export const HALL = new Roster(process.env.NODE_ENV === 'test' ? null : 'data/gladiators.json');
 
 // How long a won battle plays on before its end is called, in battle seconds
 const END_AFTER = 2.2;
@@ -252,7 +252,8 @@ export default class Game extends BaseGame {
 		// The computer's side is its own, made when it's first needed and kept for rematches: against a gladiator, one from
 		// the hall of them if there are any, or one it draws
 		if (state.mode === 'cpu' && steps.some(({ kind, optional }) => !optional && !state.art[1][kind]?.length)) {
-			const champion = gladiator ? this.roster.pick() : null;
+			// The one picked from the hall to fight, if it's still there; or one the hall sends
+			const champion = gladiator ? (this.roster.get(this.options.rival) ?? this.roster.pick()) : null;
 
 			state.art[1] = champion ? structuredClone(champion.art) : gladiator ? cpuGladiator() : cpuArmy();
 			state.fame[1] = champion?.id ?? null;

@@ -78,6 +78,8 @@ A gladiator is tough: a duel is many blows, and no blow kills outright. A bar ov
 
 Every gladiator that wins is kept in the hall of gladiators, with its record, and the computer sends them back into the arena against whoever plays it next (the better its record, the likelier); one of them shows its wins by its flag. A loser the crowd spares keeps its place in the hall, or earns one; one it gives the thumbs down is struck from it. With nobody in the hall yet, the computer draws its own.
 
+The **hall** button on the start screen (with gladiators picked) shows everyone in the hall, best record first: each drawn with its armor and shield on and its weapon beside it, with its wins and losses. Tap one to fight it: draw your gladiator, and that one walks out of the other gate.
+
 ## Running it
 
 A multiplayer web game on [web-game-framework](https://github.com/fatlard1993/web-game-framework) and [@vanilla-bean/components](https://github.com/fatlard1993/vanilla-bean-components).

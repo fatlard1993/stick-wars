@@ -33,6 +33,15 @@ const Screen = styled(
 	`,
 );
 
+/** A seat taken at a game (joined as a new player, kept in this browser) and off to play it */
+export const sitDown = async game => {
+	const joined = await joinGame(game.id, { body: { name: 'player' } });
+
+	if (!joined.body?.id) throw new Error(`could not join: ${JSON.stringify(joined.body)}`);
+	localStorage.setItem(game.id, joined.body.id);
+	window.location.href = `#/play/${game.id}`;
+};
+
 export default class Start extends View {
 	build() {
 		const screen = new Screen({ appendTo: this });
@@ -50,13 +59,17 @@ export default class Start extends View {
 				// Remembering it is only a convenience
 			}
 			for (const [name, button] of Object.entries(this.styleButtons)) button.elem.setAttribute('aria-pressed', String(name === style));
+			// The hall of gladiators, for a gladiators' fight
+			this.hallButton.elem.style.display = style === 'gladiator' ? '' : 'none';
 		};
+
+		this.hallButton = doodle('trophy', { size: '2.4em', label: 'hall', onPress: () => (window.location.href = '#/hall') });
 
 		this.styleButtons = {
 			war: doodle('catapult', { size: '2.4em', label: 'war', onPress: () => pick('war') }),
 			gladiator: doodle('helmet', { size: '2.4em', label: 'gladiators', onPress: () => pick('gladiator') }),
 		};
-		styles.append(...Object.values(this.styleButtons));
+		styles.append(...Object.values(this.styleButtons), this.hallButton);
 		screen.append(styles, modes);
 		let saved = 'war';
 
@@ -91,12 +104,7 @@ export default class Start extends View {
 					? games.find(game => sameKind(game) && game.state.seats.includes(null) && game.players.some(({ online }) => online))
 					: null;
 			const name = `${style === 'gladiator' ? 'gladiators, ' : ''}${MODES[mode]} ${new Date().toLocaleTimeString()}`;
-			const game = open ?? (await createGame({ body: { name, mode, style } })).body;
-			const joined = await joinGame(game.id, { body: { name: 'player' } });
-
-			if (!joined.body?.id) throw new Error(`could not join: ${JSON.stringify(joined.body)}`);
-			localStorage.setItem(game.id, joined.body.id);
-			window.location.href = `#/play/${game.id}`;
+			await sitDown(open ?? (await createGame({ body: { name, mode, style } })).body);
 		} catch (error) {
 			console.error('Could not start playing', error);
 			new Notify({ x: window.innerWidth / 2, y: 120, intent: 'warning', content: 'That did not work. Try again?', timeout: 3000 });
